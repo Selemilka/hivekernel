@@ -61,10 +61,10 @@ func TestSupervisorHandleChildExit_Task(t *testing.T) {
 	// Task exits.
 	sup.HandleChildExit(task.PID, 0)
 
-	// Task should be dead (RestartNever).
+	// Task should be zombie (RestartNever — awaiting reap).
 	got, _ := r.Get(task.PID)
-	if got.State != StateDead {
-		t.Fatalf("expected task to be dead, got %s", got.State)
+	if got.State != StateZombie {
+		t.Fatalf("expected task to be zombie, got %s", got.State)
 	}
 
 	// Parent should have been notified.
@@ -98,9 +98,9 @@ func TestSupervisorZombieReaping(t *testing.T) {
 	go sup.Run(ctx)
 	time.Sleep(100 * time.Millisecond)
 
-	got, _ := r.Get(zombie.PID)
-	if got.State != StateDead {
-		t.Fatalf("zombie should have been reaped, state=%s", got.State)
+	_, err := r.Get(zombie.PID)
+	if err == nil {
+		t.Fatal("zombie should have been removed from registry")
 	}
 }
 

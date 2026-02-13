@@ -222,6 +222,22 @@ killed = await ctx.kill(child_pid)  # returns list of killed PIDs
 killed = await ctx.kill(child_pid, recursive=False)
 ```
 
+Killed processes enter **zombie** state (not immediately removed). The supervisor
+reaps zombies after 60 seconds, or the parent can collect results explicitly
+with `wait_child`.
+
+### Wait for child to exit (like waitpid)
+
+```python
+# Wait for a child to finish (blocks until zombie/dead or timeout)
+info = await ctx.wait_child(child_pid, timeout_seconds=30)
+print(f"PID {info['pid']} exited with code {info['exit_code']}")
+print(f"Output: {info['output']}")
+```
+
+This is useful for fire-and-forget spawns where you want to collect the result
+later, without using `execute_on`.
+
 ---
 
 ## 4. Delegate Tasks (execute_on)
@@ -1109,6 +1125,7 @@ Use "tactical" or "operational" for task-role agents.
 | `ctx.kill(pid)` | `list[int]` | Kill agent and subtree |
 | `ctx.send(...)` | `str` (msg_id) | Send IPC message |
 | `ctx.execute_on(pid, ...)` | `TaskResult` | Delegate task to child |
+| `ctx.wait_child(pid, timeout)` | `dict` | Wait for child exit (like waitpid) |
 | `ctx.store_artifact(...)` | `str` (art_id) | Store artifact in shared memory |
 | `ctx.get_artifact(...)` | artifact proto | Retrieve artifact |
 | `ctx.escalate(...)` | `str` | Escalate issue to parent |

@@ -71,8 +71,8 @@ const (
 	StateRunning
 	StateBlocked
 	StateSleeping
-	StateZombie
 	StateDead
+	StateZombie
 )
 
 func (s ProcessState) String() string {

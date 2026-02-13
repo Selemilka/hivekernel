@@ -133,8 +133,8 @@ func TestLifecycleManager_CompleteTask(t *testing.T) {
 	}
 
 	p, _ := reg.Get(w.PID)
-	if p.State != StateDead {
-		t.Errorf("State=%s, want dead after completion", p.State)
+	if p.State != StateZombie {
+		t.Errorf("State=%s, want zombie after completion", p.State)
 	}
 }
 

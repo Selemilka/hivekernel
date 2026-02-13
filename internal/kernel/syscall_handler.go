@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/ipc"
@@ -56,6 +57,8 @@ func (h *KernelSyscallHandler) HandleSyscall(
 		return h.handleLog(callID, callerPID, c.Log)
 	case *pb.SystemCall_ExecuteOn:
 		return h.handleExecuteOn(ctx, callID, callerPID, c.ExecuteOn)
+	case *pb.SystemCall_WaitChild:
+		return h.handleWaitChild(ctx, callID, callerPID, c.WaitChild)
 	default:
 		log.Printf("[syscall] unknown syscall type for call_id=%s", callID)
 		return &pb.SyscallResult{CallId: callID}
@@ -119,14 +122,16 @@ func (h *KernelSyscallHandler) handleKill(callID string, callerPID process.PID, 
 			if h.manager != nil {
 				_ = h.manager.StopRuntime(d.PID)
 			}
-			_ = h.king.Registry().SetState(d.PID, process.StateDead)
+			_ = h.king.Registry().SetState(d.PID, process.StateZombie)
+			h.king.Signals().NotifyParent(d.PID, -1, "killed")
 			killed = append(killed, d.PID)
 		}
 	}
 	if h.manager != nil {
 		_ = h.manager.StopRuntime(req.TargetPid)
 	}
-	_ = h.king.Registry().SetState(req.TargetPid, process.StateDead)
+	_ = h.king.Registry().SetState(req.TargetPid, process.StateZombie)
+	h.king.Signals().NotifyParent(req.TargetPid, -1, "killed")
 	killed = append(killed, req.TargetPid)
 
 	log.Printf("[syscall] kill: PID %d killed %v", callerPID, killed)
@@ -338,6 +343,81 @@ func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID strin
 				Result:  taskResult,
 			},
 		},
+	}
+}
+
+func (h *KernelSyscallHandler) handleWaitChild(ctx context.Context, callID string, callerPID process.PID, req *pb.WaitChildRequest) *pb.SyscallResult {
+	errResult := func(msg string) *pb.SyscallResult {
+		return &pb.SyscallResult{
+			CallId: callID,
+			Result: &pb.SyscallResult_WaitChild{
+				WaitChild: &pb.WaitChildResponse{Success: false, Error: msg},
+			},
+		}
+	}
+
+	okResult := func(pid process.PID, exitCode int32, output string) *pb.SyscallResult {
+		return &pb.SyscallResult{
+			CallId: callID,
+			Result: &pb.SyscallResult_WaitChild{
+				WaitChild: &pb.WaitChildResponse{
+					Success:  true,
+					Pid:      pid,
+					ExitCode: exitCode,
+					Output:   output,
+				},
+			},
+		}
+	}
+
+	// Validate target is a child of caller.
+	target, err := h.king.Registry().Get(req.TargetPid)
+	if err != nil {
+		return errResult("process not found")
+	}
+	if target.PPID != callerPID {
+		return errResult("can only wait for own children")
+	}
+
+	// If already zombie/dead, collect result immediately.
+	if target.State == process.StateZombie || target.State == process.StateDead {
+		result, _ := h.king.Lifecycle().WaitResult(target.PID)
+		if result != nil {
+			return okResult(target.PID, int32(result.ExitCode), string(result.Output))
+		}
+		return okResult(target.PID, -1, "")
+	}
+
+	// Process is still alive — poll until it dies or timeout.
+	timeout := time.Duration(req.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errResult("context cancelled")
+		case <-deadline:
+			return errResult("timeout waiting for child")
+		case <-ticker.C:
+			proc, err := h.king.Registry().Get(req.TargetPid)
+			if err != nil {
+				// Process already removed from registry.
+				return okResult(req.TargetPid, -1, "")
+			}
+			if proc.State == process.StateZombie || proc.State == process.StateDead {
+				result, _ := h.king.Lifecycle().WaitResult(proc.PID)
+				if result != nil {
+					return okResult(proc.PID, int32(result.ExitCode), string(result.Output))
+				}
+				return okResult(proc.PID, -1, "")
+			}
+		}
 	}
 }
 

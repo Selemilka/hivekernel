@@ -188,14 +188,23 @@ function renderTree() {
         .attr('transform', d => `translate(${d.y},${d.x})`);
 
     nodeUpdate.select('circle')
-        .attr('fill', d => ROLE_COLORS[d.data.role] || '#576574')
-        .attr('stroke', d => STATE_COLORS[d.data.state] || '#576574');
+        .attr('fill', d => {
+            const isZombie = d.data.state === 'zombie' || d.data.state === 'dead';
+            return isZombie ? '#3a3a4a' : (ROLE_COLORS[d.data.role] || '#576574');
+        })
+        .attr('stroke', d => STATE_COLORS[d.data.state] || '#576574')
+        .attr('opacity', d => {
+            const isZombie = d.data.state === 'zombie' || d.data.state === 'dead';
+            return isZombie ? 0.4 : 1;
+        });
 
     nodeUpdate.select('.node-name')
-        .text(d => d.data.name || '?');
+        .text(d => d.data.name || '?')
+        .attr('opacity', d => (d.data.state === 'zombie' || d.data.state === 'dead') ? 0.4 : 1);
 
     nodeUpdate.select('.node-pid')
-        .text(d => 'PID ' + d.data.pid);
+        .text(d => 'PID ' + d.data.pid)
+        .attr('opacity', d => (d.data.state === 'zombie' || d.data.state === 'dead') ? 0.4 : 1);
 
     // Highlight selected
     nodeUpdate.classed('selected', d => selectedNode && d.data.pid === selectedNode.pid);

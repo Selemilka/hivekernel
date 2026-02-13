@@ -229,6 +229,7 @@ message SystemCall {
     EscalateRequest escalate = 7;
     LogRequest log = 8;
     ExecuteOnRequest execute_on = 9;
+    WaitChildRequest wait_child = 10;
   }
 }
 
@@ -243,6 +244,7 @@ message SyscallResult {
     EscalateResponse escalate = 7;
     LogResponse log = 8;
     ExecuteOnResponse execute_on = 9;
+    WaitChildResponse wait_child = 10;
   }
 }
 
@@ -390,3 +392,18 @@ enum LogLevel {
 }
 
 message LogResponse {}
+
+// ─── Wait child (like waitpid) ───
+
+message WaitChildRequest {
+  uint64 target_pid = 1;
+  int32 timeout_seconds = 2;
+}
+
+message WaitChildResponse {
+  bool success = 1;
+  uint64 pid = 2;
+  int32 exit_code = 3;
+  string output = 4;
+  string error = 5;
+}

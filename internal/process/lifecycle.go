@@ -104,8 +104,8 @@ func (lm *LifecycleManager) CompleteTask(pid PID, exitCode int, output []byte, e
 	lm.results[pid] = result
 	lm.mu.Unlock()
 
-	// Mark as dead.
-	_ = lm.registry.SetState(pid, StateDead)
+	// Mark as zombie (parent must collect result before full removal).
+	_ = lm.registry.SetState(pid, StateZombie)
 
 	// Notify parent via SIGCHLD.
 	_ = lm.signals.Send(proc.PPID, SIGCHLD, nil)

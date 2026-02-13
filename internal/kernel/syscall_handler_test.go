@@ -429,3 +429,86 @@ func TestSyscallHandler_ExecuteOn_NoRuntime(t *testing.T) {
 		t.Error("execute_on should fail when no runtime is registered")
 	}
 }
+
+func TestSyscallHandler_WaitChild_AlreadyZombie(t *testing.T) {
+	king := newTestKingForSyscall(t)
+	handler := NewKernelSyscallHandler(king, nil)
+
+	// Spawn a child.
+	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "spawn-for-wait",
+		Call: &pb.SystemCall_Spawn{
+			Spawn: &pb.SpawnRequest{
+				Name:          "wait-target",
+				Role:          pb.AgentRole_ROLE_TASK,
+				CognitiveTier: pb.CognitiveTier_COG_OPERATIONAL,
+			},
+		},
+	})
+	childPID := spawnResult.GetSpawn().ChildPid
+
+	// Complete the task so it becomes zombie with a result.
+	_, err := king.Lifecycle().CompleteTask(childPID, 42, []byte("task output"), "")
+	if err != nil {
+		t.Fatalf("CompleteTask: %v", err)
+	}
+
+	// Wait for the already-zombie child.
+	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "test-wait-1",
+		Call: &pb.SystemCall_WaitChild{
+			WaitChild: &pb.WaitChildRequest{
+				TargetPid:      childPID,
+				TimeoutSeconds: 5,
+			},
+		},
+	})
+
+	wait := result.GetWaitChild()
+	if wait == nil {
+		t.Fatal("expected WaitChildResponse")
+	}
+	if !wait.Success {
+		t.Fatalf("wait_child failed: %s", wait.Error)
+	}
+	if wait.Pid != childPID {
+		t.Errorf("pid = %d, want %d", wait.Pid, childPID)
+	}
+	if wait.ExitCode != 42 {
+		t.Errorf("exit_code = %d, want 42", wait.ExitCode)
+	}
+	if wait.Output != "task output" {
+		t.Errorf("output = %q, want %q", wait.Output, "task output")
+	}
+}
+
+func TestSyscallHandler_WaitChild_NotOwn(t *testing.T) {
+	king := newTestKingForSyscall(t)
+	handler := NewKernelSyscallHandler(king, nil)
+
+	// Spawn a child under king.
+	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "spawn-1",
+		Call: &pb.SystemCall_Spawn{
+			Spawn: &pb.SpawnRequest{
+				Name:          "child-w",
+				Role:          pb.AgentRole_ROLE_WORKER,
+				CognitiveTier: pb.CognitiveTier_COG_TACTICAL,
+			},
+		},
+	})
+	childPID := spawnResult.GetSpawn().ChildPid
+
+	// Try to wait from a different PID — should fail.
+	result := handler.HandleSyscall(context.Background(), 9999, &pb.SystemCall{
+		CallId: "bad-wait",
+		Call: &pb.SystemCall_WaitChild{
+			WaitChild: &pb.WaitChildRequest{TargetPid: childPID},
+		},
+	})
+
+	wait := result.GetWaitChild()
+	if wait.Success {
+		t.Error("wait_child should fail when caller is not parent")
+	}
+}

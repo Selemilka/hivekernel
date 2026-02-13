@@ -139,18 +139,23 @@ type Process struct {
       |                 |    |
       | sleep      block|    |complete/kill
       v                 v    v
-  +--------+       +-------+ +------+
-  |sleeping|       |blocked| | dead |
-  +--------+       +-------+ +------+
+  +--------+       +-------+ +--------+
+  |sleeping|       |blocked| | zombie |--[reap]--> removed from registry
+  +--------+       +-------+ +--------+
       |                |
       | wake      unblock
       v                v
   +-------+       +--------+
   | idle  |       | running|
   +-------+       +--------+
-
-  (zombie = dead but result not collected)
 ```
+
+**Zombie lifecycle** (modeled after Linux):
+- When a process dies (kill, crash, or task completion), it enters **zombie** state
+- The kernel sends **SIGCHLD** to the parent, and the result is stored for collection
+- The parent can call **`wait_child(pid)`** to collect the exit code and output
+- The **supervisor** periodically scans for zombies older than `ZombieTimeout` (60s) and removes them from the registry via `Registry.Remove()`
+- This prevents orphaned entries in the process table while giving parents time to collect results
 
 ### Spawn Validation
 
@@ -591,7 +596,7 @@ Dynamic process lifecycle (`internal/process/lifecycle.go`):
 |--------|-------------|
 | `Sleep(pid)` | Put agent into sleeping state (architect pattern) |
 | `Wake(pid)` | Wake sleeping agent back to idle |
-| `CompleteTask(pid, exitCode, output, error)` | Record result, mark dead, SIGCHLD to parent |
+| `CompleteTask(pid, exitCode, output, error)` | Record result, mark **zombie**, SIGCHLD to parent |
 | `WaitResult(pid)` | Collect result (like waitpid, removes after read) |
 | `CollapseBranch(parentPID)` | Kill all children, collect results (lead completion) |
 | `ActiveChildren(parentPID)` | Count non-dead, non-zombie children |
@@ -721,13 +726,14 @@ Manages bidirectional Execute streams for task execution:
 | Syscall | Handler | Description |
 |---------|---------|-------------|
 | `spawn` | `king.SpawnChild()` | Spawn child process (real or virtual) |
-| `kill` | `registry.SetState(dead)` + `manager.StopRuntime()` | Kill child + descendants |
+| `kill` | `registry.SetState(zombie)` + `manager.StopRuntime()` + `NotifyParent()` | Kill child + descendants (zombie until reaped) |
 | `send` | `broker.Route()` | Send IPC message (ACL + rate limit check) |
 | `store` | `sharedMem.Store()` | Store artifact (ACL check) |
 | `get_artifact` | `sharedMem.Get/GetByID()` | Retrieve artifact |
 | `escalate` | Push to king's inbox | Report problem to parent |
 | `log` | `log.Printf()` | Write log entry |
 | `execute_on` | `executor.ExecuteTask()` (recursive) | Delegate task to child |
+| `wait_child` | `lifecycle.WaitResult()` (poll) | Wait for child to exit (like waitpid) |
 
 ### Health Monitor (`internal/runtime/health.go`)
 
@@ -949,6 +955,7 @@ Passed to `handle_task(task, ctx)`. Performs kernel operations via the Execute b
 | `ctx.escalate(issue, severity, auto_propagate)` | `str` (response) | Escalate to parent |
 | `ctx.log(level, message, **fields)` | None | Write log entry |
 | `ctx.execute_on(pid, description, params, timeout)` | `TaskResult` | Delegate task to child |
+| `ctx.wait_child(pid, timeout_seconds=60)` | `dict` | Wait for child to exit (like waitpid) |
 | `ctx.report_progress(message, percent)` | None | Send progress update (not a syscall) |
 
 **spawn() parameters:**

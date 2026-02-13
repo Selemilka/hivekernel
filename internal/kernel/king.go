@@ -48,6 +48,7 @@ type King struct {
 	scheduler *scheduler.Scheduler
 	cron      *scheduler.CronScheduler
 	lifecycle *process.LifecycleManager
+	signals   *process.SignalRouter
 
 	// Phase 7: Runtime manager
 	rtManager *runtime.Manager
@@ -97,6 +98,7 @@ func New(cfg Config) (*King, error) {
 		scheduler:   scheduler.NewScheduler(cfg.MessageAgingFactor),
 		cron:        scheduler.NewCronScheduler(),
 		lifecycle:   process.NewLifecycleManager(registry, signals),
+		signals:     signals,
 		proc:        kernelProc,
 	}
 
@@ -220,6 +222,11 @@ func (k *King) Cron() *scheduler.CronScheduler {
 // Lifecycle returns the lifecycle manager.
 func (k *King) Lifecycle() *process.LifecycleManager {
 	return k.lifecycle
+}
+
+// Signals returns the signal router.
+func (k *King) Signals() *process.SignalRouter {
+	return k.signals
 }
 
 // SetRuntimeManager sets the runtime manager (called during wiring).

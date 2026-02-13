@@ -244,6 +244,29 @@ class SyscallContext:
             metadata=dict(resp.result.metadata),
         )
 
+    async def wait_child(self, pid: int, timeout_seconds: int = 60) -> dict:
+        """Wait for a child process to exit (like waitpid).
+
+        Returns dict with keys: pid, exit_code, output.
+        Blocks until the child becomes zombie/dead or timeout.
+        """
+        call = agent_pb2.SystemCall(
+            call_id=str(uuid.uuid4()),
+            wait_child=agent_pb2.WaitChildRequest(
+                target_pid=pid,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
+        result = await self._do_syscall(call)
+        resp = result.wait_child
+        if not resp.success:
+            raise RuntimeError(f"wait_child failed: {resp.error}")
+        return {
+            "pid": resp.pid,
+            "exit_code": resp.exit_code,
+            "output": resp.output,
+        }
+
     async def report_progress(self, message: str, percent: float = 0.0):
         """Send a progress update through the stream (not a syscall)."""
         progress = agent_pb2.TaskProgress(

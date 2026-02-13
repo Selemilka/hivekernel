@@ -114,7 +114,8 @@ func (s *CoreServer) KillChild(ctx context.Context, req *pb.KillRequest) (*pb.Ki
 			if s.king.RuntimeManager() != nil {
 				_ = s.king.RuntimeManager().StopRuntime(d.PID)
 			}
-			_ = s.king.Registry().SetState(d.PID, process.StateDead)
+			_ = s.king.Registry().SetState(d.PID, process.StateZombie)
+			s.king.Signals().NotifyParent(d.PID, -1, "killed")
 			killed = append(killed, d.PID)
 		}
 	}
@@ -122,7 +123,8 @@ func (s *CoreServer) KillChild(ctx context.Context, req *pb.KillRequest) (*pb.Ki
 	if s.king.RuntimeManager() != nil {
 		_ = s.king.RuntimeManager().StopRuntime(req.TargetPid)
 	}
-	_ = s.king.Registry().SetState(req.TargetPid, process.StateDead)
+	_ = s.king.Registry().SetState(req.TargetPid, process.StateZombie)
+	s.king.Signals().NotifyParent(req.TargetPid, -1, "killed")
 	killed = append(killed, req.TargetPid)
 
 	log.Printf("[grpc] KillChild: PID %d killed %v", parentPID, killed)

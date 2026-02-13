@@ -132,13 +132,14 @@ func (s *Supervisor) HandleChildExit(exitedPID PID, exitCode int) {
 		s.attemptRestart(proc, exitCode)
 
 	case RestartNotify:
-		// Notify parent, let them decide.
+		// Mark zombie and notify parent, let them decide.
+		_ = s.registry.SetState(exitedPID, StateZombie)
 		s.signals.NotifyParent(exitedPID, exitCode, "")
 		s.emitEvent("crashed", proc, "notified parent")
 
 	case RestartNever:
-		// Just notify parent and mark dead.
-		_ = s.registry.SetState(exitedPID, StateDead)
+		// Mark zombie and notify parent.
+		_ = s.registry.SetState(exitedPID, StateZombie)
 		s.signals.NotifyParent(exitedPID, exitCode, "")
 		s.emitEvent("crashed", proc, "no restart (task)")
 	}
@@ -231,7 +232,7 @@ func (s *Supervisor) reapZombies() {
 			}
 
 			// Remove from registry.
-			_ = s.registry.SetState(p.PID, StateDead)
+			_ = s.registry.Remove(p.PID)
 			s.emitEvent("zombie", p, "reaped")
 		}
 	}

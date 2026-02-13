@@ -1,0 +1,395 @@
+/* ─── Reset & Base ─── */
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    overflow: hidden;
+    height: 100vh;
+}
+
+/* ─── Header ─── */
+#header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+    height: 50px;
+}
+
+.header-left h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e94560;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.status {
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.status.connected {
+    background: rgba(16, 172, 132, 0.2);
+    color: #10ac84;
+}
+
+.status.disconnected {
+    background: rgba(233, 69, 96, 0.2);
+    color: #e94560;
+}
+
+/* ─── Buttons ─── */
+button {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #1a4a8a;
+}
+
+button.btn-danger {
+    background: #7b2d3b;
+    border-color: #a63d52;
+}
+
+button.btn-danger:hover {
+    background: #a63d52;
+}
+
+button.btn-secondary {
+    background: #2a2a4a;
+    border-color: #3a3a5a;
+}
+
+button.btn-secondary:hover {
+    background: #3a3a5a;
+}
+
+/* ─── Main Layout ─── */
+#main {
+    display: flex;
+    height: calc(100vh - 50px);
+}
+
+#tree-panel {
+    flex: 6;
+    min-width: 0;
+    background: #1a1a2e;
+    position: relative;
+    overflow: hidden;
+}
+
+#tree-svg {
+    width: 100%;
+    height: 100%;
+}
+
+#right-panel {
+    flex: 4;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #0f3460;
+    overflow-y: auto;
+    min-width: 320px;
+    max-width: 500px;
+}
+
+/* ─── Detail Panel ─── */
+#detail-panel {
+    padding: 16px;
+    background: #16213e;
+    flex-shrink: 0;
+}
+
+#detail-panel h2 {
+    font-size: 15px;
+    margin-bottom: 10px;
+    color: #54a0ff;
+}
+
+#detail-placeholder {
+    color: #666;
+    font-style: italic;
+    padding: 20px 0;
+    text-align: center;
+}
+
+#detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+#detail-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+#detail-table .label {
+    color: #888;
+    width: 90px;
+    white-space: nowrap;
+}
+
+#detail-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+/* ─── Artifacts Panel ─── */
+#artifacts-panel {
+    padding: 16px;
+    background: #0f3460;
+    flex: 1;
+    min-height: 0;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.panel-header h2 {
+    font-size: 15px;
+    color: #54a0ff;
+}
+
+#artifacts-toggle {
+    font-size: 18px;
+    color: #888;
+    user-select: none;
+}
+
+#artifacts-content {
+    margin-top: 10px;
+    overflow-y: auto;
+}
+
+#artifacts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#artifacts-table th {
+    text-align: left;
+    color: #888;
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+#artifacts-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ─── D3 Tree Nodes ─── */
+.node circle {
+    stroke-width: 2.5px;
+    cursor: pointer;
+    transition: r 0.2s;
+}
+
+.node circle:hover {
+    r: 10;
+}
+
+.node text {
+    font-size: 12px;
+    fill: #e0e0e0;
+    pointer-events: none;
+}
+
+.node text.node-pid {
+    font-size: 10px;
+    fill: #888;
+}
+
+.link {
+    fill: none;
+    stroke: #2a3a5a;
+    stroke-width: 1.5px;
+}
+
+.node.selected circle {
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 6px rgba(84, 160, 255, 0.6));
+}
+
+/* ─── Modal ─── */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+}
+
+.modal-content h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: #54a0ff;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: #1a1a2e;
+    border: 1px solid #2a3a5a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #54a0ff;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    justify-content: flex-end;
+}
+
+/* ─── Context Menu ─── */
+#context-menu {
+    position: fixed;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 4px 0;
+    min-width: 160px;
+    z-index: 999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.ctx-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.ctx-item:hover {
+    background: #0f3460;
+}
+
+.ctx-danger {
+    color: #e94560;
+}
+
+.ctx-separator {
+    height: 1px;
+    background: #0f3460;
+    margin: 4px 0;
+}
+
+/* ─── Toast ─── */
+#toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    max-width: 350px;
+    animation: toast-in 0.3s ease;
+    word-break: break-word;
+}
+
+.toast.success {
+    background: rgba(16, 172, 132, 0.9);
+    color: #fff;
+}
+
+.toast.error {
+    background: rgba(233, 69, 96, 0.9);
+    color: #fff;
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2a3a5a;
+    border-radius: 3px;
+}

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveKernel Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+<!-- Header -->
+<header id="header">
+    <div class="header-left">
+        <h1>HiveKernel Dashboard</h1>
+    </div>
+    <div class="header-right">
+        <button id="btn-refresh" onclick="requestRefresh()">Refresh</button>
+        <span id="status-indicator" class="status disconnected">Disconnected</span>
+    </div>
+</header>
+
+<!-- Main layout -->
+<div id="main">
+    <!-- Tree panel -->
+    <div id="tree-panel">
+        <svg id="tree-svg"></svg>
+    </div>
+
+    <!-- Right panel -->
+    <div id="right-panel">
+        <!-- Detail panel -->
+        <div id="detail-panel">
+            <h2>Process Details</h2>
+            <div id="detail-placeholder">Click a node to view details</div>
+            <div id="detail-content" style="display:none">
+                <table id="detail-table">
+                    <tr><td class="label">PID</td><td id="d-pid"></td></tr>
+                    <tr><td class="label">PPID</td><td id="d-ppid"></td></tr>
+                    <tr><td class="label">Name</td><td id="d-name"></td></tr>
+                    <tr><td class="label">User</td><td id="d-user"></td></tr>
+                    <tr><td class="label">Role</td><td id="d-role"></td></tr>
+                    <tr><td class="label">Tier</td><td id="d-tier"></td></tr>
+                    <tr><td class="label">Model</td><td id="d-model"></td></tr>
+                    <tr><td class="label">State</td><td id="d-state"></td></tr>
+                    <tr><td class="label">VPS</td><td id="d-vps"></td></tr>
+                    <tr><td class="label">Children</td><td id="d-children"></td></tr>
+                    <tr><td class="label">Tokens</td><td id="d-tokens"></td></tr>
+                    <tr><td class="label">Context %</td><td id="d-context"></td></tr>
+                    <tr><td class="label">Task</td><td id="d-task"></td></tr>
+                    <tr><td class="label">Runtime</td><td id="d-runtime"></td></tr>
+                </table>
+                <div id="detail-actions">
+                    <button id="btn-spawn" onclick="openSpawnModal()">Spawn Child</button>
+                    <button id="btn-execute" onclick="openExecuteModal()">Execute Task</button>
+                    <button id="btn-kill" class="btn-danger" onclick="killSelected()">Kill</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Artifacts panel -->
+        <div id="artifacts-panel">
+            <div class="panel-header" onclick="toggleArtifacts()">
+                <h2>Artifacts</h2>
+                <span id="artifacts-toggle">+</span>
+            </div>
+            <div id="artifacts-content" style="display:none">
+                <button onclick="loadArtifacts()" style="margin-bottom:8px">Load Artifacts</button>
+                <table id="artifacts-table">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Stored By</th>
+                        </tr>
+                    </thead>
+                    <tbody id="artifacts-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Spawn Modal -->
+<div id="spawn-modal" class="modal" style="display:none">
+    <div class="modal-content">
+        <h2>Spawn Child Agent</h2>
+        <div class="form-group">
+            <label>Parent PID</label>
+            <input type="number" id="spawn-parent" value="1">
+        </div>
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="spawn-name" placeholder="my-agent">
+        </div>
+        <div class="form-group">
+            <label>Role</label>
+            <select id="spawn-role">
+                <option value="daemon">daemon</option>
+                <option value="agent">agent</option>
+                <option value="architect">architect</option>
+                <option value="lead">lead</option>
+                <option value="worker" selected>worker</option>
+                <option value="task">task</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cognitive Tier</label>
+            <select id="spawn-tier">
+                <option value="strategic">strategic</option>
+                <option value="tactical">tactical</option>
+                <option value="operational" selected>operational</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Runtime Image</label>
+            <input type="text" id="spawn-runtime" placeholder="module:ClassName (optional)">
+        </div>
+        <div class="form-group">
+            <label>System Prompt</label>
+            <textarea id="spawn-prompt" rows="3" placeholder="(optional)"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button onclick="doSpawn()">Spawn</button>
+            <button class="btn-secondary" onclick="closeModal('spawn-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Execute Modal -->
+<div id="execute-modal" class="modal" style="display:none">
+    <div class="modal-content">
+        <h2>Execute Task on PID <span id="exec-target-pid"></span></h2>
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="exec-description" placeholder="Task description">
+        </div>
+        <div class="form-group">
+            <label>Params (JSON)</label>
+            <textarea id="exec-params" rows="3" placeholder='{"key": "value"}'>{}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Timeout (seconds)</label>
+            <input type="number" id="exec-timeout" value="60">
+        </div>
+        <div class="modal-actions">
+            <button onclick="doExecute()">Execute</button>
+            <button class="btn-secondary" onclick="closeModal('execute-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Context menu -->
+<div id="context-menu" style="display:none">
+    <div class="ctx-item" onclick="ctxViewDetails()">View Details</div>
+    <div class="ctx-item" onclick="ctxSpawnChild()">Spawn Child</div>
+    <div class="ctx-item" onclick="ctxExecuteTask()">Execute Task</div>
+    <div class="ctx-separator"></div>
+    <div class="ctx-item ctx-danger" onclick="ctxKill()">Kill Process</div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

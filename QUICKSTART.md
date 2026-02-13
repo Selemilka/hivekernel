@@ -185,6 +185,29 @@ Expected output shows 8 sections: process table, agent spawning, task execution,
 artifacts, report summary, and cleanup. See [USAGE-GUIDE.md](USAGE-GUIDE.md)
 for a full walkthrough of building similar scenarios.
 
+## Web Dashboard
+
+Interactive browser UI for viewing the process tree, spawning/killing agents,
+executing tasks, and inspecting artifacts.
+
+```bash
+# Terminal 1: start the kernel
+bin\hivekernel.exe --listen :50051
+
+# Terminal 2: install dashboard deps & start
+pip install fastapi uvicorn
+python sdk/python/dashboard/app.py
+```
+
+Open http://localhost:8080 in your browser. Features:
+- **Live process tree** (D3.js) with auto-refresh via WebSocket
+- **Click** a node to view details, **right-click** for context menu
+- **Spawn/Kill/Execute** agents from the detail panel
+- **Artifacts panel** to inspect shared memory
+
+Environment variables: `HIVEKERNEL_ADDR` (default `localhost:50051`),
+`DASHBOARD_PORT` (default `8080`).
+
 ## Run the Echo Worker Demo (manual)
 
 ```bash
@@ -212,6 +235,7 @@ internal/
   daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code
 sdk/python/           Async Python agent SDK (HiveAgent, CoreClient, SyscallContext)
+sdk/python/dashboard/ Web dashboard (FastAPI + D3.js)
 HIVEKERNEL-SPEC.md    Full project specification
 ARCHITECTURE.md       Full architecture documentation (10 sections, API ref)
 USAGE-GUIDE.md        Practical "How do I..." guide with examples

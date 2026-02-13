@@ -37,7 +37,7 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-154 tests covering:
+210 tests covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
@@ -55,10 +55,15 @@ go test ./internal/... -v
 - Auth (identity, inheritance, kernel override)
 - ACL (role-based, cross-user, custom rules)
 - Capabilities (role-based, grant/revoke, tool validation)
-- **Node discovery** (register, deregister, health, FindLeastLoaded, stale detection)
-- **VPS connector** (connect, disconnect, forward messages, error tracking, recovery)
-- **Branch migration** (prepare, execute, rollback, node count updates, snapshot)
-- **Cgroups** (create, delete, add/remove process, token limits, spawn limits, usage)
+- Node discovery (register, deregister, health, FindLeastLoaded, stale detection)
+- VPS connector (connect, disconnect, forward messages, error tracking, recovery)
+- Branch migration (prepare, execute, rollback, node count updates, snapshot)
+- Cgroups (create, delete, add/remove process, token limits, spawn limits, usage)
+- **Task priority** (tier/role scoring, aging, ready queue ordering)
+- **Task scheduler** (submit, assign, complete, cancel, resubmit, tier/role matching)
+- **Cron scheduling** (parse, match, interval, multi-value, due detection, per-VPS)
+- **Lifecycle** (sleep/wake, CompleteTask, WaitResult, CollapseBranch, ActiveChildren)
+- **Compiler scenario** (full Leo pipeline: spawn leads -> workers -> tasks complete -> tree collapse)
 
 ## Run Python Integration Test
 
@@ -129,6 +134,7 @@ internal/
   resources/          Token budgets, rate limiter, accounting, cgroups
   permissions/        Auth (USER identity), ACL, role capabilities
   cluster/            Node discovery, VPS connector, branch migration
+  scheduler/          Task priority, scheduler, cron scheduling
   runtime/            Agent runtime lifecycle (stub)
   daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code

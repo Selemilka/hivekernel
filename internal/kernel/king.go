@@ -11,6 +11,7 @@ import (
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/resources"
+	"github.com/selemilka/hivekernel/internal/scheduler"
 )
 
 // King is the root process (PID 1) of HiveKernel.
@@ -42,6 +43,11 @@ type King struct {
 	migrator  *cluster.MigrationManager
 	cgroups   *resources.CGroupManager
 
+	// Phase 5: Dynamic Scaling
+	scheduler *scheduler.Scheduler
+	cron      *scheduler.CronScheduler
+	lifecycle *process.LifecycleManager
+
 	proc *process.Process // king's own process entry
 
 	mu     sync.RWMutex
@@ -60,6 +66,7 @@ func New(cfg Config) (*King, error) {
 	}
 
 	auth := permissions.NewAuthProvider(registry)
+	signals := process.NewSignalRouter(registry)
 
 	nodes := cluster.NewNodeRegistry()
 
@@ -83,6 +90,9 @@ func New(cfg Config) (*King, error) {
 		connector:   cluster.NewConnector(),
 		migrator:    cluster.NewMigrationManager(registry, nodes),
 		cgroups:     resources.NewCGroupManager(registry),
+		scheduler:   scheduler.NewScheduler(cfg.MessageAgingFactor),
+		cron:        scheduler.NewCronScheduler(),
+		lifecycle:   process.NewLifecycleManager(registry, signals),
 		proc:        kernelProc,
 	}
 
@@ -191,6 +201,21 @@ func (k *King) Migrator() *cluster.MigrationManager {
 // CGroups returns the cgroup manager.
 func (k *King) CGroups() *resources.CGroupManager {
 	return k.cgroups
+}
+
+// Scheduler returns the task scheduler.
+func (k *King) Scheduler() *scheduler.Scheduler {
+	return k.scheduler
+}
+
+// Cron returns the cron scheduler.
+func (k *King) Cron() *scheduler.CronScheduler {
+	return k.cron
+}
+
+// Lifecycle returns the lifecycle manager.
+func (k *King) Lifecycle() *process.LifecycleManager {
+	return k.lifecycle
 }
 
 // PID returns the kernel's process ID.

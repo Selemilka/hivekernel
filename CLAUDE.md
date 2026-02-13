@@ -95,6 +95,7 @@ sdk/python/                   — Python SDK (UV-managed)
 - **Python**: relative imports within `hivekernel_sdk`, generated proto files need `from .` import fix
 - **Git**: commit at each phase completion, descriptive messages
 - **Console**: avoid unicode arrows/emojis in print statements (Windows cp1251 encoding)
+- This project runs on Windows with PowerShell. Use PowerShell cmdlets, not Unix commands. Use Select-String instead of grep, Get-ChildItem instead of find, Get-Content instead of cat/head/tail.
 
 ## Roadmap
 

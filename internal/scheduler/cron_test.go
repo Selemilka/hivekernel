@@ -1,0 +1,264 @@
+package scheduler
+
+import (
+	"testing"
+	"time"
+
+	"github.com/selemilka/hivekernel/internal/process"
+)
+
+func TestParseCron_Basic(t *testing.T) {
+	sched, err := ParseCron("0 8 * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if sched.Raw != "0 8 * * *" {
+		t.Errorf("Raw=%q", sched.Raw)
+	}
+	if sched.Minute.Any || len(sched.Minute.Values) != 1 || sched.Minute.Values[0] != 0 {
+		t.Error("minute should be 0")
+	}
+	if sched.Hour.Any || len(sched.Hour.Values) != 1 || sched.Hour.Values[0] != 8 {
+		t.Error("hour should be 8")
+	}
+	if !sched.DayOfMonth.Any {
+		t.Error("day of month should be *")
+	}
+}
+
+func TestParseCron_Interval(t *testing.T) {
+	sched, err := ParseCron("*/5 * * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if sched.Minute.Interval != 5 {
+		t.Errorf("minute interval=%d, want 5", sched.Minute.Interval)
+	}
+}
+
+func TestParseCron_MultiValue(t *testing.T) {
+	sched, err := ParseCron("0,30 * * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if len(sched.Minute.Values) != 2 {
+		t.Errorf("minute values=%d, want 2", len(sched.Minute.Values))
+	}
+}
+
+func TestParseCron_Invalid(t *testing.T) {
+	if _, err := ParseCron("invalid"); err == nil {
+		t.Error("should fail on invalid expression")
+	}
+	if _, err := ParseCron("0 8 *"); err == nil {
+		t.Error("should fail with only 3 fields")
+	}
+	if _, err := ParseCron("*/0 * * * *"); err == nil {
+		t.Error("should fail on */0")
+	}
+}
+
+func TestCronSchedule_Matches(t *testing.T) {
+	// "0 8 * * *" — every day at 08:00.
+	sched, _ := ParseCron("0 8 * * *")
+
+	match := time.Date(2025, 1, 15, 8, 0, 0, 0, time.UTC)
+	if !sched.Matches(match) {
+		t.Error("should match 08:00")
+	}
+
+	noMatch := time.Date(2025, 1, 15, 9, 0, 0, 0, time.UTC)
+	if sched.Matches(noMatch) {
+		t.Error("should not match 09:00")
+	}
+}
+
+func TestCronSchedule_Matches_Interval(t *testing.T) {
+	// "*/15 * * * *" — every 15 minutes.
+	sched, _ := ParseCron("*/15 * * * *")
+
+	for _, min := range []int{0, 15, 30, 45} {
+		t1 := time.Date(2025, 1, 15, 10, min, 0, 0, time.UTC)
+		if !sched.Matches(t1) {
+			t.Errorf("should match minute %d", min)
+		}
+	}
+
+	noMatch := time.Date(2025, 1, 15, 10, 7, 0, 0, time.UTC)
+	if sched.Matches(noMatch) {
+		t.Error("should not match minute 7")
+	}
+}
+
+func TestCronSchedule_Matches_DayOfWeek(t *testing.T) {
+	// "0 9 * * 1" — every Monday at 09:00.
+	sched, _ := ParseCron("0 9 * * 1")
+
+	// 2025-01-13 is a Monday.
+	monday := time.Date(2025, 1, 13, 9, 0, 0, 0, time.UTC)
+	if !sched.Matches(monday) {
+		t.Error("should match Monday 09:00")
+	}
+
+	tuesday := time.Date(2025, 1, 14, 9, 0, 0, 0, time.UTC)
+	if sched.Matches(tuesday) {
+		t.Error("should not match Tuesday")
+	}
+}
+
+func TestCronScheduler_AddAndGet(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 8 * * *")
+
+	id := cs.Add(&CronEntry{
+		Name:     "morning-check",
+		Schedule: sched,
+		Action:   CronSpawn,
+		VPS:      "vps1",
+	})
+
+	if id == "" {
+		t.Error("ID should not be empty")
+	}
+
+	entry, err := cs.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if entry.Name != "morning-check" {
+		t.Errorf("Name=%q, want morning-check", entry.Name)
+	}
+	if !entry.Enabled {
+		t.Error("should be enabled by default")
+	}
+}
+
+func TestCronScheduler_Remove(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 8 * * *")
+
+	id := cs.Add(&CronEntry{Name: "test", Schedule: sched})
+
+	if err := cs.Remove(id); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if cs.Count() != 0 {
+		t.Errorf("Count=%d, want 0", cs.Count())
+	}
+
+	if err := cs.Remove("nonexistent"); err == nil {
+		t.Error("remove nonexistent should fail")
+	}
+}
+
+func TestCronScheduler_SetEnabled(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 8 * * *")
+
+	id := cs.Add(&CronEntry{Name: "test", Schedule: sched})
+	cs.SetEnabled(id, false)
+
+	entry, _ := cs.Get(id)
+	if entry.Enabled {
+		t.Error("should be disabled")
+	}
+
+	cs.SetEnabled(id, true)
+	entry, _ = cs.Get(id)
+	if !entry.Enabled {
+		t.Error("should be enabled")
+	}
+}
+
+func TestCronScheduler_CheckDue(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 8 * * *")
+
+	cs.Add(&CronEntry{
+		Name:     "morning",
+		Schedule: sched,
+		Action:   CronWake,
+		TargetPID: 100,
+	})
+
+	// Check at 08:00 — should trigger.
+	at8 := time.Date(2025, 1, 15, 8, 0, 30, 0, time.UTC)
+	due := cs.CheckDue(at8)
+	if len(due) != 1 {
+		t.Errorf("due=%d, want 1 at 08:00", len(due))
+	}
+
+	// Check again at same minute — should NOT trigger again.
+	due2 := cs.CheckDue(at8)
+	if len(due2) != 0 {
+		t.Errorf("due=%d, want 0 (already triggered this minute)", len(due2))
+	}
+
+	// Check at 09:00 — should not trigger.
+	at9 := time.Date(2025, 1, 15, 9, 0, 0, 0, time.UTC)
+	due3 := cs.CheckDue(at9)
+	if len(due3) != 0 {
+		t.Errorf("due=%d, want 0 at 09:00", len(due3))
+	}
+}
+
+func TestCronScheduler_CheckDue_Disabled(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 8 * * *")
+
+	id := cs.Add(&CronEntry{Name: "test", Schedule: sched})
+	cs.SetEnabled(id, false)
+
+	at8 := time.Date(2025, 1, 15, 8, 0, 0, 0, time.UTC)
+	due := cs.CheckDue(at8)
+	if len(due) != 0 {
+		t.Errorf("disabled entry should not trigger: due=%d", len(due))
+	}
+}
+
+func TestCronScheduler_ListByVPS(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("* * * * *")
+
+	cs.Add(&CronEntry{Name: "a", Schedule: sched, VPS: "vps1"})
+	cs.Add(&CronEntry{Name: "b", Schedule: sched, VPS: "vps2"})
+	cs.Add(&CronEntry{Name: "c", Schedule: sched, VPS: "vps1"})
+
+	vps1 := cs.ListByVPS("vps1")
+	if len(vps1) != 2 {
+		t.Errorf("vps1 entries=%d, want 2", len(vps1))
+	}
+
+	vps2 := cs.ListByVPS("vps2")
+	if len(vps2) != 1 {
+		t.Errorf("vps2 entries=%d, want 1", len(vps2))
+	}
+}
+
+func TestCronScheduler_SpawnEntry(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("0 */2 * * *")
+
+	id := cs.Add(&CronEntry{
+		Name:      "spawn-checker",
+		Schedule:  sched,
+		Action:    CronSpawn,
+		SpawnName: "price-checker",
+		SpawnRole: process.RoleTask,
+		SpawnTier: process.CogOperational,
+		SpawnParent: 100,
+		KeepAlive: false,
+		VPS:       "vps2",
+	})
+
+	entry, _ := cs.Get(id)
+	if entry.Action != CronSpawn {
+		t.Errorf("Action=%s, want spawn", entry.Action)
+	}
+	if entry.SpawnRole != process.RoleTask {
+		t.Error("SpawnRole should be task")
+	}
+	if entry.KeepAlive {
+		t.Error("KeepAlive should be false")
+	}
+}

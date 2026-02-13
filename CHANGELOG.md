@@ -119,3 +119,25 @@
 - Connector: connect/get, validation, disconnect, IsConnected, list, ForwardMessage (success, not connected, unhealthy), error threshold, recovery, error reset on forward, reconnect
 - Migration: prepare (basic, cannot migrate kernel, same node, target offline), execute (basic, node count updates), rollback (basic, invalid state), execute twice, list/active, source draining restored, SnapshotProcess
 - Cgroups: create (basic, duplicate, invalid root), delete, GetByPID, AddProcess (basic, max reached, idempotent), RemoveProcess, ConsumeTokens (basic, exceeds limit, not in group), CheckSpawnAllowed (basic, not in group), List, GetGroupUsage, Remaining, UsagePercent
+
+---
+
+## Phase 5 — Dynamic Scaling (completed)
+
+**Goal:** task scheduling with priority aging, cron-based periodic actions, process lifecycle orchestration (sleep/wake, branch collapse), full compiler scenario.
+
+### Added
+- `internal/scheduler/priority.go` — TaskPriority with aging (`effective = base + age * factor`). BasePriorityFromTier/Role scoring. ReadyQueue (heap-based priority queue). TaskEntry with ID, Name, RequiredTier, RequiredRole, State. TaskState enum (Pending, Assigned, Running, Completed, Failed, Cancelled)
+- `internal/scheduler/scheduler.go` — Task Scheduler with Submit, Assign (tier/role compatibility matching), Complete, Cancel, Resubmit. PendingCount, TasksByState, TasksByAgent queries. Auto-priority from tier+role on submit
+- `internal/scheduler/cron.go` — CronSchedule parsing (supports `*`, specific values, `*/N` intervals, comma-separated). CronScheduler: Add, Remove, SetEnabled, CheckDue (with last-trigger dedup), ListByVPS. CronEntry with spawn/wake actions, VPS targeting, KeepAlive flag
+- `internal/process/lifecycle.go` — LifecycleManager for dynamic process lifecycle. Sleep/Wake (architect pattern: produce artifact then sleep, wake on demand). CompleteTask (records result, marks dead, SIGCHLD to parent — like waitpid). WaitResult/PeekResult for result collection. CollapseBranch (kills all children bottom-up, collects results). ActiveChildren, IsAlive helpers
+
+### Changed
+- `internal/kernel/king.go` — Now owns Scheduler, CronScheduler, LifecycleManager. Creates SignalRouter for lifecycle management. Added accessor methods: Scheduler(), Cron(), Lifecycle()
+
+### Tests: 210 passing (+56 new)
+- Task priority: tier scoring (strategic > tactical > operational), role scoring (kernel > daemon > ... > task), combined priority, aging effect, ReadyQueue push/pop/peek/drain, aging reorder
+- Scheduler: submit, assign (basic, tier mismatch, role mismatch, empty queue), complete (success, failure), cancel, resubmit, priority ordering, TasksByState, TasksByAgent
+- Cron: parse (basic, interval, multi-value, invalid), matches (time, interval, day-of-week), add/remove, enable/disable, CheckDue (trigger, no re-trigger), ListByVPS
+- Lifecycle: sleep (basic, idempotent, dead), wake (basic, not-sleeping), CompleteTask (success, failure), WaitResult (consume semantics), PeekResult, PendingResults, CollapseBranch (basic, with completed children, empty), IsAlive, ActiveChildren
+- **Compiler scenario**: full Leo pipeline — king → queen → Leo → Architect(sleeps) + 3 Leads → Workers/Tasks. Tree grows to 14 processes, cgroup tracks 11 members. 6 tasks submitted/assigned/completed. Token consumption: 500k across branch. Tree collapses, 0 active children remaining

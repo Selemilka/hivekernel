@@ -186,16 +186,18 @@ async def handle_task(self, task, ctx) -> TaskResult:
 
 The kernel enforces these constraints:
 
-1. **Cognitive tier**: child tier <= parent tier
+1. **Parent must be alive**: dead or zombie processes cannot spawn children
+
+2. **Cognitive tier**: child tier <= parent tier
    - strategic parent can spawn any tier
    - tactical parent can spawn tactical or operational
    - operational parent can spawn only operational
 
-2. **Role restrictions**: task role cannot be strategic tier
+3. **Role restrictions**: task role cannot be strategic tier
 
-3. **Max children**: default 10 per process (configurable via limits)
+4. **Max children**: default 10 per process (configurable via limits)
 
-4. **Name required**: empty name is rejected
+5. **Name required**: empty name is rejected
 
 ### Spawn multiple workers
 

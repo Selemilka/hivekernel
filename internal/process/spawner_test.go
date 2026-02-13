@@ -144,6 +144,37 @@ func TestSpawnRejectsStrategicTask(t *testing.T) {
 	}
 }
 
+func TestSpawnRejectsDeadParent(t *testing.T) {
+	r := NewRegistry()
+	s := NewSpawner(r)
+
+	king, _ := s.SpawnKernel("king", "root", "vps1")
+	worker, _ := s.Spawn(SpawnRequest{
+		ParentPID: king.PID, Name: "worker",
+		Role: RoleWorker, CognitiveTier: CogOperational,
+	})
+
+	// Kill the worker (zombie state).
+	_ = r.SetState(worker.PID, StateZombie)
+	_, err := s.Spawn(SpawnRequest{
+		ParentPID: worker.PID, Name: "child-of-zombie",
+		Role: RoleWorker, CognitiveTier: CogOperational,
+	})
+	if err == nil {
+		t.Fatal("expected error: zombie parent cannot spawn")
+	}
+
+	// Dead state.
+	_ = r.SetState(worker.PID, StateDead)
+	_, err = s.Spawn(SpawnRequest{
+		ParentPID: worker.PID, Name: "child-of-dead",
+		Role: RoleWorker, CognitiveTier: CogOperational,
+	})
+	if err == nil {
+		t.Fatal("expected error: dead parent cannot spawn")
+	}
+}
+
 func TestSpawnRequiresName(t *testing.T) {
 	r := NewRegistry()
 	s := NewSpawner(r)

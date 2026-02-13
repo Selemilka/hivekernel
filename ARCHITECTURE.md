@@ -161,11 +161,12 @@ type Process struct {
 
 The spawner (`internal/process/spawner.go`) enforces:
 
-1. **Cognitive tier constraint**: `child.tier >= parent.tier` (lower tier number = higher capability)
-2. **Max children**: Parent's `Limits.MaxChildren` not exceeded
-3. **Role/tier combo**: Task role cannot have strategic tier
-4. **Name required**: Every process must have a name
-5. **User inheritance**: Non-kernel parents must pass their own user to children
+1. **Parent alive**: Parent must not be in `dead` or `zombie` state
+2. **Cognitive tier constraint**: `child.tier >= parent.tier` (lower tier number = higher capability)
+3. **Max children**: Parent's `Limits.MaxChildren` not exceeded
+4. **Role/tier combo**: Task role cannot have strategic tier
+5. **Name required**: Every process must have a name
+6. **User inheritance**: Non-kernel parents must pass their own user to children
 
 ### Process Tree Example
 
@@ -509,7 +510,7 @@ Role-based access control for 7 system actions (`internal/permissions/acl.go`):
     |       childUser)
     +-- Caps.ValidateTools(childRole, tools)    -- child role allows these tools?
     +-- CGroups.CheckSpawnAllowed(parentPID)    -- cgroup process limit ok?
-    +-- Spawner.Spawn(req)                      -- cognitive tier, max_children, etc.
+    +-- Spawner.Spawn(req)                      -- parent alive, cognitive tier, max_children, etc.
     |
     v
   Process created in registry

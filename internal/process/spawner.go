@@ -91,6 +91,11 @@ func (s *Spawner) Spawn(req SpawnRequest) (*Process, error) {
 
 // validate checks all spawn invariants from the spec.
 func (s *Spawner) validate(req SpawnRequest, parent *Process) error {
+	// Rule: dead/zombie process cannot spawn children.
+	if parent != nil && (parent.State == StateDead || parent.State == StateZombie) {
+		return fmt.Errorf("parent %d is %s and cannot spawn children", parent.PID, parent.State)
+	}
+
 	// Rule: cognitive tier of child <= parent.
 	if parent != nil {
 		if req.CognitiveTier < parent.CognitiveTier {

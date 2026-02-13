@@ -74,7 +74,7 @@ func main() {
 
 	// Phase 0 demo: spawn queen + worker to verify the pipeline.
 	go func() {
-		if err := demo(king, rtManager); err != nil {
+		if err := demo(king, rtManager, cfg); err != nil {
 			log.Printf("[demo] error: %v", err)
 		}
 	}()
@@ -109,8 +109,8 @@ func listen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// demo spawns the Phase 0 scenario: king → queen → worker.
-func demo(king *kernel.King, rtManager *runtime.Manager) error {
+// demo spawns the Phase 0 scenario: king -> queen -> worker.
+func demo(king *kernel.King, rtManager *runtime.Manager, cfg kernel.Config) error {
 	// Spawn queen@vps1 under king.
 	queen, err := king.SpawnChild(process.SpawnRequest{
 		ParentPID:     king.PID(),
@@ -119,6 +119,7 @@ func demo(king *kernel.King, rtManager *runtime.Manager) error {
 		CognitiveTier: process.CogTactical,
 		Model:         "sonnet",
 		User:          "root",
+		Limits:        cfg.DefaultLimits,
 	})
 	if err != nil {
 		return err
@@ -137,6 +138,7 @@ func demo(king *kernel.King, rtManager *runtime.Manager) error {
 		Role:          process.RoleWorker,
 		CognitiveTier: process.CogTactical,
 		Model:         "sonnet",
+		Limits:        cfg.DefaultLimits,
 	})
 	if err != nil {
 		return err

@@ -78,7 +78,7 @@ class HiveAgent:
 
     # ─── SDK-provided methods (call CoreService) ───
 
-    async def spawn(
+    def spawn(
         self,
         name: str,
         role: str,
@@ -90,7 +90,7 @@ class HiveAgent:
         limits: dict | None = None,
     ) -> int:
         """Spawn a child agent. Returns child PID."""
-        return await self._core.spawn_child(
+        return self._core.spawn_child(
             name=name,
             role=role,
             cognitive_tier=cognitive_tier,
@@ -101,11 +101,11 @@ class HiveAgent:
             limits=limits,
         )
 
-    async def kill(self, pid: int, recursive: bool = True) -> list[int]:
+    def kill(self, pid: int, recursive: bool = True) -> list[int]:
         """Kill a child agent (and its children if recursive)."""
-        return await self._core.kill_child(pid, recursive)
+        return self._core.kill_child(pid, recursive)
 
-    async def send(
+    def send(
         self,
         to_pid: int = 0,
         to_queue: str = "",
@@ -116,7 +116,7 @@ class HiveAgent:
         ttl: int = 0,
     ) -> str:
         """Send a message. Returns message_id."""
-        return await self._core.send_message(
+        return self._core.send_message(
             to_pid=to_pid,
             to_queue=to_queue,
             type=type,
@@ -126,19 +126,32 @@ class HiveAgent:
             ttl=ttl,
         )
 
-    async def escalate(
+    def escalate(
         self, issue: str, severity: str = "warning", auto_propagate: bool = True
     ) -> str:
         """Escalate a problem to parent."""
-        return await self._core.escalate(issue, severity, auto_propagate)
+        return self._core.escalate(issue, severity, auto_propagate)
 
-    async def get_resources(self):
+    def get_resources(self):
         """Check remaining resources."""
-        return await self._core.get_resource_usage()
+        return self._core.get_resource_usage()
 
-    async def log(self, level: str, message: str, **fields):
+    def log(self, level: str, message: str, **fields):
         """Write a log entry."""
-        await self._core.log(level, message, **fields)
+        self._core.log(level, message, **fields)
+
+    def store_artifact(self, key: str, content: bytes,
+                       content_type: str = "text/plain", visibility: int = 3) -> str:
+        """Store an artifact in shared memory."""
+        return self._core.store_artifact(key, content, content_type, visibility)
+
+    def get_artifact(self, key: str):
+        """Get an artifact from shared memory."""
+        return self._core.get_artifact(key=key)
+
+    def report_metric(self, name: str, value: float, **labels):
+        """Report a metric (e.g. tokens_consumed)."""
+        self._core.report_metric(name, value, **labels)
 
     # ─── gRPC AgentService implementation ───
 

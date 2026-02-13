@@ -37,28 +37,58 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-27 tests covering:
+87 tests covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
 - Signals (SIGTERM, SIGKILL, SIGCHLD, grace period, STOP/CONT)
 - Tree operations (KillBranch, Reparent, OrphanAdoption)
 - Supervisor (daemon restart, task exit, zombie reaping, max restart cap)
+- Message broker (routing rules, sibling copy, cross-branch via NCA)
+- Shared memory (4 visibility levels, list, delete, kernel override)
+- Pipes (bidirectional, backpressure, registry)
+- Events (pub/sub, topic isolation, unsubscribe)
+- Token budgets (allocate, consume, release, branch usage)
+- Rate limiter (sliding window, expiry)
+- Limits (spawn, context window, timeout)
+- Accounting (usage by user, VPS, process, tier)
+- Auth (identity, inheritance, kernel override)
+- ACL (role-based, cross-user, custom rules)
+- Capabilities (role-based, grant/revoke, tool validation)
 
-## Run Python E2E Test
+## Run Python Integration Test
 
 With the Go core running in another terminal:
 
 ```bash
-python sdk\python\examples\test_e2e.py
+python sdk\python\examples\test_integration.py
 ```
 
-This connects to the core via gRPC and tests:
-- `GetProcessInfo` — reads king's process entry
-- `ListChildren` — lists the full process tree
-- `SpawnChild` — spawns a new task under queen
-- `SendMessage` — sends a message through the IPC queue
-- `Log` — writes a log entry via gRPC
+31 checks covering the full Python SDK <-> Go Core pipeline:
+- Process info (GetProcessInfo, pid=0 self-resolve)
+- Process tree (ListChildren recursive, demo queen + worker)
+- Spawn & Kill (SpawnChild, verify attributes, KillChild)
+- IPC messages (parent<->child, named queues)
+- Shared memory (store artifact, get by key, list with prefix)
+- Resource usage (tokens, children count/max)
+- Metrics & accounting (report token consumption)
+- Escalation (escalate to parent)
+- Logging (info, warn levels)
+- ACL enforcement (task cannot spawn children)
+
+Expected output:
+```
+============================================================
+HiveKernel Integration Test (Phase 0-3)
+Connecting to Go core at localhost:50051...
+============================================================
+  [PASS] king exists
+  [PASS] king name
+  ...
+============================================================
+ALL 31 CHECKS PASSED!
+============================================================
+```
 
 ## Python SDK Setup (for agent development)
 
@@ -88,9 +118,16 @@ uv run python examples\echo_worker.py --port 50100 --core localhost:50051
 
 ```
 cmd/hivekernel/       Go entry point
-internal/             Go core packages (kernel, process, ipc, runtime, daemons)
+internal/
+  kernel/             King (PID 1), config, gRPC CoreService
+  process/            Registry, spawner, supervisor, signals, tree
+  ipc/                Broker, priority queue, shared memory, pipes, events
+  resources/          Token budgets, rate limiter, accounting
+  permissions/        Auth (USER identity), ACL, role capabilities
+  runtime/            Agent runtime lifecycle (stub)
+  daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code
-sdk/python/           Python agent SDK
+sdk/python/           Python agent SDK (HiveAgent, CoreClient, types)
 HIVEKERNEL-SPEC.md    Full project specification
 CLAUDE.md             Development guide for Claude Code
 CHANGELOG.md          Progress log

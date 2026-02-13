@@ -213,39 +213,26 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 		}
 	}
 
-	// Check budget: does parent have sufficient tokens for the child?
-	childTier := resources.TierFromCog(req.CognitiveTier)
-	if req.Limits.MaxTokensTotal > 0 {
-		if err := k.budget.Allocate(req.ParentPID, 0, childTier, req.Limits.MaxTokensTotal); err != nil {
-			return nil, fmt.Errorf("spawn denied: %w", err)
-		}
-		// Undo the temporary allocation (used PID 0); we'll re-allocate with real PID.
-		k.budget.Release(0, childTier)
-	}
-
 	// Spawn the process (validates cognitive tier, max_children, etc.).
 	proc, err := k.spawner.Spawn(req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Allocate budget to the new child with real PID.
+	// Allocate budget from parent to child (if child has token limits).
+	childTier := resources.TierFromCog(req.CognitiveTier)
 	if req.Limits.MaxTokensTotal > 0 {
-		if err := k.budget.Allocate(req.ParentPID, proc.PID, childTier, req.Limits.MaxTokensTotal); err != nil {
-			// Rollback: remove the spawned process.
-			k.registry.Remove(proc.PID)
-			return nil, fmt.Errorf("budget allocation failed after spawn: %w", err)
+		// Ensure parent has a budget entry at this tier.
+		if parentBudget := k.budget.GetBudget(req.ParentPID, childTier); parentBudget != nil {
+			if err := k.budget.Allocate(req.ParentPID, proc.PID, childTier, req.Limits.MaxTokensTotal); err != nil {
+				// Rollback: remove the spawned process.
+				k.registry.Remove(proc.PID)
+				return nil, fmt.Errorf("spawn denied: %w", err)
+			}
+		} else {
+			// Parent has no budget at this tier — just set child's budget directly.
+			k.budget.SetBudget(proc.PID, childTier, req.Limits.MaxTokensTotal)
 		}
-	}
-
-	// Set rate limit for the child.
-	if req.Limits.MaxTokensPerHour > 0 {
-		// Convert tokens/hour to approximate API calls/minute (rough estimate: 1 call ≈ 1000 tokens).
-		callsPerMin := uint32(req.Limits.MaxTokensPerHour / 1000 / 60)
-		if callsPerMin < 1 {
-			callsPerMin = 1
-		}
-		k.rateLimiter.SetLimit(proc.PID, callsPerMin)
 	}
 
 	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",

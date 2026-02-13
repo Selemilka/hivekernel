@@ -14,9 +14,18 @@ class CoreClient:
         self._pid = pid
         self._metadata = [("x-hivekernel-pid", str(pid))]
 
+    @property
+    def pid(self) -> int:
+        return self._pid
+
+    @pid.setter
+    def pid(self, value: int):
+        self._pid = value
+        self._metadata = [("x-hivekernel-pid", str(value))]
+
     # --- Process management ---
 
-    async def spawn_child(
+    def spawn_child(
         self,
         name: str,
         role: str,
@@ -52,7 +61,7 @@ class CoreClient:
             raise RuntimeError(f"spawn failed: {resp.error}")
         return resp.child_pid
 
-    async def kill_child(self, pid: int, recursive: bool = True) -> list[int]:
+    def kill_child(self, pid: int, recursive: bool = True) -> list[int]:
         """Kill a child agent. Returns list of killed PIDs."""
         resp = self._stub.KillChild(
             agent_pb2.KillRequest(target_pid=pid, recursive=recursive),
@@ -62,7 +71,7 @@ class CoreClient:
             raise RuntimeError(f"kill failed: {resp.error}")
         return list(resp.killed_pids)
 
-    async def get_process_info(self, pid: int = 0):
+    def get_process_info(self, pid: int = 0):
         """Get info about a process (0 = self)."""
         resp = self._stub.GetProcessInfo(
             core_pb2.ProcessInfoRequest(pid=pid),
@@ -70,7 +79,7 @@ class CoreClient:
         )
         return resp
 
-    async def list_children(self, recursive: bool = False):
+    def list_children(self, recursive: bool = False):
         """List children of this agent."""
         resp = self._stub.ListChildren(
             core_pb2.ListChildrenRequest(recursive=recursive),
@@ -80,7 +89,7 @@ class CoreClient:
 
     # --- IPC ---
 
-    async def send_message(
+    def send_message(
         self,
         to_pid: int = 0,
         to_queue: str = "",
@@ -107,9 +116,50 @@ class CoreClient:
             raise RuntimeError(f"send failed: {resp.error}")
         return resp.message_id
 
+    # --- Artifacts ---
+
+    def store_artifact(
+        self,
+        key: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+        visibility: int = 3,  # global
+    ) -> str:
+        """Store an artifact in shared memory. Returns artifact ID."""
+        resp = self._stub.StoreArtifact(
+            agent_pb2.StoreArtifactRequest(
+                key=key,
+                content=content,
+                content_type=content_type,
+                visibility=visibility,
+            ),
+            metadata=self._metadata,
+        )
+        if not resp.success:
+            raise RuntimeError(f"store artifact failed: {resp.error}")
+        return resp.artifact_id
+
+    def get_artifact(self, key: str = "", artifact_id: str = ""):
+        """Get an artifact by key or ID."""
+        resp = self._stub.GetArtifact(
+            agent_pb2.GetArtifactRequest(key=key, artifact_id=artifact_id),
+            metadata=self._metadata,
+        )
+        if not resp.found:
+            raise RuntimeError(f"artifact not found: {resp.error}")
+        return resp
+
+    def list_artifacts(self, prefix: str = ""):
+        """List artifacts with optional prefix filter."""
+        resp = self._stub.ListArtifacts(
+            core_pb2.ListArtifactsRequest(prefix=prefix),
+            metadata=self._metadata,
+        )
+        return list(resp.artifacts)
+
     # --- Resources ---
 
-    async def get_resource_usage(self) -> ResourceUsage:
+    def get_resource_usage(self) -> ResourceUsage:
         """Get resource usage for this agent."""
         resp = self._stub.GetResourceUsage(
             core_pb2.ResourceUsageRequest(),
@@ -124,9 +174,24 @@ class CoreClient:
             uptime_seconds=resp.uptime_seconds,
         )
 
+    def request_resources(self, resource_type: str = "tokens", amount: int = 0) -> dict:
+        """Request additional resources from parent's budget."""
+        resp = self._stub.RequestResources(
+            core_pb2.ResourceRequest(
+                resource_type=resource_type,
+                amount=amount,
+            ),
+            metadata=self._metadata,
+        )
+        return {
+            "granted": resp.granted,
+            "granted_amount": resp.granted_amount,
+            "reason": resp.reason,
+        }
+
     # --- Escalation ---
 
-    async def escalate(
+    def escalate(
         self, issue: str, severity: str = "warning", auto_propagate: bool = True
     ) -> str:
         """Escalate a problem to parent."""
@@ -141,9 +206,9 @@ class CoreClient:
         )
         return resp.response
 
-    # --- Logging ---
+    # --- Logging & Metrics ---
 
-    async def log(self, level: str, message: str, **fields):
+    def log(self, level: str, message: str, **fields):
         """Write a log entry."""
         level_map = {"debug": 0, "info": 1, "warn": 2, "error": 3}
         self._stub.Log(
@@ -151,6 +216,17 @@ class CoreClient:
                 level=level_map.get(level, 1),
                 message=message,
                 fields=fields,
+            ),
+            metadata=self._metadata,
+        )
+
+    def report_metric(self, name: str, value: float, **labels):
+        """Report a metric value."""
+        self._stub.ReportMetric(
+            core_pb2.MetricRequest(
+                name=name,
+                value=value,
+                labels=labels,
             ),
             metadata=self._metadata,
         )

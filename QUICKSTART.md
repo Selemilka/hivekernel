@@ -1,5 +1,8 @@
 # HiveKernel Quickstart
 
+> **See also**: [ARCHITECTURE.md](ARCHITECTURE.md) for full system internals,
+> [USAGE-GUIDE.md](USAGE-GUIDE.md) for practical "How do I..." examples.
+
 ## Prerequisites
 
 - **Go 1.24+** — [go.dev/dl](https://go.dev/dl/)
@@ -169,6 +172,19 @@ python sdk\python\examples\test_team_e2e.py
 delegates 3 subtasks via `ctx.execute_on()`, stores results as artifact, kills workers.
 All 5 processes are real Python processes communicating via gRPC.
 
+## Run the AI Research Team Demo (one command)
+
+The showcase demo starts the kernel, spawns a lead agent + 3 workers,
+delegates research subtopics, stores artifacts, and prints results:
+
+```bash
+python sdk/python/examples/demo_showcase.py
+```
+
+Expected output shows 8 sections: process table, agent spawning, task execution,
+artifacts, report summary, and cleanup. See [USAGE-GUIDE.md](USAGE-GUIDE.md)
+for a full walkthrough of building similar scenarios.
+
 ## Run the Echo Worker Demo (manual)
 
 ```bash
@@ -197,6 +213,8 @@ internal/
 api/proto/            Protobuf definitions + generated Go code
 sdk/python/           Async Python agent SDK (HiveAgent, CoreClient, SyscallContext)
 HIVEKERNEL-SPEC.md    Full project specification
+ARCHITECTURE.md       Full architecture documentation (10 sections, API ref)
+USAGE-GUIDE.md        Practical "How do I..." guide with examples
 CLAUDE.md             Development guide for Claude Code
 CHANGELOG.md          Progress log
 ```

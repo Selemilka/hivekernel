@@ -62,11 +62,23 @@ class SyscallContext:
         tools: list[str] | None = None,
         initial_task: str = "",
         limits: dict | None = None,
+        runtime_image: str = "",
+        runtime_type: str = "python",
     ) -> int:
-        """Spawn a child agent. Returns child PID."""
+        """Spawn a child agent. Returns child PID.
+
+        If runtime_image is set (e.g. "my_module:MyClass"), the kernel will
+        launch a Python process and connect to it via gRPC.
+        """
         pb_limits = None
         if limits:
             pb_limits = agent_pb2.ResourceLimits(**limits)
+
+        rt_map = {
+            "python": agent_pb2.RUNTIME_PYTHON,
+            "claw": agent_pb2.RUNTIME_CLAW,
+            "custom": agent_pb2.RUNTIME_CUSTOM,
+        }
 
         call = agent_pb2.SystemCall(
             call_id=str(uuid.uuid4()),
@@ -79,6 +91,8 @@ class SyscallContext:
                 tools=tools or [],
                 limits=pb_limits,
                 initial_task=initial_task,
+                runtime_type=rt_map.get(runtime_type, agent_pb2.RUNTIME_PYTHON),
+                runtime_image=runtime_image,
             ),
         )
         result = await self._do_syscall(call)

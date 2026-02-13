@@ -36,14 +36,26 @@ class CoreClient:
         tools: list[str] | None = None,
         initial_task: str = "",
         limits: dict | None = None,
+        runtime_image: str = "",
+        runtime_type: str = "python",
     ) -> int:
-        """Spawn a child agent. Returns child PID."""
+        """Spawn a child agent. Returns child PID.
+
+        If runtime_image is set (e.g. "my_module:MyClass"), the kernel will
+        launch a Python process and connect to it via gRPC.
+        """
         role_enum = _role_to_proto(role)
         cog_enum = _cog_to_proto(cognitive_tier)
 
         pb_limits = None
         if limits:
             pb_limits = agent_pb2.ResourceLimits(**limits)
+
+        rt_map = {
+            "python": agent_pb2.RUNTIME_PYTHON,
+            "claw": agent_pb2.RUNTIME_CLAW,
+            "custom": agent_pb2.RUNTIME_CUSTOM,
+        }
 
         resp = await self._stub.SpawnChild(
             agent_pb2.SpawnRequest(
@@ -55,6 +67,8 @@ class CoreClient:
                 tools=tools or [],
                 limits=pb_limits,
                 initial_task=initial_task,
+                runtime_type=rt_map.get(runtime_type, agent_pb2.RUNTIME_PYTHON),
+                runtime_image=runtime_image,
             ),
             metadata=self._metadata,
         )

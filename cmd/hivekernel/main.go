@@ -36,8 +36,12 @@ func main() {
 		log.Fatalf("Failed to bootstrap kernel: %v", err)
 	}
 
+	// Normalize coreAddr for agents to dial back.
+	// ":50051" is valid for listening but agents need "localhost:50051" to connect.
+	coreAddr := normalizeCoreAddr(cfg.ListenAddr)
+
 	// Start runtime manager, executor, and health monitor.
-	rtManager := runtime.NewManager(cfg.ListenAddr, "python")
+	rtManager := runtime.NewManager(coreAddr, "python")
 	king.SetRuntimeManager(rtManager)
 	syscallHandler := kernel.NewKernelSyscallHandler(king, rtManager)
 	executor := runtime.NewExecutor(syscallHandler)
@@ -69,7 +73,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to listen on %s: %v", cfg.ListenAddr, err)
 	}
-	log.Printf("[grpc] CoreService listening on %s", cfg.ListenAddr)
+	log.Printf("[grpc] CoreService listening on %s (agents dial %s)", cfg.ListenAddr, coreAddr)
 
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
@@ -77,9 +81,9 @@ func main() {
 		}
 	}()
 
-	// Phase 0 demo: spawn queen + worker to verify the pipeline.
+	// Demo: spawn virtual queen + worker to verify the pipeline.
 	go func() {
-		if err := demo(king, rtManager, cfg); err != nil {
+		if err := demo(king, cfg); err != nil {
 			log.Printf("[demo] error: %v", err)
 		}
 	}()
@@ -103,6 +107,19 @@ func main() {
 	log.Printf("HiveKernel stopped.")
 }
 
+// normalizeCoreAddr converts a listen address to a dialable address.
+// ":50051" -> "localhost:50051", "unix:///path" stays as-is.
+func normalizeCoreAddr(listenAddr string) string {
+	if strings.HasPrefix(listenAddr, "unix://") {
+		return listenAddr
+	}
+	// TCP: if host is empty (":port"), prepend localhost.
+	if strings.HasPrefix(listenAddr, ":") {
+		return "localhost" + listenAddr
+	}
+	return listenAddr
+}
+
 // listen creates a net.Listener for TCP or unix socket addresses.
 func listen(addr string) (net.Listener, error) {
 	if strings.HasPrefix(addr, "unix://") {
@@ -114,9 +131,9 @@ func listen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// demo spawns the Phase 0 scenario: king -> queen -> worker.
-func demo(king *kernel.King, rtManager *runtime.Manager, cfg kernel.Config) error {
-	// Spawn queen@vps1 under king.
+// demo spawns the Phase 0 scenario: king -> queen -> worker (virtual, no real Python).
+func demo(king *kernel.King, cfg kernel.Config) error {
+	// Spawn queen@vps1 under king (no RuntimeImage = virtual process).
 	queen, err := king.SpawnChild(process.SpawnRequest{
 		ParentPID:     king.PID(),
 		Name:          "queen@vps1",
@@ -130,13 +147,7 @@ func demo(king *kernel.King, rtManager *runtime.Manager, cfg kernel.Config) erro
 		return err
 	}
 
-	// Register runtime for queen.
-	_, err = rtManager.StartRuntime(queen, runtime.RuntimePython)
-	if err != nil {
-		return err
-	}
-
-	// Spawn a worker under queen.
+	// Spawn a worker under queen (no RuntimeImage = virtual process).
 	worker, err := king.SpawnChild(process.SpawnRequest{
 		ParentPID:     queen.PID,
 		Name:          "demo-worker",
@@ -149,15 +160,10 @@ func demo(king *kernel.King, rtManager *runtime.Manager, cfg kernel.Config) erro
 		return err
 	}
 
-	_, err = rtManager.StartRuntime(worker, runtime.RuntimePython)
-	if err != nil {
-		return err
-	}
-
 	// Print the process table.
 	king.PrintProcessTable()
 
-	log.Printf("[demo] Phase 0 scenario ready: king(PID %d) → queen(PID %d) → worker(PID %d)",
+	log.Printf("[demo] scenario ready: king(PID %d) -> queen(PID %d) -> worker(PID %d)",
 		king.PID(), queen.PID, worker.PID)
 
 	return nil

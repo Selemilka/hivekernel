@@ -94,6 +94,10 @@ class HiveAgent:
                 agent._user = request.user
                 agent._role = _role_from_proto(request.role)
 
+                # Update CoreClient PID so subsequent RPCs carry the right metadata.
+                if agent._core is not None:
+                    agent._core.pid = request.pid
+
                 cfg = request.config
                 agent._config = AgentConfig(
                     name=cfg.name if cfg else "",

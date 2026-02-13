@@ -36,8 +36,12 @@ func main() {
 		log.Fatalf("Failed to bootstrap kernel: %v", err)
 	}
 
-	// Start runtime manager and health monitor.
+	// Start runtime manager, executor, and health monitor.
 	rtManager := runtime.NewManager()
+	syscallHandler := kernel.NewKernelSyscallHandler(king)
+	executor := runtime.NewExecutor(syscallHandler)
+	_ = executor // used when core dispatches tasks to agents
+
 	healthMon := runtime.NewHealthMonitor(
 		king.Registry(),
 		rtManager,

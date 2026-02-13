@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 
 from hivekernel_sdk import HiveAgent, TaskResult, AgentConfig
 
@@ -16,10 +17,10 @@ from hivekernel_sdk import HiveAgent, TaskResult, AgentConfig
 class EchoWorker(HiveAgent):
     """Simple worker that echoes task descriptions back."""
 
-    def on_init(self, config: AgentConfig) -> None:
+    async def on_init(self, config: AgentConfig) -> None:
         print(f"EchoWorker initialized: {config.name}")
 
-    def handle_task(self, task) -> TaskResult:
+    async def handle_task(self, task, ctx) -> TaskResult:
         print(f"EchoWorker handling task {task.task_id}: {task.description}")
         return TaskResult(
             exit_code=0,
@@ -28,7 +29,7 @@ class EchoWorker(HiveAgent):
             metadata={"worker": "echo", "task_id": task.task_id},
         )
 
-    def on_message(self, message):
+    async def on_message(self, message):
         print(f"EchoWorker got message: {message.type} from PID {message.from_pid}")
         from hivekernel_sdk.types import MessageAck
         return MessageAck(status=MessageAck.ACK_ACCEPTED)
@@ -41,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     agent = EchoWorker()
-    agent.run(agent_addr=f"[::]:{args.port}", core_addr=args.core)
+    asyncio.run(agent.run(agent_addr=f"[::]:{args.port}", core_addr=args.core))
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-210 tests covering:
+221 tests covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
@@ -64,6 +64,8 @@ go test ./internal/... -v
 - **Cron scheduling** (parse, match, interval, multi-value, due detection, per-VPS)
 - **Lifecycle** (sleep/wake, CompleteTask, WaitResult, CollapseBranch, ActiveChildren)
 - **Compiler scenario** (full Leo pipeline: spawn leads -> workers -> tasks complete -> tree collapse)
+- **Executor** (Execute stream caller: simple complete, syscall round-trip, failure, dial error)
+- **Syscall handler** (in-stream dispatch: spawn, kill, send, store/get artifact, escalate, log)
 
 ## Run Python Integration Test
 
@@ -135,10 +137,10 @@ internal/
   permissions/        Auth (USER identity), ACL, role capabilities
   cluster/            Node discovery, VPS connector, branch migration
   scheduler/          Task priority, scheduler, cron scheduling
-  runtime/            Agent runtime lifecycle (stub)
+  runtime/            Agent runtime lifecycle, Execute stream executor
   daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code
-sdk/python/           Python agent SDK (HiveAgent, CoreClient, types)
+sdk/python/           Async Python agent SDK (HiveAgent, CoreClient, SyscallContext)
 HIVEKERNEL-SPEC.md    Full project specification
 CLAUDE.md             Development guide for Claude Code
 CHANGELOG.md          Progress log

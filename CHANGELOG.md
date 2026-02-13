@@ -140,4 +140,30 @@
 - Scheduler: submit, assign (basic, tier mismatch, role mismatch, empty queue), complete (success, failure), cancel, resubmit, priority ordering, TasksByState, TasksByAgent
 - Cron: parse (basic, interval, multi-value, invalid), matches (time, interval, day-of-week), add/remove, enable/disable, CheckDue (trigger, no re-trigger), ListByVPS
 - Lifecycle: sleep (basic, idempotent, dead), wake (basic, not-sleeping), CompleteTask (success, failure), WaitResult (consume semantics), PeekResult, PendingResults, CollapseBranch (basic, with completed children, empty), IsAlive, ActiveChildren
-- **Compiler scenario**: full Leo pipeline — king → queen → Leo → Architect(sleeps) + 3 Leads → Workers/Tasks. Tree grows to 14 processes, cgroup tracks 11 members. 6 tasks submitted/assigned/completed. Token consumption: 500k across branch. Tree collapses, 0 active children remaining
+- **Compiler scenario**: full Leo pipeline
+
+---
+
+## Phase 6 — Async Python SDK + In-Stream Syscalls (completed)
+
+**Goal:** Migrate Python SDK from blocking `grpc` to `grpc.aio`, implement in-stream syscalls so agents can spawn/send/kill through the Execute bidirectional stream.
+
+### Python SDK — Async Migration
+
+- `sdk/python/hivekernel_sdk/client.py` — All 13 CoreClient methods now `async def` with `await`, channel type `grpc.aio.Channel`
+- `sdk/python/hivekernel_sdk/syscall.py` — **NEW**: SyscallContext bridges `handle_task()` to Execute bidi stream. Each syscall (spawn, kill, send, store_artifact, get_artifact, escalate, log) creates a SystemCall protobuf with UUID call_id, puts TaskProgress(PROGRESS_SYSCALL) on asyncio.Queue, awaits Future resolved when SyscallResult arrives. Also: `report_progress()` for PROGRESS_UPDATE
+- `sdk/python/hivekernel_sdk/agent.py` — HiveAgent fully async: `grpc.aio.server()`, no ThreadPoolExecutor. User methods: `async def on_init/handle_task/on_message/on_shutdown`. `handle_task(task, ctx: SyscallContext)` — new `ctx` param. Execute handler runs concurrent stream_reader/stream_writer/run_task via asyncio.create_task. New `core` property for direct CoreClient access in on_init/on_shutdown
+- `sdk/python/hivekernel_sdk/__init__.py` — Exports SyscallContext
+- `sdk/python/examples/test_integration.py` — All 31 checks migrated to async (`asyncio.run(main())`)
+- `sdk/python/examples/echo_worker.py` — Async agent (`asyncio.run(agent.run())`)
+- `sdk/python/examples/test_e2e.py` — Async (`asyncio.run(main())`)
+
+### Go Core — Execute Stream + Syscall Dispatch
+
+- `internal/runtime/executor.go` — **NEW**: Executor.ExecuteTask() opens bidi Execute stream to agent, sends TaskRequest, processes syscalls in a loop (PROGRESS_SYSCALL -> dispatch via SyscallHandler -> send SyscallResult back), returns TaskResult on COMPLETED/FAILED
+- `internal/kernel/syscall_handler.go` — **NEW**: KernelSyscallHandler implements runtime.SyscallHandler. Dispatches spawn/kill/send/store/get_artifact/escalate/log to King subsystems (same logic as grpc_core.go but via stream)
+- `cmd/hivekernel/main.go` — Wires KernelSyscallHandler + Executor into startup
+
+### Tests: 221 passing (+11 new)
+- Executor: simple complete, syscall round-trip (spawn via stream), task failure, dial error
+- Syscall handler: spawn, kill (own/not-own), send message, store+get artifact, escalate, log — king → queen → Leo → Architect(sleeps) + 3 Leads → Workers/Tasks. Tree grows to 14 processes, cgroup tracks 11 members. 6 tasks submitted/assigned/completed. Token consumption: 500k across branch. Tree collapses, 0 active children remaining

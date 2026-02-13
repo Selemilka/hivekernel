@@ -1,15 +1,16 @@
-"""gRPC client wrapper for CoreService calls."""
+"""Async gRPC client wrapper for CoreService calls."""
 
 import grpc
+import grpc.aio
 
 from . import agent_pb2, core_pb2, core_pb2_grpc, agent_pb2_grpc
 from .types import ResourceUsage
 
 
 class CoreClient:
-    """Wraps the gRPC CoreService stub with a clean Python API."""
+    """Wraps the gRPC CoreService stub with a clean async Python API."""
 
-    def __init__(self, channel: grpc.Channel, pid: int):
+    def __init__(self, channel: grpc.aio.Channel, pid: int):
         self._stub = core_pb2_grpc.CoreServiceStub(channel)
         self._pid = pid
         self._metadata = [("x-hivekernel-pid", str(pid))]
@@ -25,7 +26,7 @@ class CoreClient:
 
     # --- Process management ---
 
-    def spawn_child(
+    async def spawn_child(
         self,
         name: str,
         role: str,
@@ -44,7 +45,7 @@ class CoreClient:
         if limits:
             pb_limits = agent_pb2.ResourceLimits(**limits)
 
-        resp = self._stub.SpawnChild(
+        resp = await self._stub.SpawnChild(
             agent_pb2.SpawnRequest(
                 name=name,
                 role=role_enum,
@@ -61,9 +62,9 @@ class CoreClient:
             raise RuntimeError(f"spawn failed: {resp.error}")
         return resp.child_pid
 
-    def kill_child(self, pid: int, recursive: bool = True) -> list[int]:
+    async def kill_child(self, pid: int, recursive: bool = True) -> list[int]:
         """Kill a child agent. Returns list of killed PIDs."""
-        resp = self._stub.KillChild(
+        resp = await self._stub.KillChild(
             agent_pb2.KillRequest(target_pid=pid, recursive=recursive),
             metadata=self._metadata,
         )
@@ -71,17 +72,17 @@ class CoreClient:
             raise RuntimeError(f"kill failed: {resp.error}")
         return list(resp.killed_pids)
 
-    def get_process_info(self, pid: int = 0):
+    async def get_process_info(self, pid: int = 0):
         """Get info about a process (0 = self)."""
-        resp = self._stub.GetProcessInfo(
+        resp = await self._stub.GetProcessInfo(
             core_pb2.ProcessInfoRequest(pid=pid),
             metadata=self._metadata,
         )
         return resp
 
-    def list_children(self, recursive: bool = False):
+    async def list_children(self, recursive: bool = False):
         """List children of this agent."""
-        resp = self._stub.ListChildren(
+        resp = await self._stub.ListChildren(
             core_pb2.ListChildrenRequest(recursive=recursive),
             metadata=self._metadata,
         )
@@ -89,7 +90,7 @@ class CoreClient:
 
     # --- IPC ---
 
-    def send_message(
+    async def send_message(
         self,
         to_pid: int = 0,
         to_queue: str = "",
@@ -100,7 +101,7 @@ class CoreClient:
         ttl: int = 0,
     ) -> str:
         """Send a message. Returns message_id."""
-        resp = self._stub.SendMessage(
+        resp = await self._stub.SendMessage(
             agent_pb2.SendMessageRequest(
                 to_pid=to_pid,
                 to_queue=to_queue,
@@ -118,7 +119,7 @@ class CoreClient:
 
     # --- Artifacts ---
 
-    def store_artifact(
+    async def store_artifact(
         self,
         key: str,
         content: bytes,
@@ -126,7 +127,7 @@ class CoreClient:
         visibility: int = 3,  # global
     ) -> str:
         """Store an artifact in shared memory. Returns artifact ID."""
-        resp = self._stub.StoreArtifact(
+        resp = await self._stub.StoreArtifact(
             agent_pb2.StoreArtifactRequest(
                 key=key,
                 content=content,
@@ -139,9 +140,9 @@ class CoreClient:
             raise RuntimeError(f"store artifact failed: {resp.error}")
         return resp.artifact_id
 
-    def get_artifact(self, key: str = "", artifact_id: str = ""):
+    async def get_artifact(self, key: str = "", artifact_id: str = ""):
         """Get an artifact by key or ID."""
-        resp = self._stub.GetArtifact(
+        resp = await self._stub.GetArtifact(
             agent_pb2.GetArtifactRequest(key=key, artifact_id=artifact_id),
             metadata=self._metadata,
         )
@@ -149,9 +150,9 @@ class CoreClient:
             raise RuntimeError(f"artifact not found: {resp.error}")
         return resp
 
-    def list_artifacts(self, prefix: str = ""):
+    async def list_artifacts(self, prefix: str = ""):
         """List artifacts with optional prefix filter."""
-        resp = self._stub.ListArtifacts(
+        resp = await self._stub.ListArtifacts(
             core_pb2.ListArtifactsRequest(prefix=prefix),
             metadata=self._metadata,
         )
@@ -159,9 +160,9 @@ class CoreClient:
 
     # --- Resources ---
 
-    def get_resource_usage(self) -> ResourceUsage:
+    async def get_resource_usage(self) -> ResourceUsage:
         """Get resource usage for this agent."""
-        resp = self._stub.GetResourceUsage(
+        resp = await self._stub.GetResourceUsage(
             core_pb2.ResourceUsageRequest(),
             metadata=self._metadata,
         )
@@ -174,9 +175,9 @@ class CoreClient:
             uptime_seconds=resp.uptime_seconds,
         )
 
-    def request_resources(self, resource_type: str = "tokens", amount: int = 0) -> dict:
+    async def request_resources(self, resource_type: str = "tokens", amount: int = 0) -> dict:
         """Request additional resources from parent's budget."""
-        resp = self._stub.RequestResources(
+        resp = await self._stub.RequestResources(
             core_pb2.ResourceRequest(
                 resource_type=resource_type,
                 amount=amount,
@@ -191,12 +192,12 @@ class CoreClient:
 
     # --- Escalation ---
 
-    def escalate(
+    async def escalate(
         self, issue: str, severity: str = "warning", auto_propagate: bool = True
     ) -> str:
         """Escalate a problem to parent."""
         sev_map = {"info": 0, "warning": 1, "error": 2, "critical": 3}
-        resp = self._stub.Escalate(
+        resp = await self._stub.Escalate(
             agent_pb2.EscalateRequest(
                 issue=issue,
                 severity=sev_map.get(severity, 1),
@@ -208,10 +209,10 @@ class CoreClient:
 
     # --- Logging & Metrics ---
 
-    def log(self, level: str, message: str, **fields):
+    async def log(self, level: str, message: str, **fields):
         """Write a log entry."""
         level_map = {"debug": 0, "info": 1, "warn": 2, "error": 3}
-        self._stub.Log(
+        await self._stub.Log(
             agent_pb2.LogRequest(
                 level=level_map.get(level, 1),
                 message=message,
@@ -220,9 +221,9 @@ class CoreClient:
             metadata=self._metadata,
         )
 
-    def report_metric(self, name: str, value: float, **labels):
+    async def report_metric(self, name: str, value: float, **labels):
         """Report a metric value."""
-        self._stub.ReportMetric(
+        await self._stub.ReportMetric(
             core_pb2.MetricRequest(
                 name=name,
                 value=value,

@@ -1,14 +1,14 @@
 """HiveAgent base class — the main SDK entrypoint for agent authors."""
 
-import argparse
+import asyncio
 import logging
-import sys
-from concurrent import futures
 
 import grpc
+import grpc.aio
 
 from . import agent_pb2, agent_pb2_grpc
 from .client import CoreClient
+from .syscall import SyscallContext
 from .types import (
     AgentConfig,
     Message,
@@ -36,7 +36,7 @@ class HiveAgent:
         self._config: AgentConfig = AgentConfig()
         self._core: CoreClient | None = None
 
-    # ─── Properties (read-only) ───
+    # --- Properties (read-only) ---
 
     @property
     def pid(self) -> int:
@@ -58,109 +58,37 @@ class HiveAgent:
     def config(self) -> AgentConfig:
         return self._config
 
-    # ─── Author implements these ───
+    @property
+    def core(self) -> CoreClient | None:
+        """Direct access to CoreClient for use in on_init/on_shutdown."""
+        return self._core
 
-    def on_init(self, config: AgentConfig) -> None:
+    # --- Author implements these ---
+
+    async def on_init(self, config: AgentConfig) -> None:
         """Called after initialization. Override to set up state."""
         pass
 
-    def handle_task(self, task: Task) -> TaskResult:
-        """Main method. Receives a task, returns a result."""
+    async def handle_task(self, task: Task, ctx: SyscallContext) -> TaskResult:
+        """Main method. Receives a task and syscall context, returns a result."""
         raise NotImplementedError("Subclass must implement handle_task")
 
-    def on_message(self, message: Message) -> MessageAck:
+    async def on_message(self, message: Message) -> MessageAck:
         """Handle incoming message from another agent. Override if needed."""
         return MessageAck(status=MessageAck.ACK_ACCEPTED)
 
-    def on_shutdown(self, reason: str) -> bytes | None:
+    async def on_shutdown(self, reason: str) -> bytes | None:
         """Save state before shutdown. Override if needed."""
         return None
 
-    # ─── SDK-provided methods (call CoreService) ───
-
-    def spawn(
-        self,
-        name: str,
-        role: str,
-        cognitive_tier: str,
-        system_prompt: str = "",
-        model: str = "",
-        tools: list[str] | None = None,
-        initial_task: str = "",
-        limits: dict | None = None,
-    ) -> int:
-        """Spawn a child agent. Returns child PID."""
-        return self._core.spawn_child(
-            name=name,
-            role=role,
-            cognitive_tier=cognitive_tier,
-            system_prompt=system_prompt,
-            model=model,
-            tools=tools,
-            initial_task=initial_task,
-            limits=limits,
-        )
-
-    def kill(self, pid: int, recursive: bool = True) -> list[int]:
-        """Kill a child agent (and its children if recursive)."""
-        return self._core.kill_child(pid, recursive)
-
-    def send(
-        self,
-        to_pid: int = 0,
-        to_queue: str = "",
-        type: str = "default",
-        payload: bytes = b"",
-        priority: str = "normal",
-        requires_ack: bool = False,
-        ttl: int = 0,
-    ) -> str:
-        """Send a message. Returns message_id."""
-        return self._core.send_message(
-            to_pid=to_pid,
-            to_queue=to_queue,
-            type=type,
-            payload=payload,
-            priority=priority,
-            requires_ack=requires_ack,
-            ttl=ttl,
-        )
-
-    def escalate(
-        self, issue: str, severity: str = "warning", auto_propagate: bool = True
-    ) -> str:
-        """Escalate a problem to parent."""
-        return self._core.escalate(issue, severity, auto_propagate)
-
-    def get_resources(self):
-        """Check remaining resources."""
-        return self._core.get_resource_usage()
-
-    def log(self, level: str, message: str, **fields):
-        """Write a log entry."""
-        self._core.log(level, message, **fields)
-
-    def store_artifact(self, key: str, content: bytes,
-                       content_type: str = "text/plain", visibility: int = 3) -> str:
-        """Store an artifact in shared memory."""
-        return self._core.store_artifact(key, content, content_type, visibility)
-
-    def get_artifact(self, key: str):
-        """Get an artifact from shared memory."""
-        return self._core.get_artifact(key=key)
-
-    def report_metric(self, name: str, value: float, **labels):
-        """Report a metric (e.g. tokens_consumed)."""
-        self._core.report_metric(name, value, **labels)
-
-    # ─── gRPC AgentService implementation ───
+    # --- gRPC AgentService implementation ---
 
     def _make_servicer(self):
         """Create the gRPC servicer that delegates to this agent."""
         agent = self
 
         class Servicer(agent_pb2_grpc.AgentServiceServicer):
-            def Init(self, request, context):
+            async def Init(self, request, context):
                 agent._pid = request.pid
                 agent._ppid = request.ppid
                 agent._user = request.user
@@ -175,7 +103,7 @@ class HiveAgent:
                 )
 
                 try:
-                    agent.on_init(agent._config)
+                    await agent.on_init(agent._config)
                     logger.info(
                         "Agent %s (PID %d) initialized", agent._config.name, agent._pid
                     )
@@ -184,24 +112,24 @@ class HiveAgent:
                     logger.error("Init failed: %s", e)
                     return agent_pb2.InitResponse(ready=False, error=str(e))
 
-            def Shutdown(self, request, context):
+            async def Shutdown(self, request, context):
                 reason = _shutdown_reason(request.reason)
                 logger.info("Shutdown requested: %s", reason)
-                snapshot = agent.on_shutdown(reason)
+                snapshot = await agent.on_shutdown(reason)
                 return agent_pb2.ShutdownResponse(
                     state_snapshot=snapshot or b"",
                 )
 
-            def Heartbeat(self, request, context):
+            async def Heartbeat(self, request, context):
                 return agent_pb2.HeartbeatResponse(
                     state=agent_pb2.STATE_RUNNING,
                 )
 
-            def Interrupt(self, request, context):
+            async def Interrupt(self, request, context):
                 logger.info("Interrupt: task=%s reason=%s", request.task_id, request.reason)
                 return agent_pb2.InterruptResponse(acknowledged=True)
 
-            def DeliverMessage(self, request, context):
+            async def DeliverMessage(self, request, context):
                 msg = Message(
                     message_id=request.message_id,
                     from_pid=request.from_pid,
@@ -211,68 +139,104 @@ class HiveAgent:
                     timestamp=request.timestamp,
                     requires_ack=request.requires_ack,
                 )
-                ack = agent.on_message(msg)
+                ack = await agent.on_message(msg)
                 return agent_pb2.MessageAck(
                     message_id=msg.message_id,
                     status=ack.status,
                     reply=ack.reply,
                 )
 
-            def Execute(self, request_iterator, context):
+            async def Execute(self, request_iterator, context):
                 """Handle the bidirectional Execute stream.
 
-                Phase 0: simple request-response — read TaskRequest, call
-                handle_task, yield TaskProgress with result.
+                Runs three concurrent tasks:
+                  - stream_reader: reads ExecuteInput, dispatches TaskRequest
+                    and SyscallResult
+                  - stream_writer: drains output queue, writes to stream
+                  - run_task: calls handle_task, puts result on queue
                 """
-                for execute_input in request_iterator:
-                    if execute_input.HasField("task"):
-                        req = execute_input.task
-                        task = Task(
-                            task_id=req.task_id,
-                            description=req.description,
-                            params=dict(req.params),
-                            timeout_seconds=req.timeout_seconds,
-                            context=req.context,
-                            parent_task_id=req.parent_task_id,
-                        )
-                        logger.info("Executing task %s: %s", task.task_id, task.description)
+                out_queue = asyncio.Queue()
+                current_ctx = None
+                task_obj = None
+                task_received = asyncio.Event()
 
-                        try:
-                            result = agent.handle_task(task)
-                            yield agent_pb2.TaskProgress(
-                                task_id=task.task_id,
-                                type=agent_pb2.PROGRESS_COMPLETED,
-                                message="completed",
-                                progress_percent=100.0,
-                                result=agent_pb2.TaskResult(
-                                    exit_code=result.exit_code,
-                                    output=result.output,
-                                    artifacts=result.artifacts,
-                                    metadata=result.metadata,
-                                ),
+                async def stream_reader():
+                    nonlocal current_ctx, task_obj
+                    async for execute_input in request_iterator:
+                        if execute_input.HasField("task"):
+                            req = execute_input.task
+                            task_obj = Task(
+                                task_id=req.task_id,
+                                description=req.description,
+                                params=dict(req.params),
+                                timeout_seconds=req.timeout_seconds,
+                                context=req.context,
+                                parent_task_id=req.parent_task_id,
                             )
-                        except Exception as e:
-                            logger.error("Task %s failed: %s", task.task_id, e)
-                            yield agent_pb2.TaskProgress(
-                                task_id=task.task_id,
-                                type=agent_pb2.PROGRESS_FAILED,
-                                message=str(e),
-                                result=agent_pb2.TaskResult(
-                                    exit_code=1,
-                                    output=str(e),
-                                ),
-                            )
+                            current_ctx = SyscallContext(task_obj.task_id, out_queue)
+                            task_received.set()
+
+                        elif execute_input.HasField("syscall_result"):
+                            if current_ctx is not None:
+                                current_ctx.resolve_syscall(execute_input.syscall_result)
+
+                async def run_task():
+                    await task_received.wait()
+                    logger.info("Executing task %s: %s", task_obj.task_id, task_obj.description)
+                    try:
+                        result = await agent.handle_task(task_obj, current_ctx)
+                        await out_queue.put(agent_pb2.TaskProgress(
+                            task_id=task_obj.task_id,
+                            type=agent_pb2.PROGRESS_COMPLETED,
+                            message="completed",
+                            progress_percent=100.0,
+                            result=agent_pb2.TaskResult(
+                                exit_code=result.exit_code,
+                                output=result.output,
+                                artifacts=result.artifacts,
+                                metadata=result.metadata,
+                            ),
+                        ))
+                    except Exception as e:
+                        logger.error("Task %s failed: %s", task_obj.task_id, e)
+                        await out_queue.put(agent_pb2.TaskProgress(
+                            task_id=task_obj.task_id,
+                            type=agent_pb2.PROGRESS_FAILED,
+                            message=str(e),
+                            result=agent_pb2.TaskResult(
+                                exit_code=1,
+                                output=str(e),
+                            ),
+                        ))
+                    # Signal stream_writer to stop.
+                    await out_queue.put(None)
+
+                async def stream_writer():
+                    while True:
+                        progress = await out_queue.get()
+                        if progress is None:
+                            return
+                        await context.write(progress)
+
+                reader_task = asyncio.create_task(stream_reader())
+                writer_task = asyncio.create_task(stream_writer())
+                runner_task = asyncio.create_task(run_task())
+
+                # Wait for the task runner to finish (it signals writer via None).
+                await runner_task
+                await writer_task
+                reader_task.cancel()
 
         return Servicer()
 
-    # ─── Runner ───
+    # --- Runner ---
 
-    def run(self, agent_addr: str = "", core_addr: str = "localhost:50051"):
+    async def run(self, agent_addr: str = "", core_addr: str = "localhost:50051"):
         """
-        Start the agent: bind gRPC server, connect to core.
+        Start the agent: bind async gRPC server, connect to core.
 
         Args:
-            agent_addr: Address to listen on (e.g. "[::]:50100" or "unix:///tmp/agent.sock").
+            agent_addr: Address to listen on (e.g. "[::]:50100").
                         If empty, auto-assigned.
             core_addr:  Address of the core gRPC server.
         """
@@ -282,26 +246,27 @@ class HiveAgent:
         )
 
         # Connect to core.
-        core_channel = grpc.insecure_channel(core_addr)
+        core_channel = grpc.aio.insecure_channel(core_addr)
         self._core = CoreClient(core_channel, pid=0)  # PID set after Init
 
-        # Start agent gRPC server.
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+        # Start async agent gRPC server.
+        server = grpc.aio.server()
         agent_pb2_grpc.add_AgentServiceServicer_to_server(self._make_servicer(), server)
 
         if agent_addr:
             server.add_insecure_port(agent_addr)
         else:
-            agent_addr = f"[::]:{server.add_insecure_port('[::]:0')}"
+            port = server.add_insecure_port("[::]:0")
+            agent_addr = f"[::]:{port}"
 
-        server.start()
+        await server.start()
         logger.info("Agent server started on %s, core at %s", agent_addr, core_addr)
 
         try:
-            server.wait_for_termination()
-        except KeyboardInterrupt:
+            await server.wait_for_termination()
+        except asyncio.CancelledError:
             logger.info("Shutting down agent...")
-            server.stop(grace=5)
+            await server.stop(grace=5)
 
 
 # --- Helpers ---

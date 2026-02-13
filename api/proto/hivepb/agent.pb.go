@@ -138,6 +138,8 @@ const (
 	AgentState_STATE_RUNNING  AgentState = 1
 	AgentState_STATE_BLOCKED  AgentState = 2
 	AgentState_STATE_SLEEPING AgentState = 3
+	AgentState_STATE_DEAD     AgentState = 4
+	AgentState_STATE_ZOMBIE   AgentState = 5
 )
 
 // Enum value maps for AgentState.
@@ -147,12 +149,16 @@ var (
 		1: "STATE_RUNNING",
 		2: "STATE_BLOCKED",
 		3: "STATE_SLEEPING",
+		4: "STATE_DEAD",
+		5: "STATE_ZOMBIE",
 	}
 	AgentState_value = map[string]int32{
 		"STATE_IDLE":     0,
 		"STATE_RUNNING":  1,
 		"STATE_BLOCKED":  2,
 		"STATE_SLEEPING": 3,
+		"STATE_DEAD":     4,
+		"STATE_ZOMBIE":   5,
 	}
 )
 
@@ -3628,14 +3634,17 @@ const file_agent_proto_rawDesc = "" +
 	"\rCognitiveTier\x12\x11\n" +
 	"\rCOG_STRATEGIC\x10\x00\x12\x10\n" +
 	"\fCOG_TACTICAL\x10\x01\x12\x13\n" +
-	"\x0fCOG_OPERATIONAL\x10\x02*V\n" +
+	"\x0fCOG_OPERATIONAL\x10\x02*x\n" +
 	"\n" +
 	"AgentState\x12\x0e\n" +
 	"\n" +
 	"STATE_IDLE\x10\x00\x12\x11\n" +
 	"\rSTATE_RUNNING\x10\x01\x12\x11\n" +
 	"\rSTATE_BLOCKED\x10\x02\x12\x12\n" +
-	"\x0eSTATE_SLEEPING\x10\x03*[\n" +
+	"\x0eSTATE_SLEEPING\x10\x03\x12\x0e\n" +
+	"\n" +
+	"STATE_DEAD\x10\x04\x12\x10\n" +
+	"\fSTATE_ZOMBIE\x10\x05*[\n" +
 	"\bPriority\x12\x15\n" +
 	"\x11PRIORITY_CRITICAL\x10\x00\x12\x11\n" +
 	"\rPRIORITY_HIGH\x10\x01\x12\x13\n" +

@@ -33,6 +33,7 @@ const (
 	CoreService_Escalate_FullMethodName         = "/hivekernel.core.CoreService/Escalate"
 	CoreService_Log_FullMethodName              = "/hivekernel.core.CoreService/Log"
 	CoreService_ReportMetric_FullMethodName     = "/hivekernel.core.CoreService/ReportMetric"
+	CoreService_ExecuteTask_FullMethodName      = "/hivekernel.core.CoreService/ExecuteTask"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -59,6 +60,8 @@ type CoreServiceClient interface {
 	// Logging
 	Log(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error)
 	ReportMetric(ctx context.Context, in *MetricRequest, opts ...grpc.CallOption) (*MetricResponse, error)
+	// Task execution
+	ExecuteTask(ctx context.Context, in *ExecuteTaskRequest, opts ...grpc.CallOption) (*ExecuteTaskResponse, error)
 }
 
 type coreServiceClient struct {
@@ -218,6 +221,16 @@ func (c *coreServiceClient) ReportMetric(ctx context.Context, in *MetricRequest,
 	return out, nil
 }
 
+func (c *coreServiceClient) ExecuteTask(ctx context.Context, in *ExecuteTaskRequest, opts ...grpc.CallOption) (*ExecuteTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecuteTaskResponse)
+	err := c.cc.Invoke(ctx, CoreService_ExecuteTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -242,6 +255,8 @@ type CoreServiceServer interface {
 	// Logging
 	Log(context.Context, *LogRequest) (*LogResponse, error)
 	ReportMetric(context.Context, *MetricRequest) (*MetricResponse, error)
+	// Task execution
+	ExecuteTask(context.Context, *ExecuteTaskRequest) (*ExecuteTaskResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -293,6 +308,9 @@ func (UnimplementedCoreServiceServer) Log(context.Context, *LogRequest) (*LogRes
 }
 func (UnimplementedCoreServiceServer) ReportMetric(context.Context, *MetricRequest) (*MetricResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportMetric not implemented")
+}
+func (UnimplementedCoreServiceServer) ExecuteTask(context.Context, *ExecuteTaskRequest) (*ExecuteTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExecuteTask not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -560,6 +578,24 @@ func _CoreService_ReportMetric_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ExecuteTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ExecuteTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ExecuteTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ExecuteTask(ctx, req.(*ExecuteTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -618,6 +654,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportMetric",
 			Handler:    _CoreService_ReportMetric_Handler,
+		},
+		{
+			MethodName: "ExecuteTask",
+			Handler:    _CoreService_ExecuteTask_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

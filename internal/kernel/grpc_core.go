@@ -10,6 +10,7 @@ import (
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/resources"
+	"github.com/selemilka/hivekernel/internal/runtime"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,12 +22,18 @@ import (
 // Each agent connects to this server to use system capabilities.
 type CoreServer struct {
 	pb.UnimplementedCoreServiceServer
-	king *King
+	king     *King
+	executor *runtime.Executor
 }
 
 // NewCoreServer creates a CoreService gRPC server backed by the king.
 func NewCoreServer(king *King) *CoreServer {
 	return &CoreServer{king: king}
+}
+
+// SetExecutor sets the executor for task execution (called after creation).
+func (s *CoreServer) SetExecutor(e *runtime.Executor) {
+	s.executor = e
 }
 
 // Register registers the CoreService on a gRPC server.
@@ -449,4 +456,40 @@ func (s *CoreServer) ReportMetric(ctx context.Context, req *pb.MetricRequest) (*
 		}
 	}
 	return &pb.MetricResponse{}, nil
+}
+
+// --- Task execution ---
+
+func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest) (*pb.ExecuteTaskResponse, error) {
+	if s.executor == nil {
+		return &pb.ExecuteTaskResponse{Success: false, Error: "executor not available"}, nil
+	}
+	if s.king.RuntimeManager() == nil {
+		return &pb.ExecuteTaskResponse{Success: false, Error: "runtime manager not available"}, nil
+	}
+
+	target, err := s.king.Registry().Get(req.TargetPid)
+	if err != nil {
+		return &pb.ExecuteTaskResponse{Success: false, Error: "target process not found"}, nil
+	}
+
+	rt := s.king.RuntimeManager().GetRuntime(req.TargetPid)
+	if rt == nil {
+		return &pb.ExecuteTaskResponse{Success: false, Error: fmt.Sprintf("no runtime for PID %d", req.TargetPid)}, nil
+	}
+
+	taskReq := &pb.TaskRequest{
+		TaskId:         fmt.Sprintf("ext-%d-%s", target.PID, req.Description[:min(len(req.Description), 20)]),
+		Description:    req.Description,
+		Params:         req.Params,
+		TimeoutSeconds: uint32(req.TimeoutSeconds),
+	}
+
+	log.Printf("[grpc] ExecuteTask: target PID %d (%s), task=%s", req.TargetPid, target.Name, req.Description)
+	result, err := s.executor.ExecuteTask(ctx, rt.Addr, req.TargetPid, taskReq)
+	if err != nil {
+		return &pb.ExecuteTaskResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.ExecuteTaskResponse{Success: true, Result: result}, nil
 }

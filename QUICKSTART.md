@@ -37,7 +37,7 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-233 tests covering:
+All Go tests passing, covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
@@ -116,22 +116,60 @@ uv run python -c "from hivekernel_sdk import HiveAgent; print('OK')"
 pip install -e .
 ```
 
-## Run an Agent via Runtime Spawner
+## Writing an Agent
 
-The kernel can now automatically spawn Python agent processes. When a process
-is created with a `RuntimeImage`, the kernel launches `python -m hivekernel_sdk.runner`,
-waits for `READY <port>`, connects via gRPC, and calls `Init`.
-
-Agents can delegate tasks to children using `ctx.execute_on(child_pid, description)`.
+The kernel automatically spawns Python agent processes. Set `runtime_image` when spawning
+to specify the Python class to run:
 
 ```python
-# In your agent's handle_task:
-child_pid = await ctx.spawn(name="worker", role="task", cognitive_tier="operational")
-result = await ctx.execute_on(pid=child_pid, description="do something")
-await ctx.kill(child_pid)
+from hivekernel_sdk import HiveAgent, TaskResult, AgentConfig
+
+class MyAgent(HiveAgent):
+    async def on_init(self, config: AgentConfig) -> None:
+        pass  # Setup code here
+
+    async def handle_task(self, task, ctx) -> TaskResult:
+        # Spawn a child agent (real Python process)
+        child_pid = await ctx.spawn(
+            name="worker", role="task", cognitive_tier="operational",
+            runtime_image="my_module:WorkerAgent", runtime_type="python",
+        )
+        # Delegate a task to the child
+        result = await ctx.execute_on(pid=child_pid, description="do something")
+        # Store result as shared artifact
+        await ctx.store_artifact(key="result", content=result.output.encode())
+        # Cleanup
+        await ctx.kill(child_pid)
+        return TaskResult(exit_code=0, output="done")
 ```
 
-## Run the Echo Worker Demo
+Available syscalls in `ctx`: `spawn`, `kill`, `send`, `execute_on`, `store_artifact`,
+`get_artifact`, `escalate`, `log`, `report_progress`.
+
+## Run the Runtime E2E Test (auto-spawn)
+
+This test validates the full kernel -> Python agent lifecycle:
+
+```bash
+python sdk\python\examples\test_runtime_e2e.py
+```
+
+10 checks: kernel starts, spawns real Python agent (SubWorker), verifies process info,
+connects to agent directly, executes task via bidi stream, verifies result, kills agent.
+
+## Run the Multi-Agent Team E2E Test
+
+This test validates hierarchical multi-agent execution:
+
+```bash
+python sdk\python\examples\test_team_e2e.py
+```
+
+13 checks: kernel spawns TeamManager, TeamManager spawns 2 SubWorkers via `ctx.spawn()`,
+delegates 3 subtasks via `ctx.execute_on()`, stores results as artifact, kills workers.
+All 5 processes are real Python processes communicating via gRPC.
+
+## Run the Echo Worker Demo (manual)
 
 ```bash
 # Terminal 1: start core

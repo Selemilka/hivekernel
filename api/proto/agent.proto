@@ -26,6 +26,8 @@ enum AgentState {
   STATE_RUNNING = 1;
   STATE_BLOCKED = 2;
   STATE_SLEEPING = 3;
+  STATE_DEAD = 4;
+  STATE_ZOMBIE = 5;
 }
 
 enum Priority {

@@ -107,6 +107,11 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.MetricRequest.SerializeToString,
                 response_deserializer=core__pb2.MetricResponse.FromString,
                 _registered_method=True)
+        self.ExecuteTask = channel.unary_unary(
+                '/hivekernel.core.CoreService/ExecuteTask',
+                request_serializer=core__pb2.ExecuteTaskRequest.SerializeToString,
+                response_deserializer=core__pb2.ExecuteTaskResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -204,6 +209,13 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ExecuteTask(self, request, context):
+        """Task execution
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -276,6 +288,11 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.ReportMetric,
                     request_deserializer=core__pb2.MetricRequest.FromString,
                     response_serializer=core__pb2.MetricResponse.SerializeToString,
+            ),
+            'ExecuteTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExecuteTask,
+                    request_deserializer=core__pb2.ExecuteTaskRequest.FromString,
+                    response_serializer=core__pb2.ExecuteTaskResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -658,6 +675,33 @@ class CoreService(object):
             '/hivekernel.core.CoreService/ReportMetric',
             core__pb2.MetricRequest.SerializeToString,
             core__pb2.MetricResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ExecuteTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/ExecuteTask',
+            core__pb2.ExecuteTaskRequest.SerializeToString,
+            core__pb2.ExecuteTaskResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -33,6 +33,9 @@ service CoreService {
   // Logging
   rpc Log(hivekernel.agent.LogRequest) returns (hivekernel.agent.LogResponse);
   rpc ReportMetric(MetricRequest) returns (MetricResponse);
+
+  // Task execution
+  rpc ExecuteTask(ExecuteTaskRequest) returns (ExecuteTaskResponse);
 }
 
 // ─── Process management ───
@@ -56,6 +59,7 @@ message ProcessInfo {
   uint32 child_count = 12;
   uint64 started_at = 13;
   string current_task_id = 14;
+  string runtime_addr = 15;
 }
 
 message ListChildrenRequest {
@@ -129,3 +133,18 @@ message MetricRequest {
 }
 
 message MetricResponse {}
+
+// ─── Task execution ───
+
+message ExecuteTaskRequest {
+  uint64 target_pid = 1;
+  string description = 2;
+  map<string, string> params = 3;
+  int32 timeout_seconds = 4;
+}
+
+message ExecuteTaskResponse {
+  bool success = 1;
+  hivekernel.agent.TaskResult result = 2;
+  string error = 3;
+}

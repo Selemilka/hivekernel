@@ -193,3 +193,49 @@
 ### Tests: 233 passing (+12 new)
 - Runtime manager: NewManager (default python), StartRuntime virtual process, already running check, StopRuntime virtual + not-found, ListRuntimes, GetClient virtual + not-found
 - execute_on syscall: successful parent->child delegation via mock agent, not-own-child rejected, no-runtime error
+
+---
+
+## Phase 8 — Wire RuntimeImage Through Spawn Chain (completed)
+
+**Goal:** Ensure RuntimeImage/RuntimeType pass through all spawn entry points (gRPC, syscall handler, Python SDK).
+
+### Changes
+- `internal/kernel/grpc_core.go` — `SpawnChild()` now passes `RuntimeType` and `RuntimeImage` from proto to `SpawnRequest`
+- `internal/kernel/syscall_handler.go` — `handleSpawn()` now passes `RuntimeType` and `RuntimeImage`
+- `sdk/python/hivekernel_sdk/syscall.py` — `spawn()` now accepts `runtime_image` and `runtime_type` params
+- `sdk/python/hivekernel_sdk/client.py` — `spawn_child()` now accepts `runtime_image` and `runtime_type` params
+- `sdk/python/hivekernel_sdk/agent.py` — Init handler updates `CoreClient.pid` so subsequent RPCs carry correct PID
+- `cmd/hivekernel/main.go` — Added `normalizeCoreAddr()` (":50051" -> "localhost:50051")
+
+---
+
+## Phase 9 — E2E Runtime Test (completed)
+
+**Goal:** Verify the full kernel -> Python agent lifecycle works end-to-end.
+
+### Added
+- `sdk/python/examples/sub_worker.py` — Minimal agent for auto-spawn testing
+- `sdk/python/examples/__init__.py` — Makes examples importable as a Python package
+- `sdk/python/examples/test_runtime_e2e.py` — **10 checks**: kernel starts, spawns real Python agent, verifies process info and runtime_addr, connects to agent directly, executes task via bidi stream, verifies result, kills agent, confirms dead state
+- `api/proto/core.proto` — Added `runtime_addr` field (15) to ProcessInfo
+- `api/proto/agent.proto` — Added `STATE_DEAD` (4) and `STATE_ZOMBIE` (5) to AgentState enum
+- `internal/kernel/convert.go` — Maps StateDead/StateZombie to proto enums, includes RuntimeAddr in ProcessInfo
+
+---
+
+## Phase 10 — Multi-Agent MVP (completed)
+
+**Goal:** Full multi-agent scenario with hierarchical task delegation, runtime spawning, syscalls, and artifact storage.
+
+### Added
+- `sdk/python/examples/team_manager.py` — TeamManager agent: spawns N SubWorker agents via `ctx.spawn(runtime_image=...)`, delegates subtasks round-robin via `ctx.execute_on()`, stores combined results as artifact via `ctx.store_artifact()`, kills workers, returns summary
+- `sdk/python/examples/test_team_e2e.py` — **13 checks**: spawns TeamManager (real Python process), TeamManager spawns 2 SubWorkers (real Python processes), delegates 3 subtasks, verifies all results, checks artifact stored and retrievable, verifies workers killed, cleans up manager
+- `api/proto/core.proto` — Added `ExecuteTask` RPC to CoreService + `ExecuteTaskRequest`/`ExecuteTaskResponse` messages. Allows external callers to trigger task execution through the kernel's executor (which handles all syscalls)
+- `internal/kernel/grpc_core.go` — Implemented `ExecuteTask()` RPC: validates target process, gets runtime, delegates to executor. Added `SetExecutor()` for wiring. CoreServer now imports `runtime` package
+
+### Architecture validated
+- **3-level hierarchy**: Kernel -> TeamManager -> 2x SubWorker (all real Python processes)
+- **Full syscall chain**: spawn, execute_on, store_artifact, kill, log, report_progress
+- **Recursive execution**: TeamManager's syscalls handled by Go executor, which dispatches spawn/execute_on for children
+- **Artifact persistence**: Results stored in shared memory, retrievable by other processes

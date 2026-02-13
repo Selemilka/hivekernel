@@ -102,6 +102,10 @@ func internalStateToProto(s process.ProcessState) pb.AgentState {
 		return pb.AgentState_STATE_BLOCKED
 	case process.StateSleeping:
 		return pb.AgentState_STATE_SLEEPING
+	case process.StateDead:
+		return pb.AgentState_STATE_DEAD
+	case process.StateZombie:
+		return pb.AgentState_STATE_ZOMBIE
 	default:
 		return pb.AgentState_STATE_IDLE
 	}
@@ -123,5 +127,6 @@ func processToProto(p *process.Process) *pb.ProcessInfo {
 		ChildCount:          uint32(0), // filled by caller if needed
 		StartedAt:           uint64(p.StartedAt.Unix()),
 		CurrentTaskId:       p.CurrentTaskID,
+		RuntimeAddr:         p.RuntimeAddr,
 	}
 }

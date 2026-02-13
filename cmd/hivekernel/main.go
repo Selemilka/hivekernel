@@ -67,6 +67,7 @@ func main() {
 	// --- Start gRPC server ---
 	grpcServer := grpc.NewServer()
 	coreServer := kernel.NewCoreServer(king)
+	coreServer.SetExecutor(executor)
 	coreServer.Register(grpcServer)
 
 	lis, err := listen(cfg.ListenAddr)

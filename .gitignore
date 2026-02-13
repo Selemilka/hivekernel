@@ -34,3 +34,4 @@ uv.lock
 
 # Configs with secrets
 configs/*.local.yaml
+.env

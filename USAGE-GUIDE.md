@@ -20,7 +20,8 @@ See [QUICKSTART.md](QUICKSTART.md) for setup, [ARCHITECTURE.md](ARCHITECTURE.md)
 9. [Build a Team Scenario](#9-build-a-team-scenario)
 10. [Call From External Systems](#10-call-from-external-systems)
 11. [Run Kernel Programmatically](#11-run-kernel-programmatically)
-12. [Troubleshooting](#12-troubleshooting)
+12. [LLM Integration](#12-llm-integration)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -1016,7 +1017,129 @@ asyncio.run(main())
 
 ---
 
-## 12. Troubleshooting
+## 12. LLM Integration
+
+HiveKernel agents can make real LLM calls via OpenRouter. The SDK provides
+`LLMClient` (low-level) and `LLMAgent` (high-level base class).
+
+### Setup
+
+1. Get an API key from [openrouter.ai](https://openrouter.ai/)
+2. Create a `.env` file in the project root:
+   ```
+   OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   ```
+3. The `.env` file is gitignored. See `.env.example` for the format.
+
+### LLMClient
+
+Low-level async client. Zero extra deps (uses `urllib.request` + `asyncio.to_thread`).
+
+```python
+from hivekernel_sdk import LLMClient
+
+client = LLMClient(api_key="sk-or-v1-...", default_model="anthropic/claude-sonnet-4-5")
+
+# Single prompt
+response = await client.complete("What is 2+2?")
+
+# Multi-turn chat
+response = await client.chat([
+    {"role": "user", "content": "Hello"},
+    {"role": "assistant", "content": "Hi! How can I help?"},
+    {"role": "user", "content": "What is Python?"},
+], system="You are a helpful assistant.")
+
+# Token tracking
+print(f"Total tokens used: {client.total_tokens}")
+```
+
+### Model map
+
+The `model` parameter accepts either a short alias or a full OpenRouter model ID:
+
+| Alias | OpenRouter Model ID |
+|-------|---------------------|
+| `"opus"` | `anthropic/claude-opus-4` |
+| `"sonnet"` | `anthropic/claude-sonnet-4-5` |
+| `"haiku"` | `anthropic/claude-haiku-3-5` |
+| `"mini"` | `google/gemini-2.5-flash` |
+
+These aliases match HiveKernel's tier-to-model mapping (strategic=opus,
+tactical=sonnet, operational=mini).
+
+### LLMAgent
+
+High-level base class that extends `HiveAgent`. Auto-creates an `LLMClient`
+from `OPENROUTER_API_KEY` env var and the agent's `model` config field.
+
+```python
+from hivekernel_sdk import LLMAgent, TaskResult
+
+class SmartWorker(LLMAgent):
+    async def handle_task(self, task, ctx) -> TaskResult:
+        # self.ask() uses the agent's model and system_prompt
+        answer = await self.ask(f"Analyze: {task.description}")
+
+        # self.chat() for multi-turn
+        followup = await self.chat([
+            {"role": "user", "content": "Summarize the analysis"},
+            {"role": "assistant", "content": answer},
+            {"role": "user", "content": "Now give 3 key takeaways"},
+        ])
+
+        return TaskResult(exit_code=0, output=followup)
+```
+
+When spawning an `LLMAgent`, set `model` and `system_prompt` in the spawn request:
+
+```python
+pid = await ctx.spawn(
+    name="smart-worker",
+    role="task",
+    cognitive_tier="operational",
+    model="mini",                    # -> google/gemini-2.5-flash
+    system_prompt="You are a data analyst.",
+    runtime_image="my_module:SmartWorker",
+    runtime_type="python",
+)
+```
+
+### LLMAgent vs HiveAgent
+
+| Feature | HiveAgent | LLMAgent |
+|---------|-----------|----------|
+| Base class | - | HiveAgent |
+| LLM client | manual | automatic (`self.llm`) |
+| `self.ask()` | no | yes |
+| `self.chat()` | no | yes |
+| Requires API key | no | yes (OPENROUTER_API_KEY) |
+| Use when | no LLM needed | agent needs LLM calls |
+
+### Run the LLM demo
+
+```bash
+# With web dashboard (auto-opens browser, pauses at each step)
+python sdk/python/examples/llm_research_team.py
+
+# Without dashboard (runs straight through)
+python sdk/python/examples/llm_research_team.py --no-dashboard
+```
+
+The demo starts the kernel, launches the web dashboard, and opens
+http://localhost:8080 in your browser. You'll see:
+
+1. Initial tree (king + queen + demo-worker)
+2. **Press Enter** -- lead agent appears on the tree
+3. **Press Enter** -- LLM research starts, workers appear and work in real-time
+4. **Press Enter** -- zombie workers visible (gray, 40% opacity)
+5. **Press Enter** -- cleanup, everything shuts down
+
+All calls are real LLM requests through OpenRouter (~2000 tokens total).
+
+---
+
+## 13. Troubleshooting
 
 ### READY timeout (agent spawn hangs)
 

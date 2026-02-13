@@ -208,6 +208,49 @@ Open http://localhost:8080 in your browser. Features:
 Environment variables: `HIVEKERNEL_ADDR` (default `localhost:50051`),
 `DASHBOARD_PORT` (default `8080`).
 
+## LLM Integration (Real AI Agents)
+
+HiveKernel agents can make real LLM calls via OpenRouter.
+
+### Setup
+
+1. Get an API key from [openrouter.ai](https://openrouter.ai/)
+2. Create a `.env` file in the project root:
+   ```
+   OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   ```
+
+### Run the LLM demo
+
+```bash
+# With web dashboard (auto-opens browser, step-by-step)
+python sdk/python/examples/llm_research_team.py
+
+# Without dashboard (runs straight through)
+python sdk/python/examples/llm_research_team.py --no-dashboard
+```
+
+This spawns a research lead (sonnet) + 3 workers (gemini-flash), makes real
+LLM calls to break down a topic, research subtopics, and synthesize a report.
+Takes ~30-60 seconds depending on API latency.
+
+With the dashboard you can watch agents spawn and work in real-time in the
+D3.js process tree. The demo pauses at key moments so you can observe.
+
+### Use LLMAgent in your own agents
+
+```python
+from hivekernel_sdk import LLMAgent, TaskResult
+
+class MyAgent(LLMAgent):
+    async def handle_task(self, task, ctx) -> TaskResult:
+        answer = await self.ask("What is 2+2?")
+        return TaskResult(exit_code=0, output=answer)
+```
+
+`LLMAgent` auto-creates an OpenRouter client from `OPENROUTER_API_KEY` env var
+and the agent's `model` config. See [USAGE-GUIDE.md](USAGE-GUIDE.md) for details.
+
 ## Run the Echo Worker Demo (manual)
 
 ```bash

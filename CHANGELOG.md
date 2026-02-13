@@ -239,3 +239,21 @@
 - **Full syscall chain**: spawn, execute_on, store_artifact, kill, log, report_progress
 - **Recursive execution**: TeamManager's syscalls handled by Go executor, which dispatches spawn/execute_on for children
 - **Artifact persistence**: Results stored in shared memory, retrievable by other processes
+
+---
+
+## LLM Integration (completed)
+
+**Goal:** Real LLM calls via OpenRouter, convenience base class, live demo with web dashboard.
+
+### Added
+- `sdk/python/hivekernel_sdk/llm.py` — **NEW**: Async OpenRouter client. Zero extra deps (`urllib.request` + `asyncio.to_thread`). `LLMClient.chat()` (multi-turn), `LLMClient.complete()` (single prompt), cumulative `total_tokens` tracking. MODEL_MAP: opus=claude-opus-4, sonnet=claude-sonnet-4-5, mini=gemini-2.5-flash, haiku=claude-haiku-3-5
+- `sdk/python/hivekernel_sdk/llm_agent.py` — **NEW**: `LLMAgent` extends `HiveAgent`. Auto-creates `LLMClient` in `on_init()` from `OPENROUTER_API_KEY` env var + agent's model config. Provides `ask(prompt)` and `chat(messages)` shortcuts with agent's system_prompt
+- `sdk/python/hivekernel_sdk/__init__.py` — Exports `LLMClient`, `LLMAgent`
+- `sdk/python/examples/llm_research_team.py` — **NEW**: Live demo with real LLM calls. LLMResearchLead (sonnet) breaks topic into subtopics via LLM, spawns 3 LLMResearchWorker agents (gemini-flash), delegates research, synthesizes findings into report. Integrated web dashboard with auto-launch + browser open + step-by-step pauses. `--no-dashboard` flag for headless mode. Built-in `.env` loader (no python-dotenv dep)
+- `.env.example` — Template for OpenRouter API key
+- `.gitignore` — Added `.env`
+
+### Verified
+- Full pipeline tested: lead spawns workers, real LLM calls, ~2000 tokens total
+- Dashboard shows agents spawning, working, entering zombie state in real-time

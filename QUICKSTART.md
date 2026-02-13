@@ -37,7 +37,7 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-87 tests covering:
+154 tests covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
@@ -55,6 +55,10 @@ go test ./internal/... -v
 - Auth (identity, inheritance, kernel override)
 - ACL (role-based, cross-user, custom rules)
 - Capabilities (role-based, grant/revoke, tool validation)
+- **Node discovery** (register, deregister, health, FindLeastLoaded, stale detection)
+- **VPS connector** (connect, disconnect, forward messages, error tracking, recovery)
+- **Branch migration** (prepare, execute, rollback, node count updates, snapshot)
+- **Cgroups** (create, delete, add/remove process, token limits, spawn limits, usage)
 
 ## Run Python Integration Test
 
@@ -122,8 +126,9 @@ internal/
   kernel/             King (PID 1), config, gRPC CoreService
   process/            Registry, spawner, supervisor, signals, tree
   ipc/                Broker, priority queue, shared memory, pipes, events
-  resources/          Token budgets, rate limiter, accounting
+  resources/          Token budgets, rate limiter, accounting, cgroups
   permissions/        Auth (USER identity), ACL, role capabilities
+  cluster/            Node discovery, VPS connector, branch migration
   runtime/            Agent runtime lifecycle (stub)
   daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code

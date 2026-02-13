@@ -98,3 +98,24 @@
 - Auth: resolve identity, kernel assigns any user, non-kernel must inherit, same user check, is-kernel
 - ACL: kernel can do anything, daemon permissions, worker spawn, task cannot spawn, task can send/read, cross-user denied/same-user allowed/kernel allowed, custom rules
 - Capabilities: kernel has all, task no spawn/shell, worker can spawn, lead can kill, require, grant override, revoke override, validate tools, list capabilities
+
+---
+
+## Phase 4 — Multi-VPS (completed)
+
+**Goal:** cluster node management, cross-VPS connections, branch migration, group resource limits.
+
+### Added
+- `internal/cluster/discovery.go` — NodeRegistry for VPS node tracking. NodeInfo (ID, address, capacity, health metrics). NodeStatus (online, overloaded, draining, offline). Register, Deregister, Get, List, ListOnline, UpdateHealth (auto-overload at 90% memory), SetStatus, Heartbeat, FindLeastLoaded (with exclusion), CheckStale
+- `internal/cluster/connector.go` — VPS Connector for managing gRPC connections between nodes. Connect, Disconnect, GetConnection, IsConnected, ForwardMessage (with message logging). Error tracking with threshold-based unhealthy detection, RecordSuccess recovery. Connection pool lifecycle
+- `internal/cluster/migration.go` — MigrationManager for process/branch migration between VPS. PrepareMigration (validate, snapshot branch), ExecuteMigration (update VPS in registry, update node counts), RollbackMigration. MigrationState tracking (pending, in_progress, completed, failed, rolled_back). ProcessSnapshot for state serialization. Guards: cannot migrate kernel, cannot migrate to same node, target must be online
+- `internal/resources/cgroups.go` — CGroupManager for group resource limits by tree branch. Create (auto-includes root + descendants), Delete, Get, GetByPID, AddProcess, RemoveProcess. ConsumeTokens (collective budget enforcement), CheckSpawnAllowed (max processes per group). GroupUsage aggregation
+
+### Changed
+- `internal/kernel/king.go` — Now owns NodeRegistry, Connector, MigrationManager, CGroupManager. Registers self as cluster node on bootstrap. SpawnChild checks cgroup spawn limits and auto-adds children to parent's cgroup. Escalation handler recognizes "vps_overloaded" and triggers automatic migration to least-loaded node
+
+### Tests: 154 passing (+57 new)
+- Discovery: register/get, deregister, list, list online, update health, auto-overload detection, recovery, FindLeastLoaded (basic, exclude, skip offline, none available), CheckStale, MemoryFreePercent, LoadScore, Heartbeat, SetStatus
+- Connector: connect/get, validation, disconnect, IsConnected, list, ForwardMessage (success, not connected, unhealthy), error threshold, recovery, error reset on forward, reconnect
+- Migration: prepare (basic, cannot migrate kernel, same node, target offline), execute (basic, node count updates), rollback (basic, invalid state), execute twice, list/active, source draining restored, SnapshotProcess
+- Cgroups: create (basic, duplicate, invalid root), delete, GetByPID, AddProcess (basic, max reached, idempotent), RemoveProcess, ConsumeTokens (basic, exceeds limit, not in group), CheckSpawnAllowed (basic, not in group), List, GetGroupUsage, Remaining, UsagePercent

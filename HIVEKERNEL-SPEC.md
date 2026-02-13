@@ -1068,3 +1068,5 @@ All together. Leo spawns leads → leads spawn workers → tree grows → task c
 8. **Cron is core responsibility.** Agents may be sleeping/unspawned. Queen holds crontab, wakes or spawns agents on schedule.
 
 9. **Pluggable runtime via RuntimeType.** SpawnRequest includes runtime_type (python/claw/custom). Core spawns appropriate binary. Future-proofs for Claw and other agent frameworks.
+
+10. **Async Python SDK (confirmed, planned).** Current SDK uses synchronous `grpc` — correct for Phase 0-3, but parallel agent operations are a core project value. Migration path: `grpc` → `grpc.aio`, all CoreClient/HiveAgent methods become `async def`. Go core and protobuf definitions stay unchanged. Also: implement in-stream syscalls via SystemCall/SyscallResult messages inside the Execute bidirectional stream, so agents can spawn children and send messages without breaking execution flow.

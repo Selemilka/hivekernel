@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/selemilka/hivekernel/internal/cluster"
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
@@ -35,6 +36,12 @@ type King struct {
 	acl         *permissions.ACL
 	caps        *permissions.CapabilityChecker
 
+	// Phase 4: Multi-VPS
+	nodes     *cluster.NodeRegistry
+	connector *cluster.Connector
+	migrator  *cluster.MigrationManager
+	cgroups   *resources.CGroupManager
+
 	proc *process.Process // king's own process entry
 
 	mu     sync.RWMutex
@@ -54,6 +61,8 @@ func New(cfg Config) (*King, error) {
 
 	auth := permissions.NewAuthProvider(registry)
 
+	nodes := cluster.NewNodeRegistry()
+
 	k := &King{
 		config:      cfg,
 		registry:    registry,
@@ -70,8 +79,20 @@ func New(cfg Config) (*King, error) {
 		auth:        auth,
 		acl:         permissions.NewACL(registry, auth),
 		caps:        permissions.NewCapabilityChecker(registry),
+		nodes:       nodes,
+		connector:   cluster.NewConnector(),
+		migrator:    cluster.NewMigrationManager(registry, nodes),
+		cgroups:     resources.NewCGroupManager(registry),
 		proc:        kernelProc,
 	}
+
+	// Register this node in the cluster registry.
+	nodes.Register(&cluster.NodeInfo{
+		ID:       cfg.NodeName,
+		Address:  cfg.ListenAddr,
+		Cores:    2,
+		MemoryMB: 2048,
+	})
 
 	// Set kernel's initial budget (large defaults).
 	k.budget.SetBudget(kernelProc.PID, resources.TierOpus, cfg.DefaultLimits.MaxTokensTotal)
@@ -152,6 +173,26 @@ func (k *King) Caps() *permissions.CapabilityChecker {
 	return k.caps
 }
 
+// Nodes returns the cluster node registry.
+func (k *King) Nodes() *cluster.NodeRegistry {
+	return k.nodes
+}
+
+// Connector returns the VPS connector.
+func (k *King) Connector() *cluster.Connector {
+	return k.connector
+}
+
+// Migrator returns the migration manager.
+func (k *King) Migrator() *cluster.MigrationManager {
+	return k.migrator
+}
+
+// CGroups returns the cgroup manager.
+func (k *King) CGroups() *resources.CGroupManager {
+	return k.cgroups
+}
+
 // PID returns the kernel's process ID.
 func (k *King) PID() process.PID {
 	return k.proc.PID
@@ -213,6 +254,11 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 		}
 	}
 
+	// Phase 4: Check cgroup limits (if parent is in a group).
+	if err := k.cgroups.CheckSpawnAllowed(req.ParentPID); err != nil {
+		return nil, fmt.Errorf("spawn denied: %w", err)
+	}
+
 	// Spawn the process (validates cognitive tier, max_children, etc.).
 	proc, err := k.spawner.Spawn(req)
 	if err != nil {
@@ -233,6 +279,11 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 			// Parent has no budget at this tier — just set child's budget directly.
 			k.budget.SetBudget(proc.PID, childTier, req.Limits.MaxTokensTotal)
 		}
+	}
+
+	// Phase 4: If parent is in a cgroup, add the child to the same group.
+	if g, ok := k.cgroups.GetByPID(req.ParentPID); ok {
+		_ = k.cgroups.AddProcess(g.Name, proc.PID)
 	}
 
 	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",
@@ -259,6 +310,42 @@ func (k *King) handleEscalation(msg *ipc.Message) {
 	log.Printf("[king] escalation from PID %d: %s", msg.FromPID, string(msg.Payload))
 	// Publish as event so subscribers can react.
 	k.eventBus.Publish("escalation", msg.FromPID, msg.Payload)
+
+	// Phase 4: Check if escalation is about an overloaded VPS.
+	payload := string(msg.Payload)
+	if payload == "vps_overloaded" {
+		k.handleOverloadEscalation(msg.FromPID)
+	}
+}
+
+// handleOverloadEscalation attempts to migrate processes from an overloaded VPS.
+func (k *King) handleOverloadEscalation(fromPID process.PID) {
+	proc, err := k.registry.Get(fromPID)
+	if err != nil {
+		return
+	}
+
+	sourceNode := proc.VPS
+	target, err := k.nodes.FindLeastLoaded(sourceNode)
+	if err != nil {
+		log.Printf("[king] no migration target available: %v", err)
+		return
+	}
+
+	mig, err := k.migrator.PrepareMigration(fromPID, target.ID)
+	if err != nil {
+		log.Printf("[king] migration preparation failed: %v", err)
+		return
+	}
+
+	if err := k.migrator.ExecuteMigration(mig.ID); err != nil {
+		log.Printf("[king] migration execution failed: %v", err)
+		return
+	}
+
+	log.Printf("[king] migrated PID %d branch from %s to %s", fromPID, sourceNode, target.ID)
+	k.eventBus.Publish("migration_completed", fromPID,
+		[]byte(fmt.Sprintf("migrated from %s to %s", sourceNode, target.ID)))
 }
 
 func (k *King) handleSpawnRequest(msg *ipc.Message) {

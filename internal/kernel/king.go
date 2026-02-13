@@ -7,7 +7,9 @@ import (
 	"sync"
 
 	"github.com/selemilka/hivekernel/internal/ipc"
+	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
+	"github.com/selemilka/hivekernel/internal/resources"
 )
 
 // King is the root process (PID 1) of HiveKernel.
@@ -23,6 +25,15 @@ type King struct {
 	sharedMem *ipc.SharedMemory
 	eventBus *ipc.EventBus
 	pipes    *ipc.PipeRegistry
+
+	// Phase 3: Resources + Permissions
+	budget      *resources.BudgetManager
+	rateLimiter *resources.RateLimiter
+	limits      *resources.LimitChecker
+	accountant  *resources.Accountant
+	auth        *permissions.AuthProvider
+	acl         *permissions.ACL
+	caps        *permissions.CapabilityChecker
 
 	proc *process.Process // king's own process entry
 
@@ -41,17 +52,31 @@ func New(cfg Config) (*King, error) {
 		return nil, fmt.Errorf("bootstrap king: %w", err)
 	}
 
+	auth := permissions.NewAuthProvider(registry)
+
 	k := &King{
-		config:    cfg,
-		registry:  registry,
-		spawner:   spawner,
-		inbox:     ipc.NewPriorityQueue(cfg.MessageAgingFactor),
-		broker:    ipc.NewBroker(registry, cfg.MessageAgingFactor),
-		sharedMem: ipc.NewSharedMemory(registry),
-		eventBus:  ipc.NewEventBus(),
-		pipes:     ipc.NewPipeRegistry(),
-		proc:      kernelProc,
+		config:      cfg,
+		registry:    registry,
+		spawner:     spawner,
+		inbox:       ipc.NewPriorityQueue(cfg.MessageAgingFactor),
+		broker:      ipc.NewBroker(registry, cfg.MessageAgingFactor),
+		sharedMem:   ipc.NewSharedMemory(registry),
+		eventBus:    ipc.NewEventBus(),
+		pipes:       ipc.NewPipeRegistry(),
+		budget:      resources.NewBudgetManager(registry),
+		rateLimiter: resources.NewRateLimiter(),
+		limits:      resources.NewLimitChecker(registry),
+		accountant:  resources.NewAccountant(registry),
+		auth:        auth,
+		acl:         permissions.NewACL(registry, auth),
+		caps:        permissions.NewCapabilityChecker(registry),
+		proc:        kernelProc,
 	}
+
+	// Set kernel's initial budget (large defaults).
+	k.budget.SetBudget(kernelProc.PID, resources.TierOpus, cfg.DefaultLimits.MaxTokensTotal)
+	k.budget.SetBudget(kernelProc.PID, resources.TierSonnet, cfg.DefaultLimits.MaxTokensTotal*10)
+	k.budget.SetBudget(kernelProc.PID, resources.TierMini, cfg.DefaultLimits.MaxTokensTotal*100)
 
 	log.Printf("[king] bootstrapped as PID %d on %s", kernelProc.PID, cfg.NodeName)
 	return k, nil
@@ -92,6 +117,41 @@ func (k *King) Pipes() *ipc.PipeRegistry {
 	return k.pipes
 }
 
+// Budget returns the budget manager.
+func (k *King) Budget() *resources.BudgetManager {
+	return k.budget
+}
+
+// RateLimiter returns the rate limiter.
+func (k *King) RateLimiter() *resources.RateLimiter {
+	return k.rateLimiter
+}
+
+// Limits returns the limit checker.
+func (k *King) Limits() *resources.LimitChecker {
+	return k.limits
+}
+
+// Accountant returns the usage accountant.
+func (k *King) Accountant() *resources.Accountant {
+	return k.accountant
+}
+
+// Auth returns the auth provider.
+func (k *King) Auth() *permissions.AuthProvider {
+	return k.auth
+}
+
+// ACL returns the access control list.
+func (k *King) ACL() *permissions.ACL {
+	return k.acl
+}
+
+// Caps returns the capability checker.
+func (k *King) Caps() *permissions.CapabilityChecker {
+	return k.caps
+}
+
 // PID returns the kernel's process ID.
 func (k *King) PID() process.PID {
 	return k.proc.PID
@@ -123,11 +183,71 @@ func (k *King) Stop() {
 }
 
 // SpawnChild creates a child process under the given parent.
+// Phase 3: validates ACL, capabilities, auth, and budget before spawning.
 func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
+	// Check ACL: does the parent have permission to spawn?
+	if err := k.acl.Check(req.ParentPID, permissions.ActionSpawn); err != nil {
+		return nil, fmt.Errorf("spawn denied: %w", err)
+	}
+
+	// Check capability: does the parent's role allow spawning?
+	if err := k.caps.RequireCapability(req.ParentPID, permissions.CapSpawnChildren); err != nil {
+		return nil, fmt.Errorf("spawn denied: %w", err)
+	}
+
+	// Validate user inheritance.
+	if err := k.auth.ValidateInheritance(req.ParentPID, req.User); err != nil {
+		return nil, fmt.Errorf("spawn denied: %w", err)
+	}
+
+	// Validate tool capabilities for the child's role.
+	if len(req.Tools) > 0 {
+		// Create a temporary process to check against the child's role.
+		childRole := req.Role
+		// Check tools against what the child role permits.
+		tempReg := process.NewRegistry()
+		tempReg.Register(&process.Process{Role: childRole})
+		tempCaps := permissions.NewCapabilityChecker(tempReg)
+		if err := tempCaps.ValidateTools(1, req.Tools); err != nil {
+			return nil, fmt.Errorf("spawn denied: child role %s cannot use requested tools: %w", childRole, err)
+		}
+	}
+
+	// Check budget: does parent have sufficient tokens for the child?
+	childTier := resources.TierFromCog(req.CognitiveTier)
+	if req.Limits.MaxTokensTotal > 0 {
+		if err := k.budget.Allocate(req.ParentPID, 0, childTier, req.Limits.MaxTokensTotal); err != nil {
+			return nil, fmt.Errorf("spawn denied: %w", err)
+		}
+		// Undo the temporary allocation (used PID 0); we'll re-allocate with real PID.
+		k.budget.Release(0, childTier)
+	}
+
+	// Spawn the process (validates cognitive tier, max_children, etc.).
 	proc, err := k.spawner.Spawn(req)
 	if err != nil {
 		return nil, err
 	}
+
+	// Allocate budget to the new child with real PID.
+	if req.Limits.MaxTokensTotal > 0 {
+		if err := k.budget.Allocate(req.ParentPID, proc.PID, childTier, req.Limits.MaxTokensTotal); err != nil {
+			// Rollback: remove the spawned process.
+			k.registry.Remove(proc.PID)
+			return nil, fmt.Errorf("budget allocation failed after spawn: %w", err)
+		}
+	}
+
+	// Set rate limit for the child.
+	if req.Limits.MaxTokensPerHour > 0 {
+		// Convert tokens/hour to approximate API calls/minute (rough estimate: 1 call ≈ 1000 tokens).
+		callsPerMin := uint32(req.Limits.MaxTokensPerHour / 1000 / 60)
+		if callsPerMin < 1 {
+			callsPerMin = 1
+		}
+		k.rateLimiter.SetLimit(proc.PID, callsPerMin)
+	}
+
 	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",
 		proc.Name, proc.PID, proc.PPID, proc.Role, proc.CognitiveTier)
 	return proc, nil

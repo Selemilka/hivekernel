@@ -72,3 +72,29 @@
 - Shared memory: global/private/user/subtree visibility, list with prefix, owner delete, kernel delete, key required
 - Pipes: bidirectional read/write, close, registry create/get/remove, backpressure
 - Events: pub/sub, multiple subscribers, unsubscribe, no-subscriber safety, topic isolation
+
+---
+
+## Phase 3 — Resources + Permissions (completed)
+
+**Goal:** token budgets, rate limiting, usage accounting, identity management, ACL, role capabilities.
+
+### Added
+- `internal/resources/budget.go` — Token budget management per process/model tier. Parent-to-child allocation, consumption tracking, release on death (unused returns to parent), branch usage aggregation
+- `internal/resources/limits.go` — RateLimiter (sliding window per-process API call rate limiting), LimitChecker (spawn limits, context window, timeout enforcement)
+- `internal/resources/accounting.go` — Usage tracking aggregated by user, VPS, PID, and model tier. Records token consumption events with timestamps
+- `internal/permissions/auth.go` — USER identity resolution and inheritance validation. Kernel can assign any user, others must inherit from parent
+- `internal/permissions/acl.go` — Access control lists with role-based default rules. Actions: spawn, kill, send_message, read/write_artifact, escalate, read_process. Cross-user access restricted (kernel only)
+- `internal/permissions/capabilities.go` — Role-based capability system. Per-role capability sets (kernel=all, task=minimal). Per-process grant/revoke overrides. Tool validation (tasks cannot have shell_exec)
+
+### Changed
+- `internal/kernel/king.go` — Now owns BudgetManager, RateLimiter, LimitChecker, Accountant, AuthProvider, ACL, CapabilityChecker. SpawnChild validates ACL, capabilities, user inheritance, and budget before spawning. Kernel gets initial budget on bootstrap
+- `internal/kernel/grpc_core.go` — SendMessage checks ACL and rate limits. StoreArtifact checks write permission. ReportMetric records token usage in accounting and budget. GetResourceUsage returns budget-aware remaining tokens. RequestResources fully implemented (allocates from parent budget)
+
+### Tests: 87 passing (+35 new)
+- Budget: set/get, allocate to child, insufficient funds, consume, exceed, release (return to parent), branch usage, tier mapping
+- Limits: rate limiter allow/deny/expiry/remove/no-limit, spawn limit check, context window, timeout
+- Accounting: record, user usage, VPS usage, process usage, total usage
+- Auth: resolve identity, kernel assigns any user, non-kernel must inherit, same user check, is-kernel
+- ACL: kernel can do anything, daemon permissions, worker spawn, task cannot spawn, task can send/read, cross-user denied/same-user allowed/kernel allowed, custom rules
+- Capabilities: kernel has all, task no spawn/shell, worker can spawn, lead can kill, require, grant override, revoke override, validate tools, list capabilities

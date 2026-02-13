@@ -7,7 +7,9 @@ import (
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/ipc"
+	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
+	"github.com/selemilka/hivekernel/internal/resources"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -161,6 +163,16 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 		return nil, err
 	}
 
+	// ACL check: does the caller have permission to send messages?
+	if err := s.king.ACL().Check(fromPID, permissions.ActionSendMessage); err != nil {
+		return &pb.SendMessageResponse{Delivered: false, Error: err.Error()}, nil
+	}
+
+	// Rate limit check.
+	if !s.king.RateLimiter().Allow(fromPID) {
+		return &pb.SendMessageResponse{Delivered: false, Error: "rate limit exceeded"}, nil
+	}
+
 	sender, err := s.king.Registry().Get(fromPID)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "sender %d not found", fromPID)
@@ -241,6 +253,11 @@ func (s *CoreServer) StoreArtifact(ctx context.Context, req *pb.StoreArtifactReq
 		return nil, err
 	}
 
+	// ACL check.
+	if err := s.king.ACL().Check(pid, permissions.ActionWriteArtifact); err != nil {
+		return &pb.StoreArtifactResponse{Success: false, Error: err.Error()}, nil
+	}
+
 	vis := ipc.Visibility(req.Visibility)
 	id, err := s.king.SharedMemory().Store(pid, req.Key, req.Content, req.ContentType, vis)
 	if err != nil {
@@ -311,18 +328,61 @@ func (s *CoreServer) GetResourceUsage(ctx context.Context, req *pb.ResourceUsage
 		return nil, status.Errorf(codes.NotFound, "process %d not found", pid)
 	}
 
+	// Get budget-aware remaining tokens.
+	tier := resources.TierFromCog(proc.CognitiveTier)
+	var tokensRemaining uint64
+	if b := s.king.Budget().GetBudget(pid, tier); b != nil {
+		tokensRemaining = b.Remaining()
+	} else {
+		// Fallback to static limit.
+		if proc.Limits.MaxTokensTotal > proc.TokensConsumed {
+			tokensRemaining = proc.Limits.MaxTokensTotal - proc.TokensConsumed
+		}
+	}
+
+	var uptimeSeconds uint64
+	if !proc.StartedAt.IsZero() {
+		uptimeSeconds = uint64(proc.UpdatedAt.Sub(proc.StartedAt).Seconds())
+	}
+
 	return &pb.ResourceUsage{
 		TokensConsumed:      proc.TokensConsumed,
-		TokensRemaining:     proc.Limits.MaxTokensTotal - proc.TokensConsumed,
+		TokensRemaining:     tokensRemaining,
 		ChildrenActive:      uint32(s.king.Registry().CountChildren(pid)),
 		ChildrenMax:         proc.Limits.MaxChildren,
 		ContextUsagePercent: proc.ContextUsagePercent,
-		UptimeSeconds:       0, // TODO: compute from StartedAt
+		UptimeSeconds:       uptimeSeconds,
 	}, nil
 }
 
 func (s *CoreServer) RequestResources(ctx context.Context, req *pb.ResourceRequest) (*pb.ResourceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "RequestResources not yet implemented (Phase 3)")
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	proc, err := s.king.Registry().Get(pid)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "process %d not found", pid)
+	}
+
+	tier := resources.TierFromCog(proc.CognitiveTier)
+
+	// Try to allocate additional tokens from parent's budget.
+	err = s.king.Budget().Allocate(proc.PPID, pid, tier, req.Amount)
+	if err != nil {
+		log.Printf("[grpc] RequestResources: PID %d denied: %v", pid, err)
+		return &pb.ResourceResponse{
+			Granted: false,
+			Reason:  err.Error(),
+		}, nil
+	}
+
+	log.Printf("[grpc] RequestResources: PID %d granted %d %s tokens", pid, req.Amount, tier)
+	return &pb.ResourceResponse{
+		Granted:       true,
+		GrantedAmount: req.Amount,
+	}, nil
 }
 
 // --- Escalation ---
@@ -358,5 +418,27 @@ func (s *CoreServer) Log(ctx context.Context, req *pb.LogRequest) (*pb.LogRespon
 func (s *CoreServer) ReportMetric(ctx context.Context, req *pb.MetricRequest) (*pb.MetricResponse, error) {
 	pid, _ := callerPID(ctx)
 	log.Printf("[metric:%d] %s = %f", pid, req.Name, req.Value)
+
+	// If the metric is token usage, record it in accounting and budget.
+	if req.Name == "tokens_consumed" {
+		tokens := uint64(req.Value)
+		proc, err := s.king.Registry().Get(pid)
+		if err == nil {
+			tier := resources.TierFromCog(proc.CognitiveTier)
+			s.king.Accountant().Record(pid, tier, tokens)
+
+			if err := s.king.Budget().Consume(pid, tier, tokens); err != nil {
+				log.Printf("[metric:%d] budget exceeded: %v", pid, err)
+				// Publish budget exceeded event.
+				s.king.EventBus().Publish("budget_exceeded", pid,
+					[]byte(fmt.Sprintf("PID %d exceeded %s budget", pid, tier)))
+			}
+
+			// Update process token counter.
+			s.king.Registry().Update(pid, func(p *process.Process) {
+				p.TokensConsumed += tokens
+			})
+		}
+	}
 	return &pb.MetricResponse{}, nil
 }

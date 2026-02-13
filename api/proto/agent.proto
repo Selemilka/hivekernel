@@ -1,0 +1,375 @@
+syntax = "proto3";
+package hivekernel.agent;
+
+option go_package = "github.com/selemilka/hivekernel/api/proto/hivepb";
+
+// ─── Common enums ───
+
+enum AgentRole {
+  ROLE_KERNEL = 0;
+  ROLE_DAEMON = 1;
+  ROLE_AGENT = 2;
+  ROLE_ARCHITECT = 3;
+  ROLE_LEAD = 4;
+  ROLE_WORKER = 5;
+  ROLE_TASK = 6;
+}
+
+enum CognitiveTier {
+  COG_STRATEGIC = 0;
+  COG_TACTICAL = 1;
+  COG_OPERATIONAL = 2;
+}
+
+enum AgentState {
+  STATE_IDLE = 0;
+  STATE_RUNNING = 1;
+  STATE_BLOCKED = 2;
+  STATE_SLEEPING = 3;
+}
+
+enum Priority {
+  PRIORITY_CRITICAL = 0;
+  PRIORITY_HIGH = 1;
+  PRIORITY_NORMAL = 2;
+  PRIORITY_LOW = 3;
+}
+
+enum MessageRelation {
+  REL_SYSTEM = 0;
+  REL_PARENT = 1;
+  REL_CHILD = 2;
+  REL_SIBLING = 3;
+}
+
+enum ShutdownReason {
+  SHUTDOWN_NORMAL = 0;
+  SHUTDOWN_PARENT_DIED = 1;
+  SHUTDOWN_BUDGET_EXCEEDED = 2;
+  SHUTDOWN_MIGRATION = 3;
+  SHUTDOWN_USER_REQUEST = 4;
+}
+
+enum AckStatus {
+  ACK_ACCEPTED = 0;
+  ACK_QUEUED = 1;
+  ACK_REJECTED = 2;
+  ACK_ESCALATE = 3;
+}
+
+enum ProgressType {
+  PROGRESS_UPDATE = 0;
+  PROGRESS_LOG = 1;
+  PROGRESS_COMPLETED = 2;
+  PROGRESS_FAILED = 3;
+  PROGRESS_NEEDS_INPUT = 4;
+  PROGRESS_SYSCALL = 5;
+}
+
+// ─── AgentService — implemented by every agent runtime ───
+
+service AgentService {
+  // Lifecycle
+  rpc Init(InitRequest) returns (InitResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Execution — bidirectional stream for syscalls during execution
+  rpc Execute(stream ExecuteInput) returns (stream TaskProgress);
+
+  // Interrupt current task (SIGINT)
+  rpc Interrupt(InterruptRequest) returns (InterruptResponse);
+
+  // Receive message from another agent
+  rpc DeliverMessage(AgentMessage) returns (MessageAck);
+}
+
+// ─── Lifecycle ───
+
+message InitRequest {
+  uint64 pid = 1;
+  uint64 ppid = 2;
+  string user = 3;
+  AgentRole role = 4;
+  CognitiveTier cognitive_tier = 5;
+  AgentConfig config = 10;
+  ResourceLimits limits = 11;
+  repeated Tool tools = 12;
+  map<string, string> env = 13;
+}
+
+message AgentConfig {
+  string name = 1;
+  string system_prompt = 2;
+  string model = 3;
+  map<string, string> metadata = 4;
+}
+
+message ResourceLimits {
+  uint64 max_tokens_per_hour = 1;
+  uint64 max_context_tokens = 2;
+  uint32 max_children = 3;
+  uint32 max_concurrent_tasks = 4;
+  uint32 timeout_seconds = 5;
+  uint64 max_tokens_total = 6;
+}
+
+message Tool {
+  string name = 1;
+  string description = 2;
+  map<string, string> config = 3;
+  repeated string allowed_paths = 4;
+}
+
+message InitResponse {
+  bool ready = 1;
+  string error = 2;
+}
+
+message ShutdownRequest {
+  ShutdownReason reason = 1;
+  uint32 grace_period_seconds = 2;
+}
+
+message ShutdownResponse {
+  bytes state_snapshot = 1;
+  TaskResult partial_result = 2;
+}
+
+message HeartbeatRequest {
+  uint64 timestamp = 1;
+}
+
+message HeartbeatResponse {
+  AgentState state = 1;
+  float context_usage_percent = 2;
+  uint64 tokens_consumed = 3;
+  uint32 active_children = 4;
+  string current_task_id = 5;
+}
+
+// ─── Execution (bidirectional streaming) ───
+
+message ExecuteInput {
+  oneof input {
+    TaskRequest task = 1;
+    SyscallResult syscall_result = 2;
+    string user_input = 3;
+  }
+}
+
+message TaskRequest {
+  string task_id = 1;
+  string description = 2;
+  map<string, string> params = 3;
+  Priority priority = 4;
+  uint32 timeout_seconds = 5;
+  bytes context = 6;
+  string parent_task_id = 7;
+}
+
+message TaskProgress {
+  string task_id = 1;
+  ProgressType type = 2;
+  string message = 3;
+  float progress_percent = 4;
+  TaskResult result = 5;
+  repeated SystemCall syscalls = 6;
+}
+
+message TaskResult {
+  int32 exit_code = 1;
+  string output = 2;
+  map<string, string> artifacts = 3;
+  map<string, string> metadata = 4;
+}
+
+message InterruptRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message InterruptResponse {
+  bool acknowledged = 1;
+  TaskResult partial_result = 2;
+}
+
+// ─── Message delivery ───
+
+message AgentMessage {
+  string message_id = 1;
+  uint64 from_pid = 2;
+  string from_name = 3;
+  MessageRelation relation = 4;
+  string type = 5;
+  Priority priority = 6;
+  bytes payload = 7;
+  uint64 timestamp = 8;
+  bool requires_ack = 9;
+}
+
+message MessageAck {
+  string message_id = 1;
+  AckStatus status = 2;
+  string reply = 3;
+}
+
+// ─── Syscalls (embedded in Execute stream) ───
+
+message SystemCall {
+  string call_id = 1;
+  oneof call {
+    SpawnRequest spawn = 2;
+    KillRequest kill = 3;
+    SendMessageRequest send = 4;
+    StoreArtifactRequest store = 5;
+    GetArtifactRequest get_artifact = 6;
+    EscalateRequest escalate = 7;
+    LogRequest log = 8;
+  }
+}
+
+message SyscallResult {
+  string call_id = 1;
+  oneof result {
+    SpawnResponse spawn = 2;
+    KillResponse kill = 3;
+    SendMessageResponse send = 4;
+    StoreArtifactResponse store = 5;
+    GetArtifactResponse get_artifact = 6;
+    EscalateResponse escalate = 7;
+    LogResponse log = 8;
+  }
+}
+
+// ─── Syscall request/response messages (shared with core.proto) ───
+
+message SpawnRequest {
+  string name = 1;
+  AgentRole role = 2;
+  CognitiveTier cognitive_tier = 3;
+  string model = 4;
+  string system_prompt = 5;
+  repeated string tools = 6;
+  ResourceLimits limits = 7;
+  map<string, string> env = 8;
+  string initial_task = 9;
+  RuntimeType runtime_type = 10;
+  string runtime_image = 11;
+  Schedule schedule = 12;
+}
+
+enum RuntimeType {
+  RUNTIME_PYTHON = 0;
+  RUNTIME_CLAW = 1;
+  RUNTIME_CUSTOM = 2;
+}
+
+message Schedule {
+  string cron = 1;
+  bool keep_alive = 2;
+}
+
+message SpawnResponse {
+  bool success = 1;
+  uint64 child_pid = 2;
+  string error = 3;
+}
+
+message KillRequest {
+  uint64 target_pid = 1;
+  bool recursive = 2;
+  ShutdownReason reason = 3;
+  uint32 grace_period_seconds = 4;
+}
+
+message KillResponse {
+  bool success = 1;
+  repeated uint64 killed_pids = 2;
+  string error = 3;
+}
+
+message SendMessageRequest {
+  uint64 to_pid = 1;
+  string to_queue = 2;
+  string type = 3;
+  Priority priority = 4;
+  bytes payload = 5;
+  bool requires_ack = 6;
+  uint32 ttl_seconds = 7;
+}
+
+message SendMessageResponse {
+  bool delivered = 1;
+  string message_id = 2;
+  string error = 3;
+}
+
+message StoreArtifactRequest {
+  string key = 1;
+  bytes content = 2;
+  string content_type = 3;
+  ArtifactVisibility visibility = 4;
+}
+
+enum ArtifactVisibility {
+  VIS_PRIVATE = 0;
+  VIS_USER = 1;
+  VIS_SUBTREE = 2;
+  VIS_GLOBAL = 3;
+}
+
+message StoreArtifactResponse {
+  bool success = 1;
+  string artifact_id = 2;
+  string error = 3;
+}
+
+message GetArtifactRequest {
+  string artifact_id = 1;
+  string key = 2;
+}
+
+message GetArtifactResponse {
+  bool found = 1;
+  bytes content = 2;
+  string content_type = 3;
+  uint64 stored_by_pid = 4;
+  uint64 stored_at = 5;
+  string error = 6;
+}
+
+message EscalateRequest {
+  string issue = 1;
+  EscalationSeverity severity = 2;
+  map<string, string> context = 3;
+  bool auto_propagate = 4;
+}
+
+enum EscalationSeverity {
+  ESC_INFO = 0;
+  ESC_WARNING = 1;
+  ESC_ERROR = 2;
+  ESC_CRITICAL = 3;
+}
+
+message EscalateResponse {
+  bool received = 1;
+  uint64 handled_by_pid = 2;
+  string response = 3;
+}
+
+message LogRequest {
+  LogLevel level = 1;
+  string message = 2;
+  map<string, string> fields = 3;
+}
+
+enum LogLevel {
+  LOG_DEBUG = 0;
+  LOG_INFO = 1;
+  LOG_WARN = 2;
+  LOG_ERROR = 3;
+}
+
+message LogResponse {}

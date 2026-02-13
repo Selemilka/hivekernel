@@ -11,6 +11,7 @@ import (
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/resources"
+	"github.com/selemilka/hivekernel/internal/runtime"
 	"github.com/selemilka/hivekernel/internal/scheduler"
 )
 
@@ -47,6 +48,9 @@ type King struct {
 	scheduler *scheduler.Scheduler
 	cron      *scheduler.CronScheduler
 	lifecycle *process.LifecycleManager
+
+	// Phase 7: Runtime manager
+	rtManager *runtime.Manager
 
 	proc *process.Process // king's own process entry
 
@@ -218,6 +222,16 @@ func (k *King) Lifecycle() *process.LifecycleManager {
 	return k.lifecycle
 }
 
+// SetRuntimeManager sets the runtime manager (called during wiring).
+func (k *King) SetRuntimeManager(m *runtime.Manager) {
+	k.rtManager = m
+}
+
+// RuntimeManager returns the runtime manager.
+func (k *King) RuntimeManager() *runtime.Manager {
+	return k.rtManager
+}
+
 // PID returns the kernel's process ID.
 func (k *King) PID() process.PID {
 	return k.proc.PID
@@ -309,6 +323,15 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 	// Phase 4: If parent is in a cgroup, add the child to the same group.
 	if g, ok := k.cgroups.GetByPID(req.ParentPID); ok {
 		_ = k.cgroups.AddProcess(g.Name, proc.PID)
+	}
+
+	// Phase 7: Start runtime if agent code is specified.
+	if req.RuntimeImage != "" && k.rtManager != nil {
+		proc.RuntimeAddr = req.RuntimeImage // Pass image spec through RuntimeAddr.
+		if _, err := k.rtManager.StartRuntime(proc, runtime.RuntimeType(req.RuntimeType)); err != nil {
+			k.registry.Remove(proc.PID)
+			return nil, fmt.Errorf("runtime start failed: %w", err)
+		}
 	}
 
 	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",

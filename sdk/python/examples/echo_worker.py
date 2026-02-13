@@ -1,11 +1,11 @@
 """
-Phase 0 demo agent: a simple echo worker.
+Echo worker agent: echoes task descriptions back.
 
-Receives a task, echoes it back with some metadata.
-Demonstrates the HiveAgent lifecycle end-to-end.
+Demonstrates the HiveAgent lifecycle and execute_on delegation.
 
 Usage:
     python echo_worker.py --port 50100 --core localhost:50051
+    python echo_worker.py --port 50100 --core localhost:50051 --delegate
 """
 
 import argparse
@@ -22,6 +22,36 @@ class EchoWorker(HiveAgent):
 
     async def handle_task(self, task, ctx) -> TaskResult:
         print(f"EchoWorker handling task {task.task_id}: {task.description}")
+
+        # If the task description starts with "delegate:", spawn a child
+        # and execute_on it.
+        if task.description.startswith("delegate:"):
+            subtask_desc = task.description[len("delegate:"):]
+            print(f"Spawning sub-worker for: {subtask_desc}")
+
+            child_pid = await ctx.spawn(
+                name="sub-echo",
+                role="task",
+                cognitive_tier="operational",
+                model="mini",
+            )
+            print(f"Spawned sub-worker PID {child_pid}")
+
+            child_result = await ctx.execute_on(
+                pid=child_pid,
+                description=subtask_desc,
+            )
+            print(f"Sub-worker result: {child_result.output}")
+
+            await ctx.kill(child_pid)
+
+            return TaskResult(
+                exit_code=0,
+                output=f"Delegated result: {child_result.output}",
+                artifacts=child_result.artifacts,
+                metadata={"delegated_to": str(child_pid)},
+            )
+
         return TaskResult(
             exit_code=0,
             output=f"Echo: {task.description}",

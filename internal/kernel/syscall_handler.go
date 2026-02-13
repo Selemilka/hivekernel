@@ -9,17 +9,25 @@ import (
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
+	"github.com/selemilka/hivekernel/internal/runtime"
 )
 
 // KernelSyscallHandler implements runtime.SyscallHandler by dispatching
 // syscalls to the King's subsystems.
 type KernelSyscallHandler struct {
-	king *King
+	king     *King
+	manager  *runtime.Manager
+	executor *runtime.Executor
 }
 
 // NewKernelSyscallHandler creates a syscall handler backed by the king.
-func NewKernelSyscallHandler(king *King) *KernelSyscallHandler {
-	return &KernelSyscallHandler{king: king}
+func NewKernelSyscallHandler(king *King, manager *runtime.Manager) *KernelSyscallHandler {
+	return &KernelSyscallHandler{king: king, manager: manager}
+}
+
+// SetExecutor sets the executor (called after creation to break circular dependency).
+func (h *KernelSyscallHandler) SetExecutor(e *runtime.Executor) {
+	h.executor = e
 }
 
 // HandleSyscall dispatches a single SystemCall and returns its result.
@@ -46,6 +54,8 @@ func (h *KernelSyscallHandler) HandleSyscall(
 		return h.handleEscalate(callID, callerPID, c.Escalate)
 	case *pb.SystemCall_Log:
 		return h.handleLog(callID, callerPID, c.Log)
+	case *pb.SystemCall_ExecuteOn:
+		return h.handleExecuteOn(ctx, callID, callerPID, c.ExecuteOn)
 	default:
 		log.Printf("[syscall] unknown syscall type for call_id=%s", callID)
 		return &pb.SyscallResult{CallId: callID}
@@ -104,9 +114,15 @@ func (h *KernelSyscallHandler) handleKill(callID string, callerPID process.PID, 
 	if req.Recursive {
 		descendants := h.king.Registry().GetDescendants(req.TargetPid)
 		for _, d := range descendants {
+			if h.manager != nil {
+				_ = h.manager.StopRuntime(d.PID)
+			}
 			_ = h.king.Registry().SetState(d.PID, process.StateDead)
 			killed = append(killed, d.PID)
 		}
+	}
+	if h.manager != nil {
+		_ = h.manager.StopRuntime(req.TargetPid)
 	}
 	_ = h.king.Registry().SetState(req.TargetPid, process.StateDead)
 	killed = append(killed, req.TargetPid)
@@ -269,6 +285,56 @@ func (h *KernelSyscallHandler) handleLog(callID string, callerPID process.PID, r
 		CallId: callID,
 		Result: &pb.SyscallResult_Log{
 			Log: &pb.LogResponse{},
+		},
+	}
+}
+
+func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID string, callerPID process.PID, req *pb.ExecuteOnRequest) *pb.SyscallResult {
+	errResult := func(msg string) *pb.SyscallResult {
+		return &pb.SyscallResult{
+			CallId: callID,
+			Result: &pb.SyscallResult_ExecuteOn{
+				ExecuteOn: &pb.ExecuteOnResponse{Success: false, Error: msg},
+			},
+		}
+	}
+
+	// Validate target_pid is a child of callerPID.
+	target, err := h.king.Registry().Get(req.TargetPid)
+	if err != nil {
+		return errResult("target process not found")
+	}
+	if target.PPID != callerPID {
+		return errResult("can only execute_on own children")
+	}
+
+	// Get target's runtime address.
+	if h.manager == nil {
+		return errResult("runtime manager not available")
+	}
+	rt := h.manager.GetRuntime(req.TargetPid)
+	if rt == nil {
+		return errResult(fmt.Sprintf("no runtime for PID %d", req.TargetPid))
+	}
+
+	if h.executor == nil {
+		return errResult("executor not available")
+	}
+
+	// Execute the task on the target agent.
+	log.Printf("[syscall] execute_on: PID %d -> PID %d, task=%s", callerPID, req.TargetPid, req.Task.GetDescription())
+	taskResult, err := h.executor.ExecuteTask(ctx, rt.Addr, req.TargetPid, req.Task)
+	if err != nil {
+		return errResult(fmt.Sprintf("execute_on failed: %v", err))
+	}
+
+	return &pb.SyscallResult{
+		CallId: callID,
+		Result: &pb.SyscallResult_ExecuteOn{
+			ExecuteOn: &pb.ExecuteOnResponse{
+				Success: true,
+				Result:  taskResult,
+			},
 		},
 	}
 }

@@ -2,9 +2,13 @@ package kernel
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
+	"github.com/selemilka/hivekernel/internal/runtime"
+
+	"google.golang.org/grpc"
 )
 
 func newTestKingForSyscall(t *testing.T) *King {
@@ -20,7 +24,7 @@ func newTestKingForSyscall(t *testing.T) *King {
 
 func TestSyscallHandler_Spawn(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
 		CallId: "test-spawn-1",
@@ -51,7 +55,7 @@ func TestSyscallHandler_Spawn(t *testing.T) {
 
 func TestSyscallHandler_Kill(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	// Spawn a child to kill.
 	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
@@ -97,7 +101,7 @@ func TestSyscallHandler_Kill(t *testing.T) {
 
 func TestSyscallHandler_KillNotOwn(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	// Spawn a child under king.
 	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
@@ -128,7 +132,7 @@ func TestSyscallHandler_KillNotOwn(t *testing.T) {
 
 func TestSyscallHandler_Send(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	// Spawn a child so we have a sender.
 	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
@@ -168,7 +172,7 @@ func TestSyscallHandler_Send(t *testing.T) {
 
 func TestSyscallHandler_StoreAndGetArtifact(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	// Store.
 	storeResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
@@ -210,7 +214,7 @@ func TestSyscallHandler_StoreAndGetArtifact(t *testing.T) {
 
 func TestSyscallHandler_Escalate(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
 		CallId: "test-escalate-1",
@@ -230,7 +234,7 @@ func TestSyscallHandler_Escalate(t *testing.T) {
 
 func TestSyscallHandler_Log(t *testing.T) {
 	king := newTestKingForSyscall(t)
-	handler := NewKernelSyscallHandler(king)
+	handler := NewKernelSyscallHandler(king, nil)
 
 	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
 		CallId: "test-log-1",
@@ -248,5 +252,180 @@ func TestSyscallHandler_Log(t *testing.T) {
 	logResp := result.GetLog()
 	if logResp == nil {
 		t.Fatal("expected LogResponse")
+	}
+}
+
+// --- execute_on tests ---
+
+// mockAgentForExecOn implements AgentService Execute for testing execute_on.
+type mockAgentForExecOn struct {
+	pb.UnimplementedAgentServiceServer
+}
+
+func (m *mockAgentForExecOn) Execute(stream pb.AgentService_ExecuteServer) error {
+	input, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	task := input.GetTask()
+	if task == nil {
+		return nil
+	}
+	return stream.Send(&pb.TaskProgress{
+		TaskId:  task.TaskId,
+		Type:    pb.ProgressType_PROGRESS_COMPLETED,
+		Message: "done",
+		Result: &pb.TaskResult{
+			ExitCode: 0,
+			Output:   "exec-on: " + task.Description,
+		},
+	})
+}
+
+func TestSyscallHandler_ExecuteOn(t *testing.T) {
+	king := newTestKingForSyscall(t)
+
+	// Start mock agent gRPC server.
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := grpc.NewServer()
+	pb.RegisterAgentServiceServer(srv, &mockAgentForExecOn{})
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.GracefulStop)
+	agentAddr := lis.Addr().String()
+
+	// Create manager and register a runtime entry pointing to our mock agent.
+	mgr := runtime.NewManager("localhost:50051", "python")
+	handler := NewKernelSyscallHandler(king, mgr)
+	executor := runtime.NewExecutor(handler)
+	handler.SetExecutor(executor)
+
+	// Spawn a child under king.
+	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "spawn-for-execute-on",
+		Call: &pb.SystemCall_Spawn{
+			Spawn: &pb.SpawnRequest{
+				Name:          "exec-target",
+				Role:          pb.AgentRole_ROLE_WORKER,
+				CognitiveTier: pb.CognitiveTier_COG_TACTICAL,
+			},
+		},
+	})
+	childPID := spawnResult.GetSpawn().ChildPid
+
+	// Register a virtual runtime for the child, then overwrite Addr to mock agent.
+	childProc, _ := king.Registry().Get(childPID)
+	_, err = mgr.StartRuntime(childProc, runtime.RuntimePython)
+	if err != nil {
+		t.Fatalf("register runtime: %v", err)
+	}
+	rt := mgr.GetRuntime(childPID)
+	rt.Addr = agentAddr
+
+	// Execute_on: king sends a task to child.
+	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "test-execute-on-1",
+		Call: &pb.SystemCall_ExecuteOn{
+			ExecuteOn: &pb.ExecuteOnRequest{
+				TargetPid: childPID,
+				Task: &pb.TaskRequest{
+					TaskId:      "task-exec-on",
+					Description: "hello from parent",
+				},
+			},
+		},
+	})
+
+	execOn := result.GetExecuteOn()
+	if execOn == nil {
+		t.Fatal("expected ExecuteOnResponse")
+	}
+	if !execOn.Success {
+		t.Fatalf("execute_on failed: %s", execOn.Error)
+	}
+	if execOn.Result == nil {
+		t.Fatal("expected TaskResult")
+	}
+	if execOn.Result.Output != "exec-on: hello from parent" {
+		t.Errorf("output = %q, want %q", execOn.Result.Output, "exec-on: hello from parent")
+	}
+}
+
+func TestSyscallHandler_ExecuteOn_NotOwnChild(t *testing.T) {
+	king := newTestKingForSyscall(t)
+	mgr := runtime.NewManager("localhost:50051", "python")
+	handler := NewKernelSyscallHandler(king, mgr)
+
+	// Spawn a child under king.
+	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "spawn-1",
+		Call: &pb.SystemCall_Spawn{
+			Spawn: &pb.SpawnRequest{
+				Name:          "child-x",
+				Role:          pb.AgentRole_ROLE_WORKER,
+				CognitiveTier: pb.CognitiveTier_COG_TACTICAL,
+			},
+		},
+	})
+	childPID := spawnResult.GetSpawn().ChildPid
+
+	// Try execute_on from a different PID (not the parent).
+	result := handler.HandleSyscall(context.Background(), 9999, &pb.SystemCall{
+		CallId: "bad-execute-on",
+		Call: &pb.SystemCall_ExecuteOn{
+			ExecuteOn: &pb.ExecuteOnRequest{
+				TargetPid: childPID,
+				Task: &pb.TaskRequest{
+					TaskId:      "task-bad",
+					Description: "should fail",
+				},
+			},
+		},
+	})
+
+	execOn := result.GetExecuteOn()
+	if execOn.Success {
+		t.Error("execute_on should fail when caller is not parent")
+	}
+}
+
+func TestSyscallHandler_ExecuteOn_NoRuntime(t *testing.T) {
+	king := newTestKingForSyscall(t)
+	mgr := runtime.NewManager("localhost:50051", "python")
+	handler := NewKernelSyscallHandler(king, mgr)
+	executor := runtime.NewExecutor(handler)
+	handler.SetExecutor(executor)
+
+	// Spawn a child but don't register a runtime.
+	spawnResult := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "spawn-no-rt",
+		Call: &pb.SystemCall_Spawn{
+			Spawn: &pb.SpawnRequest{
+				Name:          "child-no-rt",
+				Role:          pb.AgentRole_ROLE_WORKER,
+				CognitiveTier: pb.CognitiveTier_COG_TACTICAL,
+			},
+		},
+	})
+	childPID := spawnResult.GetSpawn().ChildPid
+
+	result := handler.HandleSyscall(context.Background(), king.PID(), &pb.SystemCall{
+		CallId: "exec-on-no-rt",
+		Call: &pb.SystemCall_ExecuteOn{
+			ExecuteOn: &pb.ExecuteOnRequest{
+				TargetPid: childPID,
+				Task: &pb.TaskRequest{
+					TaskId:      "task-no-rt",
+					Description: "should fail",
+				},
+			},
+		},
+	})
+
+	execOn := result.GetExecuteOn()
+	if execOn.Success {
+		t.Error("execute_on should fail when no runtime is registered")
 	}
 }

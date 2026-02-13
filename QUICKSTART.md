@@ -37,7 +37,7 @@ The demo automatically spawns king -> queen -> worker and prints the process tab
 go test ./internal/... -v
 ```
 
-221 tests covering:
+233 tests covering:
 - Process registry (CRUD, tree traversal, nearest common ancestor)
 - Spawner validation (cognitive tier, max children, role compatibility)
 - IPC priority queue (ordering, aging, TTL, blocking pop)
@@ -65,7 +65,9 @@ go test ./internal/... -v
 - **Lifecycle** (sleep/wake, CompleteTask, WaitResult, CollapseBranch, ActiveChildren)
 - **Compiler scenario** (full Leo pipeline: spawn leads -> workers -> tasks complete -> tree collapse)
 - **Executor** (Execute stream caller: simple complete, syscall round-trip, failure, dial error)
-- **Syscall handler** (in-stream dispatch: spawn, kill, send, store/get artifact, escalate, log)
+- **Syscall handler** (in-stream dispatch: spawn, kill, send, store/get artifact, escalate, log, execute_on)
+- **Runtime manager** (virtual process registration, start/stop lifecycle, client access)
+- **execute_on** (parent-to-child task delegation, permission checks, no-runtime handling)
 
 ## Run Python Integration Test
 
@@ -114,6 +116,21 @@ uv run python -c "from hivekernel_sdk import HiveAgent; print('OK')"
 pip install -e .
 ```
 
+## Run an Agent via Runtime Spawner
+
+The kernel can now automatically spawn Python agent processes. When a process
+is created with a `RuntimeImage`, the kernel launches `python -m hivekernel_sdk.runner`,
+waits for `READY <port>`, connects via gRPC, and calls `Init`.
+
+Agents can delegate tasks to children using `ctx.execute_on(child_pid, description)`.
+
+```python
+# In your agent's handle_task:
+child_pid = await ctx.spawn(name="worker", role="task", cognitive_tier="operational")
+result = await ctx.execute_on(pid=child_pid, description="do something")
+await ctx.kill(child_pid)
+```
+
 ## Run the Echo Worker Demo
 
 ```bash
@@ -137,7 +154,7 @@ internal/
   permissions/        Auth (USER identity), ACL, role capabilities
   cluster/            Node discovery, VPS connector, branch migration
   scheduler/          Task priority, scheduler, cron scheduling
-  runtime/            Agent runtime lifecycle, Execute stream executor
+  runtime/            Agent runtime manager (OS process spawning), executor, health
   daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code
 sdk/python/           Async Python agent SDK (HiveAgent, CoreClient, SyscallContext)

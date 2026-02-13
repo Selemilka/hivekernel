@@ -166,4 +166,30 @@
 
 ### Tests: 221 passing (+11 new)
 - Executor: simple complete, syscall round-trip (spawn via stream), task failure, dial error
-- Syscall handler: spawn, kill (own/not-own), send message, store+get artifact, escalate, log — king → queen → Leo → Architect(sleeps) + 3 Leads → Workers/Tasks. Tree grows to 14 processes, cgroup tracks 11 members. 6 tasks submitted/assigned/completed. Token consumption: 500k across branch. Tree collapses, 0 active children remaining
+- Syscall handler: spawn, kill (own/not-own), send message, store+get artifact, escalate, log — king -> queen -> Leo -> Architect(sleeps) + 3 Leads -> Workers/Tasks. Tree grows to 14 processes, cgroup tracks 11 members. 6 tasks submitted/assigned/completed. Token consumption: 500k across branch. Tree collapses, 0 active children remaining
+
+---
+
+## Phase 7 — Runtime Spawner + execute_on Syscall (completed)
+
+**Goal:** Make the kernel actually spawn Python agent processes and enable parent->child task delegation through the Execute stream.
+
+### Go Core
+
+- `internal/runtime/manager.go` — **REWRITTEN**: Real OS process management. `StartRuntime()` now spawns Python process via `os/exec`, reads `READY <port>` from stdout (10s timeout), dials gRPC to agent, calls `Init()`. `StopRuntime()` sends Shutdown RPC with grace period, waits for exit (5s), force-kills if needed. Virtual process mode preserved for processes without RuntimeImage. `GetClient()` returns AgentServiceClient for a PID
+- `internal/kernel/syscall_handler.go` — Added `execute_on` syscall case. `handleExecuteOn()` validates target is caller's child, gets runtime from Manager, delegates to Executor. Kill now stops runtime before marking process dead. Handler struct extended with Manager + Executor references (circular dependency resolved via `SetExecutor()`)
+- `internal/kernel/king.go` — Added `rtManager` field with `SetRuntimeManager()`/`RuntimeManager()` accessors. `SpawnChild()` now auto-starts runtime when `RuntimeImage` is set
+- `internal/kernel/grpc_core.go` — `KillChild()` now stops runtime before state change (both target and descendants)
+- `cmd/hivekernel/main.go` — Wires Manager (with coreAddr + pythonBin), sets rtManager on King, resolves circular Handler<->Executor dependency via setter
+- `api/proto/agent.proto` — Added `ExecuteOnRequest`/`ExecuteOnResponse` messages, wired into SystemCall/SyscallResult oneofs (field 9)
+
+### Python SDK
+
+- `sdk/python/hivekernel_sdk/runner.py` — **NEW**: Entry point for kernel-spawned agents. CLI: `python -m hivekernel_sdk.runner --agent module:Class --core addr`. Loads agent class via importlib, starts gRPC server on random port, prints `READY <port>` to stdout for Go handshake
+- `sdk/python/hivekernel_sdk/__main__.py` — **NEW**: Enables `python -m hivekernel_sdk.runner`
+- `sdk/python/hivekernel_sdk/syscall.py` — Added `execute_on()` method: sends ExecuteOnRequest syscall through Execute stream, returns TaskResult from child agent
+- `sdk/python/examples/echo_worker.py` — Updated to demonstrate `execute_on` delegation: "delegate:X" tasks spawn a sub-worker, execute_on it, collect result
+
+### Tests: 233 passing (+12 new)
+- Runtime manager: NewManager (default python), StartRuntime virtual process, already running check, StopRuntime virtual + not-found, ListRuntimes, GetClient virtual + not-found
+- execute_on syscall: successful parent->child delegation via mock agent, not-own-child rejected, no-runtime error

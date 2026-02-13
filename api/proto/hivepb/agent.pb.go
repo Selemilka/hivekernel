@@ -1887,6 +1887,7 @@ type SystemCall struct {
 	//	*SystemCall_GetArtifact
 	//	*SystemCall_Escalate
 	//	*SystemCall_Log
+	//	*SystemCall_ExecuteOn
 	Call          isSystemCall_Call `protobuf_oneof:"call"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1999,6 +2000,15 @@ func (x *SystemCall) GetLog() *LogRequest {
 	return nil
 }
 
+func (x *SystemCall) GetExecuteOn() *ExecuteOnRequest {
+	if x != nil {
+		if x, ok := x.Call.(*SystemCall_ExecuteOn); ok {
+			return x.ExecuteOn
+		}
+	}
+	return nil
+}
+
 type isSystemCall_Call interface {
 	isSystemCall_Call()
 }
@@ -2031,6 +2041,10 @@ type SystemCall_Log struct {
 	Log *LogRequest `protobuf:"bytes,8,opt,name=log,proto3,oneof"`
 }
 
+type SystemCall_ExecuteOn struct {
+	ExecuteOn *ExecuteOnRequest `protobuf:"bytes,9,opt,name=execute_on,json=executeOn,proto3,oneof"`
+}
+
 func (*SystemCall_Spawn) isSystemCall_Call() {}
 
 func (*SystemCall_Kill) isSystemCall_Call() {}
@@ -2045,6 +2059,8 @@ func (*SystemCall_Escalate) isSystemCall_Call() {}
 
 func (*SystemCall_Log) isSystemCall_Call() {}
 
+func (*SystemCall_ExecuteOn) isSystemCall_Call() {}
+
 type SyscallResult struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
@@ -2057,6 +2073,7 @@ type SyscallResult struct {
 	//	*SyscallResult_GetArtifact
 	//	*SyscallResult_Escalate
 	//	*SyscallResult_Log
+	//	*SyscallResult_ExecuteOn
 	Result        isSyscallResult_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2169,6 +2186,15 @@ func (x *SyscallResult) GetLog() *LogResponse {
 	return nil
 }
 
+func (x *SyscallResult) GetExecuteOn() *ExecuteOnResponse {
+	if x != nil {
+		if x, ok := x.Result.(*SyscallResult_ExecuteOn); ok {
+			return x.ExecuteOn
+		}
+	}
+	return nil
+}
+
 type isSyscallResult_Result interface {
 	isSyscallResult_Result()
 }
@@ -2201,6 +2227,10 @@ type SyscallResult_Log struct {
 	Log *LogResponse `protobuf:"bytes,8,opt,name=log,proto3,oneof"`
 }
 
+type SyscallResult_ExecuteOn struct {
+	ExecuteOn *ExecuteOnResponse `protobuf:"bytes,9,opt,name=execute_on,json=executeOn,proto3,oneof"`
+}
+
 func (*SyscallResult_Spawn) isSyscallResult_Result() {}
 
 func (*SyscallResult_Kill) isSyscallResult_Result() {}
@@ -2214,6 +2244,120 @@ func (*SyscallResult_GetArtifact) isSyscallResult_Result() {}
 func (*SyscallResult_Escalate) isSyscallResult_Result() {}
 
 func (*SyscallResult_Log) isSyscallResult_Result() {}
+
+func (*SyscallResult_ExecuteOn) isSyscallResult_Result() {}
+
+type ExecuteOnRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetPid     uint64                 `protobuf:"varint,1,opt,name=target_pid,json=targetPid,proto3" json:"target_pid,omitempty"`
+	Task          *TaskRequest           `protobuf:"bytes,2,opt,name=task,proto3" json:"task,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteOnRequest) Reset() {
+	*x = ExecuteOnRequest{}
+	mi := &file_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteOnRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteOnRequest) ProtoMessage() {}
+
+func (x *ExecuteOnRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteOnRequest.ProtoReflect.Descriptor instead.
+func (*ExecuteOnRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ExecuteOnRequest) GetTargetPid() uint64 {
+	if x != nil {
+		return x.TargetPid
+	}
+	return 0
+}
+
+func (x *ExecuteOnRequest) GetTask() *TaskRequest {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
+type ExecuteOnResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Result        *TaskResult            `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteOnResponse) Reset() {
+	*x = ExecuteOnResponse{}
+	mi := &file_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteOnResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteOnResponse) ProtoMessage() {}
+
+func (x *ExecuteOnResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteOnResponse.ProtoReflect.Descriptor instead.
+func (*ExecuteOnResponse) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ExecuteOnResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ExecuteOnResponse) GetResult() *TaskResult {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *ExecuteOnResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
 
 type SpawnRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2235,7 +2379,7 @@ type SpawnRequest struct {
 
 func (x *SpawnRequest) Reset() {
 	*x = SpawnRequest{}
-	mi := &file_agent_proto_msgTypes[19]
+	mi := &file_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2247,7 +2391,7 @@ func (x *SpawnRequest) String() string {
 func (*SpawnRequest) ProtoMessage() {}
 
 func (x *SpawnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[19]
+	mi := &file_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2260,7 +2404,7 @@ func (x *SpawnRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpawnRequest.ProtoReflect.Descriptor instead.
 func (*SpawnRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{19}
+	return file_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SpawnRequest) GetName() string {
@@ -2357,7 +2501,7 @@ type Schedule struct {
 
 func (x *Schedule) Reset() {
 	*x = Schedule{}
-	mi := &file_agent_proto_msgTypes[20]
+	mi := &file_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2369,7 +2513,7 @@ func (x *Schedule) String() string {
 func (*Schedule) ProtoMessage() {}
 
 func (x *Schedule) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[20]
+	mi := &file_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2382,7 +2526,7 @@ func (x *Schedule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Schedule.ProtoReflect.Descriptor instead.
 func (*Schedule) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{20}
+	return file_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Schedule) GetCron() string {
@@ -2410,7 +2554,7 @@ type SpawnResponse struct {
 
 func (x *SpawnResponse) Reset() {
 	*x = SpawnResponse{}
-	mi := &file_agent_proto_msgTypes[21]
+	mi := &file_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2422,7 +2566,7 @@ func (x *SpawnResponse) String() string {
 func (*SpawnResponse) ProtoMessage() {}
 
 func (x *SpawnResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[21]
+	mi := &file_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2435,7 +2579,7 @@ func (x *SpawnResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpawnResponse.ProtoReflect.Descriptor instead.
 func (*SpawnResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{21}
+	return file_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SpawnResponse) GetSuccess() bool {
@@ -2471,7 +2615,7 @@ type KillRequest struct {
 
 func (x *KillRequest) Reset() {
 	*x = KillRequest{}
-	mi := &file_agent_proto_msgTypes[22]
+	mi := &file_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2483,7 +2627,7 @@ func (x *KillRequest) String() string {
 func (*KillRequest) ProtoMessage() {}
 
 func (x *KillRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[22]
+	mi := &file_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2496,7 +2640,7 @@ func (x *KillRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillRequest.ProtoReflect.Descriptor instead.
 func (*KillRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{22}
+	return file_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *KillRequest) GetTargetPid() uint64 {
@@ -2538,7 +2682,7 @@ type KillResponse struct {
 
 func (x *KillResponse) Reset() {
 	*x = KillResponse{}
-	mi := &file_agent_proto_msgTypes[23]
+	mi := &file_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2550,7 +2694,7 @@ func (x *KillResponse) String() string {
 func (*KillResponse) ProtoMessage() {}
 
 func (x *KillResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[23]
+	mi := &file_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2563,7 +2707,7 @@ func (x *KillResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillResponse.ProtoReflect.Descriptor instead.
 func (*KillResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{23}
+	return file_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *KillResponse) GetSuccess() bool {
@@ -2602,7 +2746,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_agent_proto_msgTypes[24]
+	mi := &file_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2614,7 +2758,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[24]
+	mi := &file_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2627,7 +2771,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{24}
+	return file_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SendMessageRequest) GetToPid() uint64 {
@@ -2690,7 +2834,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_agent_proto_msgTypes[25]
+	mi := &file_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2702,7 +2846,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[25]
+	mi := &file_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2715,7 +2859,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{25}
+	return file_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *SendMessageResponse) GetDelivered() bool {
@@ -2751,7 +2895,7 @@ type StoreArtifactRequest struct {
 
 func (x *StoreArtifactRequest) Reset() {
 	*x = StoreArtifactRequest{}
-	mi := &file_agent_proto_msgTypes[26]
+	mi := &file_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2763,7 +2907,7 @@ func (x *StoreArtifactRequest) String() string {
 func (*StoreArtifactRequest) ProtoMessage() {}
 
 func (x *StoreArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[26]
+	mi := &file_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2776,7 +2920,7 @@ func (x *StoreArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreArtifactRequest.ProtoReflect.Descriptor instead.
 func (*StoreArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{26}
+	return file_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StoreArtifactRequest) GetKey() string {
@@ -2818,7 +2962,7 @@ type StoreArtifactResponse struct {
 
 func (x *StoreArtifactResponse) Reset() {
 	*x = StoreArtifactResponse{}
-	mi := &file_agent_proto_msgTypes[27]
+	mi := &file_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2830,7 +2974,7 @@ func (x *StoreArtifactResponse) String() string {
 func (*StoreArtifactResponse) ProtoMessage() {}
 
 func (x *StoreArtifactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[27]
+	mi := &file_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2843,7 +2987,7 @@ func (x *StoreArtifactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreArtifactResponse.ProtoReflect.Descriptor instead.
 func (*StoreArtifactResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{27}
+	return file_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *StoreArtifactResponse) GetSuccess() bool {
@@ -2877,7 +3021,7 @@ type GetArtifactRequest struct {
 
 func (x *GetArtifactRequest) Reset() {
 	*x = GetArtifactRequest{}
-	mi := &file_agent_proto_msgTypes[28]
+	mi := &file_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2889,7 +3033,7 @@ func (x *GetArtifactRequest) String() string {
 func (*GetArtifactRequest) ProtoMessage() {}
 
 func (x *GetArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[28]
+	mi := &file_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2902,7 +3046,7 @@ func (x *GetArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetArtifactRequest.ProtoReflect.Descriptor instead.
 func (*GetArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{28}
+	return file_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetArtifactRequest) GetArtifactId() string {
@@ -2933,7 +3077,7 @@ type GetArtifactResponse struct {
 
 func (x *GetArtifactResponse) Reset() {
 	*x = GetArtifactResponse{}
-	mi := &file_agent_proto_msgTypes[29]
+	mi := &file_agent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2945,7 +3089,7 @@ func (x *GetArtifactResponse) String() string {
 func (*GetArtifactResponse) ProtoMessage() {}
 
 func (x *GetArtifactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[29]
+	mi := &file_agent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2958,7 +3102,7 @@ func (x *GetArtifactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetArtifactResponse.ProtoReflect.Descriptor instead.
 func (*GetArtifactResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{29}
+	return file_agent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetArtifactResponse) GetFound() bool {
@@ -3015,7 +3159,7 @@ type EscalateRequest struct {
 
 func (x *EscalateRequest) Reset() {
 	*x = EscalateRequest{}
-	mi := &file_agent_proto_msgTypes[30]
+	mi := &file_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3027,7 +3171,7 @@ func (x *EscalateRequest) String() string {
 func (*EscalateRequest) ProtoMessage() {}
 
 func (x *EscalateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[30]
+	mi := &file_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3040,7 +3184,7 @@ func (x *EscalateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EscalateRequest.ProtoReflect.Descriptor instead.
 func (*EscalateRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{30}
+	return file_agent_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *EscalateRequest) GetIssue() string {
@@ -3082,7 +3226,7 @@ type EscalateResponse struct {
 
 func (x *EscalateResponse) Reset() {
 	*x = EscalateResponse{}
-	mi := &file_agent_proto_msgTypes[31]
+	mi := &file_agent_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3094,7 +3238,7 @@ func (x *EscalateResponse) String() string {
 func (*EscalateResponse) ProtoMessage() {}
 
 func (x *EscalateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[31]
+	mi := &file_agent_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3107,7 +3251,7 @@ func (x *EscalateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EscalateResponse.ProtoReflect.Descriptor instead.
 func (*EscalateResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{31}
+	return file_agent_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EscalateResponse) GetReceived() bool {
@@ -3142,7 +3286,7 @@ type LogRequest struct {
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_agent_proto_msgTypes[32]
+	mi := &file_agent_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3154,7 +3298,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[32]
+	mi := &file_agent_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3167,7 +3311,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{32}
+	return file_agent_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *LogRequest) GetLevel() LogLevel {
@@ -3199,7 +3343,7 @@ type LogResponse struct {
 
 func (x *LogResponse) Reset() {
 	*x = LogResponse{}
-	mi := &file_agent_proto_msgTypes[33]
+	mi := &file_agent_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3211,7 +3355,7 @@ func (x *LogResponse) String() string {
 func (*LogResponse) ProtoMessage() {}
 
 func (x *LogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[33]
+	mi := &file_agent_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3224,7 +3368,7 @@ func (x *LogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogResponse.ProtoReflect.Descriptor instead.
 func (*LogResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{33}
+	return file_agent_proto_rawDescGZIP(), []int{35}
 }
 
 var File_agent_proto protoreflect.FileDescriptor
@@ -3344,7 +3488,7 @@ const file_agent_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x123\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1b.hivekernel.agent.AckStatusR\x06status\x12\x14\n" +
-	"\x05reply\x18\x03 \x01(\tR\x05reply\"\xd4\x03\n" +
+	"\x05reply\x18\x03 \x01(\tR\x05reply\"\x99\x04\n" +
 	"\n" +
 	"SystemCall\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x126\n" +
@@ -3354,8 +3498,10 @@ const file_agent_proto_rawDesc = "" +
 	"\x05store\x18\x05 \x01(\v2&.hivekernel.agent.StoreArtifactRequestH\x00R\x05store\x12I\n" +
 	"\fget_artifact\x18\x06 \x01(\v2$.hivekernel.agent.GetArtifactRequestH\x00R\vgetArtifact\x12?\n" +
 	"\bescalate\x18\a \x01(\v2!.hivekernel.agent.EscalateRequestH\x00R\bescalate\x120\n" +
-	"\x03log\x18\b \x01(\v2\x1c.hivekernel.agent.LogRequestH\x00R\x03logB\x06\n" +
-	"\x04call\"\xe0\x03\n" +
+	"\x03log\x18\b \x01(\v2\x1c.hivekernel.agent.LogRequestH\x00R\x03log\x12C\n" +
+	"\n" +
+	"execute_on\x18\t \x01(\v2\".hivekernel.agent.ExecuteOnRequestH\x00R\texecuteOnB\x06\n" +
+	"\x04call\"\xa6\x04\n" +
 	"\rSyscallResult\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x127\n" +
 	"\x05spawn\x18\x02 \x01(\v2\x1f.hivekernel.agent.SpawnResponseH\x00R\x05spawn\x124\n" +
@@ -3364,8 +3510,18 @@ const file_agent_proto_rawDesc = "" +
 	"\x05store\x18\x05 \x01(\v2'.hivekernel.agent.StoreArtifactResponseH\x00R\x05store\x12J\n" +
 	"\fget_artifact\x18\x06 \x01(\v2%.hivekernel.agent.GetArtifactResponseH\x00R\vgetArtifact\x12@\n" +
 	"\bescalate\x18\a \x01(\v2\".hivekernel.agent.EscalateResponseH\x00R\bescalate\x121\n" +
-	"\x03log\x18\b \x01(\v2\x1d.hivekernel.agent.LogResponseH\x00R\x03logB\b\n" +
-	"\x06result\"\xdb\x04\n" +
+	"\x03log\x18\b \x01(\v2\x1d.hivekernel.agent.LogResponseH\x00R\x03log\x12D\n" +
+	"\n" +
+	"execute_on\x18\t \x01(\v2#.hivekernel.agent.ExecuteOnResponseH\x00R\texecuteOnB\b\n" +
+	"\x06result\"d\n" +
+	"\x10ExecuteOnRequest\x12\x1d\n" +
+	"\n" +
+	"target_pid\x18\x01 \x01(\x04R\ttargetPid\x121\n" +
+	"\x04task\x18\x02 \x01(\v2\x1d.hivekernel.agent.TaskRequestR\x04task\"y\n" +
+	"\x11ExecuteOnResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x124\n" +
+	"\x06result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\x06result\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xdb\x04\n" +
 	"\fSpawnRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x04role\x18\x02 \x01(\x0e2\x1b.hivekernel.agent.AgentRoleR\x04role\x12F\n" +
@@ -3552,7 +3708,7 @@ func file_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_agent_proto_goTypes = []any{
 	(AgentRole)(0),                // 0: hivekernel.agent.AgentRole
 	(CognitiveTier)(0),            // 1: hivekernel.agent.CognitiveTier
@@ -3585,30 +3741,32 @@ var file_agent_proto_goTypes = []any{
 	(*MessageAck)(nil),            // 28: hivekernel.agent.MessageAck
 	(*SystemCall)(nil),            // 29: hivekernel.agent.SystemCall
 	(*SyscallResult)(nil),         // 30: hivekernel.agent.SyscallResult
-	(*SpawnRequest)(nil),          // 31: hivekernel.agent.SpawnRequest
-	(*Schedule)(nil),              // 32: hivekernel.agent.Schedule
-	(*SpawnResponse)(nil),         // 33: hivekernel.agent.SpawnResponse
-	(*KillRequest)(nil),           // 34: hivekernel.agent.KillRequest
-	(*KillResponse)(nil),          // 35: hivekernel.agent.KillResponse
-	(*SendMessageRequest)(nil),    // 36: hivekernel.agent.SendMessageRequest
-	(*SendMessageResponse)(nil),   // 37: hivekernel.agent.SendMessageResponse
-	(*StoreArtifactRequest)(nil),  // 38: hivekernel.agent.StoreArtifactRequest
-	(*StoreArtifactResponse)(nil), // 39: hivekernel.agent.StoreArtifactResponse
-	(*GetArtifactRequest)(nil),    // 40: hivekernel.agent.GetArtifactRequest
-	(*GetArtifactResponse)(nil),   // 41: hivekernel.agent.GetArtifactResponse
-	(*EscalateRequest)(nil),       // 42: hivekernel.agent.EscalateRequest
-	(*EscalateResponse)(nil),      // 43: hivekernel.agent.EscalateResponse
-	(*LogRequest)(nil),            // 44: hivekernel.agent.LogRequest
-	(*LogResponse)(nil),           // 45: hivekernel.agent.LogResponse
-	nil,                           // 46: hivekernel.agent.InitRequest.EnvEntry
-	nil,                           // 47: hivekernel.agent.AgentConfig.MetadataEntry
-	nil,                           // 48: hivekernel.agent.Tool.ConfigEntry
-	nil,                           // 49: hivekernel.agent.TaskRequest.ParamsEntry
-	nil,                           // 50: hivekernel.agent.TaskResult.ArtifactsEntry
-	nil,                           // 51: hivekernel.agent.TaskResult.MetadataEntry
-	nil,                           // 52: hivekernel.agent.SpawnRequest.EnvEntry
-	nil,                           // 53: hivekernel.agent.EscalateRequest.ContextEntry
-	nil,                           // 54: hivekernel.agent.LogRequest.FieldsEntry
+	(*ExecuteOnRequest)(nil),      // 31: hivekernel.agent.ExecuteOnRequest
+	(*ExecuteOnResponse)(nil),     // 32: hivekernel.agent.ExecuteOnResponse
+	(*SpawnRequest)(nil),          // 33: hivekernel.agent.SpawnRequest
+	(*Schedule)(nil),              // 34: hivekernel.agent.Schedule
+	(*SpawnResponse)(nil),         // 35: hivekernel.agent.SpawnResponse
+	(*KillRequest)(nil),           // 36: hivekernel.agent.KillRequest
+	(*KillResponse)(nil),          // 37: hivekernel.agent.KillResponse
+	(*SendMessageRequest)(nil),    // 38: hivekernel.agent.SendMessageRequest
+	(*SendMessageResponse)(nil),   // 39: hivekernel.agent.SendMessageResponse
+	(*StoreArtifactRequest)(nil),  // 40: hivekernel.agent.StoreArtifactRequest
+	(*StoreArtifactResponse)(nil), // 41: hivekernel.agent.StoreArtifactResponse
+	(*GetArtifactRequest)(nil),    // 42: hivekernel.agent.GetArtifactRequest
+	(*GetArtifactResponse)(nil),   // 43: hivekernel.agent.GetArtifactResponse
+	(*EscalateRequest)(nil),       // 44: hivekernel.agent.EscalateRequest
+	(*EscalateResponse)(nil),      // 45: hivekernel.agent.EscalateResponse
+	(*LogRequest)(nil),            // 46: hivekernel.agent.LogRequest
+	(*LogResponse)(nil),           // 47: hivekernel.agent.LogResponse
+	nil,                           // 48: hivekernel.agent.InitRequest.EnvEntry
+	nil,                           // 49: hivekernel.agent.AgentConfig.MetadataEntry
+	nil,                           // 50: hivekernel.agent.Tool.ConfigEntry
+	nil,                           // 51: hivekernel.agent.TaskRequest.ParamsEntry
+	nil,                           // 52: hivekernel.agent.TaskResult.ArtifactsEntry
+	nil,                           // 53: hivekernel.agent.TaskResult.MetadataEntry
+	nil,                           // 54: hivekernel.agent.SpawnRequest.EnvEntry
+	nil,                           // 55: hivekernel.agent.EscalateRequest.ContextEntry
+	nil,                           // 56: hivekernel.agent.LogRequest.FieldsEntry
 }
 var file_agent_proto_depIdxs = []int32{
 	0,  // 0: hivekernel.agent.InitRequest.role:type_name -> hivekernel.agent.AgentRole
@@ -3616,69 +3774,73 @@ var file_agent_proto_depIdxs = []int32{
 	13, // 2: hivekernel.agent.InitRequest.config:type_name -> hivekernel.agent.AgentConfig
 	14, // 3: hivekernel.agent.InitRequest.limits:type_name -> hivekernel.agent.ResourceLimits
 	15, // 4: hivekernel.agent.InitRequest.tools:type_name -> hivekernel.agent.Tool
-	46, // 5: hivekernel.agent.InitRequest.env:type_name -> hivekernel.agent.InitRequest.EnvEntry
-	47, // 6: hivekernel.agent.AgentConfig.metadata:type_name -> hivekernel.agent.AgentConfig.MetadataEntry
-	48, // 7: hivekernel.agent.Tool.config:type_name -> hivekernel.agent.Tool.ConfigEntry
+	48, // 5: hivekernel.agent.InitRequest.env:type_name -> hivekernel.agent.InitRequest.EnvEntry
+	49, // 6: hivekernel.agent.AgentConfig.metadata:type_name -> hivekernel.agent.AgentConfig.MetadataEntry
+	50, // 7: hivekernel.agent.Tool.config:type_name -> hivekernel.agent.Tool.ConfigEntry
 	5,  // 8: hivekernel.agent.ShutdownRequest.reason:type_name -> hivekernel.agent.ShutdownReason
 	24, // 9: hivekernel.agent.ShutdownResponse.partial_result:type_name -> hivekernel.agent.TaskResult
 	2,  // 10: hivekernel.agent.HeartbeatResponse.state:type_name -> hivekernel.agent.AgentState
 	22, // 11: hivekernel.agent.ExecuteInput.task:type_name -> hivekernel.agent.TaskRequest
 	30, // 12: hivekernel.agent.ExecuteInput.syscall_result:type_name -> hivekernel.agent.SyscallResult
-	49, // 13: hivekernel.agent.TaskRequest.params:type_name -> hivekernel.agent.TaskRequest.ParamsEntry
+	51, // 13: hivekernel.agent.TaskRequest.params:type_name -> hivekernel.agent.TaskRequest.ParamsEntry
 	3,  // 14: hivekernel.agent.TaskRequest.priority:type_name -> hivekernel.agent.Priority
 	7,  // 15: hivekernel.agent.TaskProgress.type:type_name -> hivekernel.agent.ProgressType
 	24, // 16: hivekernel.agent.TaskProgress.result:type_name -> hivekernel.agent.TaskResult
 	29, // 17: hivekernel.agent.TaskProgress.syscalls:type_name -> hivekernel.agent.SystemCall
-	50, // 18: hivekernel.agent.TaskResult.artifacts:type_name -> hivekernel.agent.TaskResult.ArtifactsEntry
-	51, // 19: hivekernel.agent.TaskResult.metadata:type_name -> hivekernel.agent.TaskResult.MetadataEntry
+	52, // 18: hivekernel.agent.TaskResult.artifacts:type_name -> hivekernel.agent.TaskResult.ArtifactsEntry
+	53, // 19: hivekernel.agent.TaskResult.metadata:type_name -> hivekernel.agent.TaskResult.MetadataEntry
 	24, // 20: hivekernel.agent.InterruptResponse.partial_result:type_name -> hivekernel.agent.TaskResult
 	4,  // 21: hivekernel.agent.AgentMessage.relation:type_name -> hivekernel.agent.MessageRelation
 	3,  // 22: hivekernel.agent.AgentMessage.priority:type_name -> hivekernel.agent.Priority
 	6,  // 23: hivekernel.agent.MessageAck.status:type_name -> hivekernel.agent.AckStatus
-	31, // 24: hivekernel.agent.SystemCall.spawn:type_name -> hivekernel.agent.SpawnRequest
-	34, // 25: hivekernel.agent.SystemCall.kill:type_name -> hivekernel.agent.KillRequest
-	36, // 26: hivekernel.agent.SystemCall.send:type_name -> hivekernel.agent.SendMessageRequest
-	38, // 27: hivekernel.agent.SystemCall.store:type_name -> hivekernel.agent.StoreArtifactRequest
-	40, // 28: hivekernel.agent.SystemCall.get_artifact:type_name -> hivekernel.agent.GetArtifactRequest
-	42, // 29: hivekernel.agent.SystemCall.escalate:type_name -> hivekernel.agent.EscalateRequest
-	44, // 30: hivekernel.agent.SystemCall.log:type_name -> hivekernel.agent.LogRequest
-	33, // 31: hivekernel.agent.SyscallResult.spawn:type_name -> hivekernel.agent.SpawnResponse
-	35, // 32: hivekernel.agent.SyscallResult.kill:type_name -> hivekernel.agent.KillResponse
-	37, // 33: hivekernel.agent.SyscallResult.send:type_name -> hivekernel.agent.SendMessageResponse
-	39, // 34: hivekernel.agent.SyscallResult.store:type_name -> hivekernel.agent.StoreArtifactResponse
-	41, // 35: hivekernel.agent.SyscallResult.get_artifact:type_name -> hivekernel.agent.GetArtifactResponse
-	43, // 36: hivekernel.agent.SyscallResult.escalate:type_name -> hivekernel.agent.EscalateResponse
-	45, // 37: hivekernel.agent.SyscallResult.log:type_name -> hivekernel.agent.LogResponse
-	0,  // 38: hivekernel.agent.SpawnRequest.role:type_name -> hivekernel.agent.AgentRole
-	1,  // 39: hivekernel.agent.SpawnRequest.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
-	14, // 40: hivekernel.agent.SpawnRequest.limits:type_name -> hivekernel.agent.ResourceLimits
-	52, // 41: hivekernel.agent.SpawnRequest.env:type_name -> hivekernel.agent.SpawnRequest.EnvEntry
-	8,  // 42: hivekernel.agent.SpawnRequest.runtime_type:type_name -> hivekernel.agent.RuntimeType
-	32, // 43: hivekernel.agent.SpawnRequest.schedule:type_name -> hivekernel.agent.Schedule
-	5,  // 44: hivekernel.agent.KillRequest.reason:type_name -> hivekernel.agent.ShutdownReason
-	3,  // 45: hivekernel.agent.SendMessageRequest.priority:type_name -> hivekernel.agent.Priority
-	9,  // 46: hivekernel.agent.StoreArtifactRequest.visibility:type_name -> hivekernel.agent.ArtifactVisibility
-	10, // 47: hivekernel.agent.EscalateRequest.severity:type_name -> hivekernel.agent.EscalationSeverity
-	53, // 48: hivekernel.agent.EscalateRequest.context:type_name -> hivekernel.agent.EscalateRequest.ContextEntry
-	11, // 49: hivekernel.agent.LogRequest.level:type_name -> hivekernel.agent.LogLevel
-	54, // 50: hivekernel.agent.LogRequest.fields:type_name -> hivekernel.agent.LogRequest.FieldsEntry
-	12, // 51: hivekernel.agent.AgentService.Init:input_type -> hivekernel.agent.InitRequest
-	17, // 52: hivekernel.agent.AgentService.Shutdown:input_type -> hivekernel.agent.ShutdownRequest
-	19, // 53: hivekernel.agent.AgentService.Heartbeat:input_type -> hivekernel.agent.HeartbeatRequest
-	21, // 54: hivekernel.agent.AgentService.Execute:input_type -> hivekernel.agent.ExecuteInput
-	25, // 55: hivekernel.agent.AgentService.Interrupt:input_type -> hivekernel.agent.InterruptRequest
-	27, // 56: hivekernel.agent.AgentService.DeliverMessage:input_type -> hivekernel.agent.AgentMessage
-	16, // 57: hivekernel.agent.AgentService.Init:output_type -> hivekernel.agent.InitResponse
-	18, // 58: hivekernel.agent.AgentService.Shutdown:output_type -> hivekernel.agent.ShutdownResponse
-	20, // 59: hivekernel.agent.AgentService.Heartbeat:output_type -> hivekernel.agent.HeartbeatResponse
-	23, // 60: hivekernel.agent.AgentService.Execute:output_type -> hivekernel.agent.TaskProgress
-	26, // 61: hivekernel.agent.AgentService.Interrupt:output_type -> hivekernel.agent.InterruptResponse
-	28, // 62: hivekernel.agent.AgentService.DeliverMessage:output_type -> hivekernel.agent.MessageAck
-	57, // [57:63] is the sub-list for method output_type
-	51, // [51:57] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	33, // 24: hivekernel.agent.SystemCall.spawn:type_name -> hivekernel.agent.SpawnRequest
+	36, // 25: hivekernel.agent.SystemCall.kill:type_name -> hivekernel.agent.KillRequest
+	38, // 26: hivekernel.agent.SystemCall.send:type_name -> hivekernel.agent.SendMessageRequest
+	40, // 27: hivekernel.agent.SystemCall.store:type_name -> hivekernel.agent.StoreArtifactRequest
+	42, // 28: hivekernel.agent.SystemCall.get_artifact:type_name -> hivekernel.agent.GetArtifactRequest
+	44, // 29: hivekernel.agent.SystemCall.escalate:type_name -> hivekernel.agent.EscalateRequest
+	46, // 30: hivekernel.agent.SystemCall.log:type_name -> hivekernel.agent.LogRequest
+	31, // 31: hivekernel.agent.SystemCall.execute_on:type_name -> hivekernel.agent.ExecuteOnRequest
+	35, // 32: hivekernel.agent.SyscallResult.spawn:type_name -> hivekernel.agent.SpawnResponse
+	37, // 33: hivekernel.agent.SyscallResult.kill:type_name -> hivekernel.agent.KillResponse
+	39, // 34: hivekernel.agent.SyscallResult.send:type_name -> hivekernel.agent.SendMessageResponse
+	41, // 35: hivekernel.agent.SyscallResult.store:type_name -> hivekernel.agent.StoreArtifactResponse
+	43, // 36: hivekernel.agent.SyscallResult.get_artifact:type_name -> hivekernel.agent.GetArtifactResponse
+	45, // 37: hivekernel.agent.SyscallResult.escalate:type_name -> hivekernel.agent.EscalateResponse
+	47, // 38: hivekernel.agent.SyscallResult.log:type_name -> hivekernel.agent.LogResponse
+	32, // 39: hivekernel.agent.SyscallResult.execute_on:type_name -> hivekernel.agent.ExecuteOnResponse
+	22, // 40: hivekernel.agent.ExecuteOnRequest.task:type_name -> hivekernel.agent.TaskRequest
+	24, // 41: hivekernel.agent.ExecuteOnResponse.result:type_name -> hivekernel.agent.TaskResult
+	0,  // 42: hivekernel.agent.SpawnRequest.role:type_name -> hivekernel.agent.AgentRole
+	1,  // 43: hivekernel.agent.SpawnRequest.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
+	14, // 44: hivekernel.agent.SpawnRequest.limits:type_name -> hivekernel.agent.ResourceLimits
+	54, // 45: hivekernel.agent.SpawnRequest.env:type_name -> hivekernel.agent.SpawnRequest.EnvEntry
+	8,  // 46: hivekernel.agent.SpawnRequest.runtime_type:type_name -> hivekernel.agent.RuntimeType
+	34, // 47: hivekernel.agent.SpawnRequest.schedule:type_name -> hivekernel.agent.Schedule
+	5,  // 48: hivekernel.agent.KillRequest.reason:type_name -> hivekernel.agent.ShutdownReason
+	3,  // 49: hivekernel.agent.SendMessageRequest.priority:type_name -> hivekernel.agent.Priority
+	9,  // 50: hivekernel.agent.StoreArtifactRequest.visibility:type_name -> hivekernel.agent.ArtifactVisibility
+	10, // 51: hivekernel.agent.EscalateRequest.severity:type_name -> hivekernel.agent.EscalationSeverity
+	55, // 52: hivekernel.agent.EscalateRequest.context:type_name -> hivekernel.agent.EscalateRequest.ContextEntry
+	11, // 53: hivekernel.agent.LogRequest.level:type_name -> hivekernel.agent.LogLevel
+	56, // 54: hivekernel.agent.LogRequest.fields:type_name -> hivekernel.agent.LogRequest.FieldsEntry
+	12, // 55: hivekernel.agent.AgentService.Init:input_type -> hivekernel.agent.InitRequest
+	17, // 56: hivekernel.agent.AgentService.Shutdown:input_type -> hivekernel.agent.ShutdownRequest
+	19, // 57: hivekernel.agent.AgentService.Heartbeat:input_type -> hivekernel.agent.HeartbeatRequest
+	21, // 58: hivekernel.agent.AgentService.Execute:input_type -> hivekernel.agent.ExecuteInput
+	25, // 59: hivekernel.agent.AgentService.Interrupt:input_type -> hivekernel.agent.InterruptRequest
+	27, // 60: hivekernel.agent.AgentService.DeliverMessage:input_type -> hivekernel.agent.AgentMessage
+	16, // 61: hivekernel.agent.AgentService.Init:output_type -> hivekernel.agent.InitResponse
+	18, // 62: hivekernel.agent.AgentService.Shutdown:output_type -> hivekernel.agent.ShutdownResponse
+	20, // 63: hivekernel.agent.AgentService.Heartbeat:output_type -> hivekernel.agent.HeartbeatResponse
+	23, // 64: hivekernel.agent.AgentService.Execute:output_type -> hivekernel.agent.TaskProgress
+	26, // 65: hivekernel.agent.AgentService.Interrupt:output_type -> hivekernel.agent.InterruptResponse
+	28, // 66: hivekernel.agent.AgentService.DeliverMessage:output_type -> hivekernel.agent.MessageAck
+	61, // [61:67] is the sub-list for method output_type
+	55, // [55:61] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -3699,6 +3861,7 @@ func file_agent_proto_init() {
 		(*SystemCall_GetArtifact)(nil),
 		(*SystemCall_Escalate)(nil),
 		(*SystemCall_Log)(nil),
+		(*SystemCall_ExecuteOn)(nil),
 	}
 	file_agent_proto_msgTypes[18].OneofWrappers = []any{
 		(*SyscallResult_Spawn)(nil),
@@ -3708,6 +3871,7 @@ func file_agent_proto_init() {
 		(*SyscallResult_GetArtifact)(nil),
 		(*SyscallResult_Escalate)(nil),
 		(*SyscallResult_Log)(nil),
+		(*SyscallResult_ExecuteOn)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3715,7 +3879,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   43,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -194,6 +194,42 @@ class SyscallContext:
         )
         await self._do_syscall(call)
 
+    async def execute_on(
+        self,
+        pid: int,
+        description: str,
+        params: dict[str, str] | None = None,
+        timeout_seconds: int = 0,
+    ):
+        """Send a task to a child agent and wait for its result.
+
+        Returns a TaskResult (from types module).
+        """
+        from .types import TaskResult as TR
+
+        call = agent_pb2.SystemCall(
+            call_id=str(uuid.uuid4()),
+            execute_on=agent_pb2.ExecuteOnRequest(
+                target_pid=pid,
+                task=agent_pb2.TaskRequest(
+                    task_id=str(uuid.uuid4()),
+                    description=description,
+                    params=params or {},
+                    timeout_seconds=timeout_seconds,
+                ),
+            ),
+        )
+        result = await self._do_syscall(call)
+        resp = result.execute_on
+        if not resp.success:
+            raise RuntimeError(f"execute_on failed: {resp.error}")
+        return TR(
+            exit_code=resp.result.exit_code,
+            output=resp.result.output,
+            artifacts=dict(resp.result.artifacts),
+            metadata=dict(resp.result.metadata),
+        )
+
     async def report_progress(self, message: str, percent: float = 0.0):
         """Send a progress update through the stream (not a syscall)."""
         progress = agent_pb2.TaskProgress(

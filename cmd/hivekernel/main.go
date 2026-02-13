@@ -37,10 +37,11 @@ func main() {
 	}
 
 	// Start runtime manager, executor, and health monitor.
-	rtManager := runtime.NewManager()
-	syscallHandler := kernel.NewKernelSyscallHandler(king)
+	rtManager := runtime.NewManager(cfg.ListenAddr, "python")
+	king.SetRuntimeManager(rtManager)
+	syscallHandler := kernel.NewKernelSyscallHandler(king, rtManager)
 	executor := runtime.NewExecutor(syscallHandler)
-	_ = executor // used when core dispatches tasks to agents
+	syscallHandler.SetExecutor(executor)
 
 	healthMon := runtime.NewHealthMonitor(
 		king.Registry(),

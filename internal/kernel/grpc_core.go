@@ -102,11 +102,17 @@ func (s *CoreServer) KillChild(ctx context.Context, req *pb.KillRequest) (*pb.Ki
 		// Kill descendants first.
 		descendants := s.king.Registry().GetDescendants(req.TargetPid)
 		for _, d := range descendants {
+			if s.king.RuntimeManager() != nil {
+				_ = s.king.RuntimeManager().StopRuntime(d.PID)
+			}
 			_ = s.king.Registry().SetState(d.PID, process.StateDead)
 			killed = append(killed, d.PID)
 		}
 	}
 
+	if s.king.RuntimeManager() != nil {
+		_ = s.king.RuntimeManager().StopRuntime(req.TargetPid)
+	}
 	_ = s.king.Registry().SetState(req.TargetPid, process.StateDead)
 	killed = append(killed, req.TargetPid)
 

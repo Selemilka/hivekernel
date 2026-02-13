@@ -226,6 +226,7 @@ message SystemCall {
     GetArtifactRequest get_artifact = 6;
     EscalateRequest escalate = 7;
     LogRequest log = 8;
+    ExecuteOnRequest execute_on = 9;
   }
 }
 
@@ -239,7 +240,21 @@ message SyscallResult {
     GetArtifactResponse get_artifact = 6;
     EscalateResponse escalate = 7;
     LogResponse log = 8;
+    ExecuteOnResponse execute_on = 9;
   }
+}
+
+// ─── Execute-on (parent delegates task to child) ───
+
+message ExecuteOnRequest {
+  uint64 target_pid = 1;
+  TaskRequest task = 2;
+}
+
+message ExecuteOnResponse {
+  bool success = 1;
+  TaskResult result = 2;
+  string error = 3;
 }
 
 // ─── Syscall request/response messages (shared with core.proto) ───

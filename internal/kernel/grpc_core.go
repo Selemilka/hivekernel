@@ -177,29 +177,125 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 		RequiresAck: req.RequiresAck,
 	}
 
-	s.king.Inbox().Push(msg)
+	// Route through broker (validates routing rules, computes priority).
+	if err := s.king.Broker().Route(msg); err != nil {
+		return &pb.SendMessageResponse{Delivered: false, Error: err.Error()}, nil
+	}
 
-	log.Printf("[grpc] SendMessage: PID %d → PID %d, type=%s", fromPID, req.ToPid, req.Type)
+	log.Printf("[grpc] SendMessage: PID %d -> PID %d, type=%s", fromPID, req.ToPid, req.Type)
 	return &pb.SendMessageResponse{Delivered: true, MessageId: msg.ID}, nil
 }
 
 func (s *CoreServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.AgentMessage]) error {
-	// Phase 0: stub — will be fully implemented in Phase 2 with broker.
-	return status.Error(codes.Unimplemented, "Subscribe not yet implemented (Phase 2)")
+	// Get caller PID from stream context.
+	pid, err := callerPID(stream.Context())
+	if err != nil {
+		return err
+	}
+
+	// Get or create the named queue / process inbox.
+	var q *ipc.PriorityQueue
+	if req.Queue != "" {
+		q = s.king.Broker().GetNamedQueue(req.Queue)
+	} else {
+		q = s.king.Broker().GetInbox(pid)
+	}
+
+	log.Printf("[grpc] Subscribe: PID %d subscribed to queue=%q", pid, req.Queue)
+
+	// Stream messages until client disconnects.
+	ctx := stream.Context()
+	for {
+		msg := q.PopWait(ctx.Done())
+		if msg == nil {
+			return nil // context cancelled
+		}
+
+		// Apply type filter if set.
+		if req.TypeFilter != "" && msg.Type != req.TypeFilter {
+			q.Push(msg) // put it back
+			continue
+		}
+
+		pbMsg := &pb.AgentMessage{
+			MessageId: msg.ID,
+			FromPid:   msg.FromPID,
+			FromName:  msg.FromName,
+			Type:      msg.Type,
+			Priority:  pb.Priority(msg.Priority),
+			Payload:   msg.Payload,
+			RequiresAck: msg.RequiresAck,
+		}
+
+		if err := stream.Send(pbMsg); err != nil {
+			return err
+		}
+	}
 }
 
 // --- Shared memory ---
 
 func (s *CoreServer) StoreArtifact(ctx context.Context, req *pb.StoreArtifactRequest) (*pb.StoreArtifactResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "StoreArtifact not yet implemented (Phase 2)")
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	vis := ipc.Visibility(req.Visibility)
+	id, err := s.king.SharedMemory().Store(pid, req.Key, req.Content, req.ContentType, vis)
+	if err != nil {
+		return &pb.StoreArtifactResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	log.Printf("[grpc] StoreArtifact: PID %d stored %q (id=%s, vis=%s)", pid, req.Key, id, vis)
+	return &pb.StoreArtifactResponse{Success: true, ArtifactId: id}, nil
 }
 
 func (s *CoreServer) GetArtifact(ctx context.Context, req *pb.GetArtifactRequest) (*pb.GetArtifactResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "GetArtifact not yet implemented (Phase 2)")
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try by key first, then by ID.
+	var art *ipc.Artifact
+	if req.Key != "" {
+		art, err = s.king.SharedMemory().Get(pid, req.Key)
+	} else {
+		art, err = s.king.SharedMemory().GetByID(pid, req.ArtifactId)
+	}
+	if err != nil {
+		return &pb.GetArtifactResponse{Found: false, Error: err.Error()}, nil
+	}
+
+	return &pb.GetArtifactResponse{
+		Found:       true,
+		Content:     art.Content,
+		ContentType: art.ContentType,
+		StoredByPid: art.StoredByPID,
+		StoredAt:    uint64(art.StoredAt.Unix()),
+	}, nil
 }
 
 func (s *CoreServer) ListArtifacts(ctx context.Context, req *pb.ListArtifactsRequest) (*pb.ListArtifactsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "ListArtifacts not yet implemented (Phase 2)")
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	arts := s.king.SharedMemory().List(pid, req.Prefix)
+	resp := &pb.ListArtifactsResponse{}
+	for _, a := range arts {
+		resp.Artifacts = append(resp.Artifacts, &pb.ArtifactMeta{
+			ArtifactId:  a.ID,
+			Key:         a.Key,
+			ContentType: a.ContentType,
+			SizeBytes:   uint64(len(a.Content)),
+			StoredByPid: a.StoredByPID,
+			StoredAt:    uint64(a.StoredAt.Unix()),
+		})
+	}
+	return resp, nil
 }
 
 // --- Resources ---

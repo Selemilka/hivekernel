@@ -49,3 +49,26 @@
 - Signals: SIGTERM->Blocked, SIGKILL->Dead, SIGCHLD delivery, grace period (TERM then KILL), STOP/CONT
 - Tree: KillBranch (bottom-up), Reparent (+ SIGHUP), OrphanAdoption
 - Supervisor: daemon auto-restart, task no-restart + parent notify, zombie reaping, max restart exceeded
+
+---
+
+## Phase 2 — Multi-agent + IPC (completed)
+
+**Goal:** full IPC routing with priority aging, shared memory, broadcast events.
+
+### Added
+- `internal/ipc/broker.go` — Central message router with routing rule validation (parent<->child direct, siblings through broker with parent copy, cross-branch through NCA, tasks can only send to parent)
+- `internal/ipc/priority.go` — Relationship-based priority (kernel > parent > sibling > child), combined with explicit priority
+- `internal/ipc/shared_memory.go` — Artifact storage with 4 visibility levels (private, user, subtree, global), permission checks based on process tree and USER identity
+- `internal/ipc/pipe.go` — Bidirectional byte channels parent<->child with backpressure, PipeRegistry for lifecycle management
+- `internal/ipc/events.go` — Pub/sub broadcast EventBus with topic subscription, non-blocking delivery
+
+### Changed
+- `internal/kernel/king.go` — Now owns Broker, SharedMemory, EventBus, PipeRegistry; routes messages through broker
+- `internal/kernel/grpc_core.go` — SendMessage uses broker (validates routing rules), Subscribe streams from broker queues, StoreArtifact/GetArtifact/ListArtifacts fully implemented
+
+### Tests: 52 passing (+25 new)
+- Broker: parent->child, child->parent, siblings (parent sees copy), task restricted to parent, named queues, cross-branch via NCA
+- Shared memory: global/private/user/subtree visibility, list with prefix, owner delete, kernel delete, key required
+- Pipes: bidirectional read/write, close, registry create/get/remove, backpressure
+- Events: pub/sub, multiple subscribers, unsubscribe, no-subscriber safety, topic isolation

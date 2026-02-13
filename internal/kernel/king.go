@@ -11,12 +11,18 @@ import (
 )
 
 // King is the root process (PID 1) of HiveKernel.
-// It owns the process registry, spawner, and message queue.
+// It owns the process registry, spawner, broker, shared memory, and event bus.
 type King struct {
 	config   Config
 	registry *process.Registry
 	spawner  *process.Spawner
 	inbox    *ipc.PriorityQueue
+
+	// Phase 2: IPC subsystems
+	broker   *ipc.Broker
+	sharedMem *ipc.SharedMemory
+	eventBus *ipc.EventBus
+	pipes    *ipc.PipeRegistry
 
 	proc *process.Process // king's own process entry
 
@@ -36,18 +42,22 @@ func New(cfg Config) (*King, error) {
 	}
 
 	k := &King{
-		config:   cfg,
-		registry: registry,
-		spawner:  spawner,
-		inbox:    ipc.NewPriorityQueue(cfg.MessageAgingFactor),
-		proc:     kernelProc,
+		config:    cfg,
+		registry:  registry,
+		spawner:   spawner,
+		inbox:     ipc.NewPriorityQueue(cfg.MessageAgingFactor),
+		broker:    ipc.NewBroker(registry, cfg.MessageAgingFactor),
+		sharedMem: ipc.NewSharedMemory(registry),
+		eventBus:  ipc.NewEventBus(),
+		pipes:     ipc.NewPipeRegistry(),
+		proc:      kernelProc,
 	}
 
 	log.Printf("[king] bootstrapped as PID %d on %s", kernelProc.PID, cfg.NodeName)
 	return k, nil
 }
 
-// Registry returns the process registry (used by gRPC service implementations).
+// Registry returns the process registry.
 func (k *King) Registry() *process.Registry {
 	return k.registry
 }
@@ -60,6 +70,26 @@ func (k *King) Spawner() *process.Spawner {
 // Inbox returns the kernel's message queue.
 func (k *King) Inbox() *ipc.PriorityQueue {
 	return k.inbox
+}
+
+// Broker returns the message broker.
+func (k *King) Broker() *ipc.Broker {
+	return k.broker
+}
+
+// SharedMemory returns the shared memory store.
+func (k *King) SharedMemory() *ipc.SharedMemory {
+	return k.sharedMem
+}
+
+// EventBus returns the event bus.
+func (k *King) EventBus() *ipc.EventBus {
+	return k.eventBus
+}
+
+// Pipes returns the pipe registry.
+func (k *King) Pipes() *ipc.PipeRegistry {
+	return k.pipes
 }
 
 // PID returns the kernel's process ID.
@@ -76,7 +106,6 @@ func (k *King) Run(ctx context.Context) error {
 	for {
 		msg := k.inbox.PopWait(ctx.Done())
 		if msg == nil {
-			// Context cancelled.
 			log.Printf("[king] shutting down")
 			return ctx.Err()
 		}
@@ -115,35 +144,36 @@ func (k *King) handleMessage(msg *ipc.Message) {
 	case "spawn_request":
 		k.handleSpawnRequest(msg)
 	default:
-		// Route to target process.
 		k.routeMessage(msg)
 	}
 }
 
 func (k *King) handleEscalation(msg *ipc.Message) {
 	log.Printf("[king] escalation from PID %d: %s", msg.FromPID, string(msg.Payload))
-	// Phase 0: just log it. Later phases will add decision-making.
+	// Publish as event so subscribers can react.
+	k.eventBus.Publish("escalation", msg.FromPID, msg.Payload)
 }
 
 func (k *King) handleSpawnRequest(msg *ipc.Message) {
 	log.Printf("[king] spawn request from PID %d: %s", msg.FromPID, string(msg.Payload))
-	// Phase 0: spawn requests go through SpawnChild directly via gRPC.
 }
 
 func (k *King) routeMessage(msg *ipc.Message) {
-	if msg.ToPID == 0 {
+	if msg.ToPID == 0 && msg.ToQueue == "" {
 		log.Printf("[king] message %s has no target, dropping", msg.ID)
 		return
 	}
-	// Phase 0: log routing. Full broker in Phase 2.
-	log.Printf("[king] routing message %s to PID %d", msg.ID, msg.ToPID)
+	// Route through broker (validates rules, computes priority, delivers).
+	if err := k.broker.Route(msg); err != nil {
+		log.Printf("[king] routing failed for message %s: %v", msg.ID, err)
+	}
 }
 
 // PrintProcessTable logs the current process table (ps-like output).
 func (k *King) PrintProcessTable() {
 	procs := k.registry.List()
 	log.Printf("PID  PPID USER       ROLE       COG        MODEL   VPS   STATE    COMMAND")
-	log.Printf("─────────────────────────────────────────────────────────────────────────")
+	log.Printf("-------------------------------------------------------------------")
 	for _, p := range procs {
 		log.Printf("%-4d %-4d %-10s %-10s %-10s %-7s %-5s %-8s %s",
 			p.PID, p.PPID, p.User, p.Role, p.CognitiveTier,

@@ -218,6 +218,20 @@ No persistent daemon needed for v1.
 
 **Risk:** medium. Changes worker lifecycle model.
 
+**Status:** DONE
+
+**Implementation notes:**
+- Orchestrator: LLM decomposes into **grouped** subtasks (not flat list)
+- Groups execute in **parallel** via `asyncio.gather`, subtasks within group **sequentially**
+- Workers spawned as `role=worker` (not task) -- stay alive between `execute_on` calls
+- `_parse_groups()`: 3 fallback strategies (grouped JSON -> flat list -> newlines)
+- `_cap_groups()`: merges excess groups round-robin into first N when too many
+- Worker: `_task_memory: list[dict]` accumulates context across sequential tasks
+- Worker prompt includes previous task results as context for related follow-ups
+- After synthesis, all workers explicitly killed (`ctx.kill`)
+- New metadata: `groups_count`, `subtasks_count`, `workers_reused`
+- 31 unit tests in `sdk/python/tests/test_orchestrator.py`
+
 ---
 
 ### Phase 5: Architect Role

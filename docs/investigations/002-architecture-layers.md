@@ -1,7 +1,7 @@
 # Investigation 002: Architecture Layers & Responsibility Boundaries
 
 **Date:** 2026-02-15
-**Status:** Investigation complete, decision pending
+**Status:** Investigation complete, decisions documented
 **Related:** Investigation 001 (Kernel-Agent Coupling)
 
 ---
@@ -346,6 +346,77 @@ Based on the analysis, here's what each part IS:
 - Make autonomous decisions
 - Run as an agent in the process tree
 - Depend on specific agents existing
+
+---
+
+## Key Decisions
+
+### Decision 1: King = init(1)
+
+King is NOT a "king of agents" — he is **init(1)**, the root process of the OS.
+
+| Linux | HiveKernel | Role |
+|-------|-----------|------|
+| init / systemd (PID 1) | King (PID 1) | Root process, owns all subsystems |
+| fork(2) / exec(3) | spawn syscall | Create child processes |
+| waitpid(2) | wait_child syscall | Collect child exit status |
+| kill(2) | kill syscall | Send signal to process |
+| crond (userspace) | CronScheduler (kernel) | Timer-based execution |
+| No analogy | Queen | Optional application agent |
+
+**Naming decision:** Keep `King` in code. Renaming to `Init` conflicts with Go's
+`init()` function. `Kernel` creates `kernel.Kernel` redundancy. `Core` conflicts
+with `CoreService`. King is unique, unambiguous, and already established across
+37 source files and 30 test files.
+
+**Documentation rule:** Always refer to King as "init(1) / root process", never
+as "leader" or "boss" of agents. King doesn't know agents exist.
+
+### Decision 2: Zombie Lifecycle Is Already Correct
+
+The zombie lifecycle is **entirely on Layer 2 (Core Kernel Primitives)**.
+No Python agent participates in zombie management. This is clean.
+
+**Paths to Zombie state (4):**
+
+| Path | Function | Layer |
+|------|----------|-------|
+| Task completes | `LifecycleManager.CompleteTask()` | Layer 2 |
+| Child crashes | `Supervisor.HandleChildExit()` | Layer 2 |
+| Parent kills child | gRPC `KillChild` / syscall `kill` | Layer 1 → Layer 2 |
+| Branch collapse | `LifecycleManager.CollapseBranch()` | Layer 2 (skips zombie → Dead) |
+
+**Zombie reaping:**
+- `Supervisor.reapZombies()` — 15s scan interval, 60s timeout
+- Reparents orphaned children to grandparent (Unix semantics)
+- Fires `EventRemoved` for dashboard
+
+**SIGCHLD delivery:**
+- `SignalRouter.NotifyParent()` — sent on every death path
+- Parent can collect result via `wait_child` syscall (polls 200ms)
+
+**What about Python Maid?** Python MaidAgent *scans* for zombies and *escalates*
+to King, but does NOT reap them. Real reaping is Go Supervisor only.
+This makes Python Maid redundant for zombie cleanup — Supervisor already does it.
+Python Maid's value (if any) is in LLM-powered anomaly detection, not zombie reaping.
+
+### Decision 3: What King Is and Is Not
+
+**King IS:**
+- A facade over 23 kernel subsystems (Registry, Broker, Budget, ACL, ...)
+- The `New()` constructor that wires everything together
+- The `Run()` main loop that dispatches messages from inbox
+- The `SpawnChild()` pipeline with 7-step validation
+- **init(1)** — always exists, always PID 1, always running
+
+**King is NOT:**
+- An agent (he doesn't call LLMs, doesn't make business decisions)
+- A manager of specific agents (he doesn't know about Queen, Maid, etc.)
+- Replaceable — without him there's no process table, no IPC, no signals
+
+**King's 26 accessor methods** are just thin wrappers (`func (k *King) Registry()
+*process.Registry`). gRPC CoreServer uses them to reach subsystems. King adds no
+logic on top — the subsystems are the real architecture.
 
 ---
 

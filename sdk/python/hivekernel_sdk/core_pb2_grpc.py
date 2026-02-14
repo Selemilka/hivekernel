@@ -117,6 +117,21 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.SubscribeEventsRequest.SerializeToString,
                 response_deserializer=core__pb2.ProcessEvent.FromString,
                 _registered_method=True)
+        self.AddCron = channel.unary_unary(
+                '/hivekernel.core.CoreService/AddCron',
+                request_serializer=core__pb2.AddCronRequest.SerializeToString,
+                response_deserializer=core__pb2.AddCronResponse.FromString,
+                _registered_method=True)
+        self.RemoveCron = channel.unary_unary(
+                '/hivekernel.core.CoreService/RemoveCron',
+                request_serializer=core__pb2.RemoveCronRequest.SerializeToString,
+                response_deserializer=core__pb2.RemoveCronResponse.FromString,
+                _registered_method=True)
+        self.ListCron = channel.unary_unary(
+                '/hivekernel.core.CoreService/ListCron',
+                request_serializer=core__pb2.ListCronRequest.SerializeToString,
+                response_deserializer=core__pb2.ListCronResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -228,6 +243,25 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AddCron(self, request, context):
+        """Cron management
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveCron(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListCron(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -310,6 +344,21 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.SubscribeEvents,
                     request_deserializer=core__pb2.SubscribeEventsRequest.FromString,
                     response_serializer=core__pb2.ProcessEvent.SerializeToString,
+            ),
+            'AddCron': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddCron,
+                    request_deserializer=core__pb2.AddCronRequest.FromString,
+                    response_serializer=core__pb2.AddCronResponse.SerializeToString,
+            ),
+            'RemoveCron': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveCron,
+                    request_deserializer=core__pb2.RemoveCronRequest.FromString,
+                    response_serializer=core__pb2.RemoveCronResponse.SerializeToString,
+            ),
+            'ListCron': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListCron,
+                    request_deserializer=core__pb2.ListCronRequest.FromString,
+                    response_serializer=core__pb2.ListCronResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -746,6 +795,87 @@ class CoreService(object):
             '/hivekernel.core.CoreService/SubscribeEvents',
             core__pb2.SubscribeEventsRequest.SerializeToString,
             core__pb2.ProcessEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddCron(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/AddCron',
+            core__pb2.AddCronRequest.SerializeToString,
+            core__pb2.AddCronResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveCron(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/RemoveCron',
+            core__pb2.RemoveCronRequest.SerializeToString,
+            core__pb2.RemoveCronResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListCron(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/ListCron',
+            core__pb2.ListCronRequest.SerializeToString,
+            core__pb2.ListCronResponse.FromString,
             options,
             channel_credentials,
             insecure,

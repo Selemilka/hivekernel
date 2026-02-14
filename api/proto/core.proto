@@ -39,6 +39,11 @@ service CoreService {
 
   // Event sourcing
   rpc SubscribeEvents(SubscribeEventsRequest) returns (stream ProcessEvent);
+
+  // Cron management
+  rpc AddCron(AddCronRequest) returns (AddCronResponse);
+  rpc RemoveCron(RemoveCronRequest) returns (RemoveCronResponse);
+  rpc ListCron(ListCronRequest) returns (ListCronResponse);
 }
 
 // ─── Process management ───
@@ -173,4 +178,46 @@ message ProcessEvent {
 
 message SubscribeEventsRequest {
   uint64 since_seq = 1;  // 0 = from now, >0 = replay from seq
+}
+
+// ─── Cron management ───
+
+message CronEntryProto {
+  string id = 1;
+  string name = 2;
+  string cron_expression = 3;
+  string action = 4;              // "spawn", "wake", "execute"
+  uint64 target_pid = 5;
+  string execute_description = 6;
+  map<string, string> execute_params = 7;
+  bool enabled = 8;
+}
+
+message AddCronRequest {
+  string name = 1;
+  string cron_expression = 2;
+  string action = 3;              // "execute" (default), "spawn", "wake"
+  uint64 target_pid = 4;
+  string execute_description = 5;
+  map<string, string> execute_params = 6;
+}
+
+message AddCronResponse {
+  string cron_id = 1;
+  string error = 2;
+}
+
+message RemoveCronRequest {
+  string cron_id = 1;
+}
+
+message RemoveCronResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message ListCronRequest {}
+
+message ListCronResponse {
+  repeated CronEntryProto entries = 1;
 }

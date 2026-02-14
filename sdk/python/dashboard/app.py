@@ -23,7 +23,7 @@ from pathlib import Path
 import grpc
 import grpc.aio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # Add SDK to path so we can import generated protos.
@@ -439,6 +439,123 @@ def _find_queen_pid() -> int | None:
     return None
 
 
+def _find_agent_pid(name_prefix: str) -> int | None:
+    """Find an agent's PID from tree_cache by name prefix."""
+    for pid, node in tree_cache.items():
+        if node.get("name", "").startswith(name_prefix):
+            return pid
+    return None
+
+
+def _get_sibling_pids() -> dict[str, int]:
+    """Build a map of known daemon names to PIDs from tree_cache."""
+    result = {}
+    for pid, node in tree_cache.items():
+        name = node.get("name", "")
+        if node.get("role") == "daemon" and name:
+            result[name] = pid
+    return result
+
+
+@app.post("/api/chat")
+async def api_chat(body: dict):
+    """Send a message to the Assistant agent, return response."""
+    message = body.get("message", "")
+    history = body.get("history", [])
+
+    if not message.strip():
+        return JSONResponse({"ok": False, "error": "Empty message"}, status_code=400)
+
+    assistant_pid = _find_agent_pid("assistant")
+    if assistant_pid is None:
+        return JSONResponse({"ok": False, "error": "Assistant agent not found"}, status_code=503)
+
+    sibling_pids = _get_sibling_pids()
+
+    try:
+        resp = await stub.ExecuteTask(
+            core_pb2.ExecuteTaskRequest(
+                target_pid=assistant_pid,
+                description=message,
+                params={
+                    "message": message,
+                    "history": json.dumps(history, ensure_ascii=False),
+                    "sibling_pids": json.dumps(sibling_pids),
+                },
+                timeout_seconds=120,
+            ),
+            metadata=md(1),
+            timeout=130,
+        )
+        if resp.success:
+            return {
+                "ok": True,
+                "response": resp.result.output,
+                "exit_code": resp.result.exit_code,
+            }
+        return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
+@app.get("/api/cron")
+async def api_cron_list():
+    """List all cron entries."""
+    try:
+        resp = await stub.ListCron(core_pb2.ListCronRequest(), metadata=md(1), timeout=5)
+        entries = []
+        for e in resp.entries:
+            entries.append({
+                "id": e.id,
+                "name": e.name,
+                "cron_expression": e.cron_expression,
+                "action": e.action,
+                "target_pid": e.target_pid,
+                "execute_description": e.execute_description,
+                "enabled": e.enabled,
+            })
+        return {"ok": True, "entries": entries}
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
+@app.post("/api/cron")
+async def api_cron_add(body: dict):
+    """Add a cron entry."""
+    try:
+        resp = await stub.AddCron(
+            core_pb2.AddCronRequest(
+                name=body.get("name", ""),
+                cron_expression=body.get("cron_expression", ""),
+                action=body.get("action", "execute"),
+                target_pid=body.get("target_pid", 0),
+                execute_description=body.get("description", ""),
+                execute_params=body.get("params", {}),
+            ),
+            metadata=md(1),
+            timeout=5,
+        )
+        if resp.error:
+            return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
+        return {"ok": True, "cron_id": resp.cron_id}
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
+@app.delete("/api/cron/{cron_id}")
+async def api_cron_remove(cron_id: str):
+    """Remove a cron entry."""
+    try:
+        resp = await stub.RemoveCron(
+            core_pb2.RemoveCronRequest(cron_id=cron_id), metadata=md(1), timeout=5,
+        )
+        if resp.error:
+            return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
+        return {"ok": True}
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
 @app.get("/api/artifacts")
 async def api_artifacts():
     try:
@@ -489,6 +606,17 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         ws_clients.discard(ws)
+
+
+# ─── Convenience redirects ───
+
+@app.get("/chat")
+async def redirect_chat():
+    return RedirectResponse("/chat.html")
+
+@app.get("/tree")
+async def redirect_tree():
+    return RedirectResponse("/index.html")
 
 
 # ─── Static files (must be last) ───

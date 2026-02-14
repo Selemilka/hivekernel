@@ -35,6 +35,9 @@ const (
 	CoreService_ReportMetric_FullMethodName     = "/hivekernel.core.CoreService/ReportMetric"
 	CoreService_ExecuteTask_FullMethodName      = "/hivekernel.core.CoreService/ExecuteTask"
 	CoreService_SubscribeEvents_FullMethodName  = "/hivekernel.core.CoreService/SubscribeEvents"
+	CoreService_AddCron_FullMethodName          = "/hivekernel.core.CoreService/AddCron"
+	CoreService_RemoveCron_FullMethodName       = "/hivekernel.core.CoreService/RemoveCron"
+	CoreService_ListCron_FullMethodName         = "/hivekernel.core.CoreService/ListCron"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -65,6 +68,10 @@ type CoreServiceClient interface {
 	ExecuteTask(ctx context.Context, in *ExecuteTaskRequest, opts ...grpc.CallOption) (*ExecuteTaskResponse, error)
 	// Event sourcing
 	SubscribeEvents(ctx context.Context, in *SubscribeEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ProcessEvent], error)
+	// Cron management
+	AddCron(ctx context.Context, in *AddCronRequest, opts ...grpc.CallOption) (*AddCronResponse, error)
+	RemoveCron(ctx context.Context, in *RemoveCronRequest, opts ...grpc.CallOption) (*RemoveCronResponse, error)
+	ListCron(ctx context.Context, in *ListCronRequest, opts ...grpc.CallOption) (*ListCronResponse, error)
 }
 
 type coreServiceClient struct {
@@ -253,6 +260,36 @@ func (c *coreServiceClient) SubscribeEvents(ctx context.Context, in *SubscribeEv
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CoreService_SubscribeEventsClient = grpc.ServerStreamingClient[ProcessEvent]
 
+func (c *coreServiceClient) AddCron(ctx context.Context, in *AddCronRequest, opts ...grpc.CallOption) (*AddCronResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddCronResponse)
+	err := c.cc.Invoke(ctx, CoreService_AddCron_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) RemoveCron(ctx context.Context, in *RemoveCronRequest, opts ...grpc.CallOption) (*RemoveCronResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveCronResponse)
+	err := c.cc.Invoke(ctx, CoreService_RemoveCron_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListCron(ctx context.Context, in *ListCronRequest, opts ...grpc.CallOption) (*ListCronResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCronResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListCron_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -281,6 +318,10 @@ type CoreServiceServer interface {
 	ExecuteTask(context.Context, *ExecuteTaskRequest) (*ExecuteTaskResponse, error)
 	// Event sourcing
 	SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[ProcessEvent]) error
+	// Cron management
+	AddCron(context.Context, *AddCronRequest) (*AddCronResponse, error)
+	RemoveCron(context.Context, *RemoveCronRequest) (*RemoveCronResponse, error)
+	ListCron(context.Context, *ListCronRequest) (*ListCronResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -338,6 +379,15 @@ func (UnimplementedCoreServiceServer) ExecuteTask(context.Context, *ExecuteTaskR
 }
 func (UnimplementedCoreServiceServer) SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[ProcessEvent]) error {
 	return status.Error(codes.Unimplemented, "method SubscribeEvents not implemented")
+}
+func (UnimplementedCoreServiceServer) AddCron(context.Context, *AddCronRequest) (*AddCronResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddCron not implemented")
+}
+func (UnimplementedCoreServiceServer) RemoveCron(context.Context, *RemoveCronRequest) (*RemoveCronResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveCron not implemented")
+}
+func (UnimplementedCoreServiceServer) ListCron(context.Context, *ListCronRequest) (*ListCronResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCron not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -634,6 +684,60 @@ func _CoreService_SubscribeEvents_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CoreService_SubscribeEventsServer = grpc.ServerStreamingServer[ProcessEvent]
 
+func _CoreService_AddCron_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddCronRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).AddCron(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_AddCron_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).AddCron(ctx, req.(*AddCronRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_RemoveCron_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveCronRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RemoveCron(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RemoveCron_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RemoveCron(ctx, req.(*RemoveCronRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListCron_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCronRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListCron(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListCron_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListCron(ctx, req.(*ListCronRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -696,6 +800,18 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExecuteTask",
 			Handler:    _CoreService_ExecuteTask_Handler,
+		},
+		{
+			MethodName: "AddCron",
+			Handler:    _CoreService_AddCron_Handler,
+		},
+		{
+			MethodName: "RemoveCron",
+			Handler:    _CoreService_RemoveCron_Handler,
+		},
+		{
+			MethodName: "ListCron",
+			Handler:    _CoreService_ListCron_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -14,8 +14,9 @@ import (
 type CronAction int
 
 const (
-	CronSpawn CronAction = iota // spawn a new process
-	CronWake                    // wake a sleeping process
+	CronSpawn   CronAction = iota // spawn a new process
+	CronWake                      // wake a sleeping process
+	CronExecute                   // execute task on existing process
 )
 
 func (a CronAction) String() string {
@@ -24,6 +25,8 @@ func (a CronAction) String() string {
 		return "spawn"
 	case CronWake:
 		return "wake"
+	case CronExecute:
+		return "execute"
 	default:
 		return "unknown"
 	}
@@ -44,6 +47,10 @@ type CronEntry struct {
 	SpawnTier     process.CognitiveTier
 	SpawnParent   process.PID
 	KeepAlive     bool // true = sleep between runs, false = kill and respawn
+
+	// For CronExecute — task to execute on TargetPID.
+	ExecuteDesc   string            // task description
+	ExecuteParams map[string]string // task params
 
 	LastRun  time.Time
 	NextRun  time.Time
@@ -260,6 +267,43 @@ func (cs *CronScheduler) ListByVPS(vps string) []*CronEntry {
 		}
 	}
 	return list
+}
+
+// ParseAndAdd parses a cron expression and adds a new entry in one step.
+// action should be "execute", "spawn", or "wake".
+func (cs *CronScheduler) ParseAndAdd(
+	name, cronExpr, action string,
+	targetPID process.PID,
+	executeDesc string,
+	executeParams map[string]string,
+) (string, error) {
+	sched, err := ParseCron(cronExpr)
+	if err != nil {
+		return "", fmt.Errorf("invalid cron expression: %w", err)
+	}
+
+	var cronAction CronAction
+	switch action {
+	case "execute", "":
+		cronAction = CronExecute
+	case "spawn":
+		cronAction = CronSpawn
+	case "wake":
+		cronAction = CronWake
+	default:
+		return "", fmt.Errorf("unknown cron action: %q", action)
+	}
+
+	entry := &CronEntry{
+		Name:          name,
+		Schedule:      sched,
+		Action:        cronAction,
+		TargetPID:     targetPID,
+		ExecuteDesc:   executeDesc,
+		ExecuteParams: executeParams,
+	}
+	id := cs.Add(entry)
+	return id, nil
 }
 
 // Count returns the number of cron entries.

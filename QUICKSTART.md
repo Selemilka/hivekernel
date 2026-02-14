@@ -253,6 +253,62 @@ class MyAgent(LLMAgent):
 `LLMAgent` auto-creates an OpenRouter client from `OPENROUTER_API_KEY` env var
 and the agent's `model` config. See [USAGE-GUIDE.md](USAGE-GUIDE.md) for details.
 
+## Chat with the Assistant
+
+HiveKernel includes a 24/7 chat assistant daemon. Access it through the dashboard chat UI:
+
+```bash
+# Terminal 1: start kernel
+bin\hivekernel.exe --listen :50051
+
+# Terminal 2: start dashboard
+pip install fastapi uvicorn
+python sdk/python/dashboard/app.py
+```
+
+Open http://localhost:8080/static/chat.html in your browser. Features:
+- **Chat with AI** — Assistant uses LLM to answer questions
+- **Schedule tasks** — Ask "Schedule GitHub checks every 30 minutes" and Assistant creates cron entries
+- **Generate code** — Ask "Write a Python fibonacci function" and Assistant delegates to the Coder agent
+- **Sidebar** — Shows running agents and active cron schedules
+
+The process tree automatically includes 4 daemon agents:
+```
+King (PID 1)
+  +-- Queen (daemon, tactical)
+        +-- Maid (daemon, operational) -- health checks
+        +-- Assistant (daemon, tactical) -- 24/7 chat
+        +-- GitMonitor (daemon, operational) -- repo monitoring
+        +-- Coder (daemon, tactical) -- code generation
+```
+
+### Built-in Agent Types
+
+| Agent | Role | Description |
+|-------|------|-------------|
+| `AssistantAgent` | Chat daemon | Answers questions, schedules cron, delegates to Coder |
+| `GitHubMonitorAgent` | Cron-triggered daemon | Checks repos for new commits, escalates updates |
+| `CoderAgent` | Code daemon | Generates code on demand via `execute_on` |
+| `OrchestratorAgent` | Task lead | Decomposes complex tasks into subtasks |
+| `WorkerAgent` | Task worker | Executes individual subtasks |
+| `ArchitectAgent` | Strategic planner | Designs execution plans for complex tasks |
+| `MaidAgent` | Health daemon | Monitors process health, detects anomalies |
+
+## Run the Plan 003 E2E Test
+
+```bash
+# Full test with dashboard (opens browser)
+python sdk/python/examples/test_plan003_e2e.py
+
+# Without dashboard
+python sdk/python/examples/test_plan003_e2e.py --no-dashboard
+
+# Without LLM (structure-only tests)
+python sdk/python/examples/test_plan003_e2e.py --no-dashboard --no-llm
+```
+
+Verifies: all agents spawn, cron engine (add/list/remove), chat responses, GitHub monitor cron, code generation.
+
 ## Run the Echo Worker Demo (manual)
 
 ```bash

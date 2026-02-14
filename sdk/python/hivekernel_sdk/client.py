@@ -246,6 +246,63 @@ class CoreClient:
             metadata=self._metadata,
         )
 
+    # --- Cron management ---
+
+    async def add_cron(
+        self,
+        name: str,
+        cron_expression: str,
+        target_pid: int,
+        description: str = "",
+        params: dict[str, str] | None = None,
+        action: str = "execute",
+    ) -> str:
+        """Add a cron entry. Returns cron_id."""
+        resp = await self._stub.AddCron(
+            core_pb2.AddCronRequest(
+                name=name,
+                cron_expression=cron_expression,
+                action=action,
+                target_pid=target_pid,
+                execute_description=description,
+                execute_params=params or {},
+            ),
+            metadata=self._metadata,
+        )
+        if resp.error:
+            raise RuntimeError(f"add_cron failed: {resp.error}")
+        return resp.cron_id
+
+    async def remove_cron(self, cron_id: str) -> bool:
+        """Remove a cron entry."""
+        resp = await self._stub.RemoveCron(
+            core_pb2.RemoveCronRequest(cron_id=cron_id),
+            metadata=self._metadata,
+        )
+        if resp.error:
+            raise RuntimeError(f"remove_cron failed: {resp.error}")
+        return resp.ok
+
+    async def list_cron(self) -> list[dict]:
+        """List all cron entries."""
+        resp = await self._stub.ListCron(
+            core_pb2.ListCronRequest(),
+            metadata=self._metadata,
+        )
+        return [
+            {
+                "id": e.id,
+                "name": e.name,
+                "cron_expression": e.cron_expression,
+                "action": e.action,
+                "target_pid": e.target_pid,
+                "execute_description": e.execute_description,
+                "execute_params": dict(e.execute_params),
+                "enabled": e.enabled,
+            }
+            for e in resp.entries
+        ]
+
 
 # --- Proto enum converters ---
 

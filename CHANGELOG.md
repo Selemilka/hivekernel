@@ -283,3 +283,84 @@
 
 ### Tests: 243 passing (+8 new)
 - EventLog: emit+since, subscribe replay+live (no gap), ring buffer trim, disk persistence (JSONL read-back), registry hooks (spawned/state_changed/removed events), no event on same state, concurrent emit+subscribe
+
+---
+
+## Zombie Lifecycle Fix + wait_child Syscall (completed)
+
+**Goal:** Follow Linux process model: all death paths go through zombie state, parent collects exit status via wait_child.
+
+### Changes
+- All death paths (KillChild, CompleteTask, HandleChildExit) now transition to Zombie (not Dead)
+- SIGCHLD sent to parent via `NotifyParent()` on every death
+- Supervisor reaps zombies after `ZombieTimeout` (60s) via `Registry.Remove()`
+- `wait_child` syscall: polls every 200ms until child is zombie/dead, returns exit_code + output
+- Dashboard renders zombie/dead nodes at 40% opacity (gray)
+
+---
+
+## Plan 002: System Health & Queen Evolution (completed)
+
+**Goal:** Hardened process lifecycle, Maid daemon, Queen improvements (lead reuse, heuristic complexity, task history, architect routing).
+
+### Added
+- Process exit watcher: instant zombie on auto-exit
+- Maid health daemon: spawns under Queen, periodic health checks, anomaly detection
+- Queen improvements: lead reuse pool (5min idle timeout), heuristic complexity assessment, task history, Maid health integration
+- Architect role: strategic planner spawned for architecture/design tasks, produces execution plan, lead executes
+- OrchestratorAgent: task decomposition, parallel worker groups, result synthesis
+- WorkerAgent, ArchitectAgent: specialized LLM-powered agents
+- Full documentation: ARCHITECTURE.md (10 sections), USAGE-GUIDE.md, README.md
+
+---
+
+## Plan 003: Practical Agents (completed)
+
+**Goal:** Three real-world agents that turn HiveKernel from a demo into a usable tool: chat assistant, GitHub monitor, code generator. Plus cron engine activation and chat web UI.
+
+### Phase 1: Cron Engine Activation (Go)
+- Added `CronExecute` action type to cron scheduler (executes tasks on existing daemon processes)
+- Added `ParseAndAdd()` convenience method to CronScheduler
+- Added `RunCronPoller()` to King — 30s ticker goroutine that dispatches due cron entries
+- Added `AddCron`, `RemoveCron`, `ListCron` gRPC RPCs to CoreService
+- Added `add_cron()`, `remove_cron()`, `list_cron()` to Python CoreClient
+- 9 new Go tests for cron engine
+
+### Phase 2: Assistant Agent + Chat UI
+- `sdk/python/hivekernel_sdk/assistant.py` — **NEW**: AssistantAgent (LLMAgent subclass), 24/7 chat daemon. Receives messages via execute_on. Uses LLM with structured markers (SCHEDULE:/DELEGATE_CODE:) for scheduling and code delegation. Partial-match sibling PID lookup
+- `sdk/python/dashboard/static/chat.html` + `chat.js` — **NEW**: Full chat UI with message history (localStorage), agent sidebar, cron sidebar
+- `sdk/python/dashboard/app.py` — Added `/api/chat`, `/api/cron` (GET/POST/DELETE) endpoints
+- `sdk/python/dashboard/static/index.html` — Added navigation header (Tree / Chat)
+- `sdk/python/dashboard/static/style.css` — Added chat page styles
+- 17 Python tests for AssistantAgent
+
+### Phase 3: GitHub Monitor
+- `sdk/python/hivekernel_sdk/github_monitor.py` — **NEW**: GitHubMonitorAgent (LLMAgent subclass), cron-triggered daemon. Fetches latest commits from GitHub API (unauthenticated), compares with stored artifact state, escalates new commits to parent. `_http_get_json()` async urllib helper
+- Queen spawns GitMonitor as daemon + schedules default cron (`*/30 * * * *`)
+- 9 Python tests for GitHubMonitorAgent
+
+### Phase 4: Coder Agent
+- `sdk/python/hivekernel_sdk/coder.py` — **NEW**: CoderAgent (LLMAgent subclass), on-demand code generation daemon. Accepts coding tasks via execute_on, generates code using powerful LLM model, strips markdown fences, stores as artifact. `_extract_code_block()` helper
+- Queen spawns Coder as tactical daemon (sonnet model)
+- 15 Python tests for CoderAgent (5 for _extract_code_block + 10 for handle_task)
+
+### Phase 5: Integration
+- `sdk/python/examples/test_plan003_e2e.py` — **NEW**: E2E test verifying all agents spawn, cron engine works (add/list/remove), chat responds, GitHub monitor has cron, coder generates code
+- Updated QUICKSTART.md and CHANGELOG.md
+
+### Process Tree
+```
+King (PID 1)
+  +-- Queen (PID 2, daemon, tactical)
+        +-- Maid (daemon, operational) -- health checks
+        +-- Assistant (daemon, tactical, sonnet) -- 24/7 chat
+        +-- GitMonitor (daemon, operational) -- cron-triggered repo checks
+        +-- Coder (daemon, tactical, sonnet) -- on-demand code generation
+```
+
+### Files Changed/Added
+- Go: `cron.go`, `king.go`, `main.go`, `core.proto`, `grpc_core.go`, `cron_test.go` + proto regen
+- Python: `assistant.py`, `github_monitor.py`, `coder.py`, `queen.py`, `__init__.py`, `client.py`
+- Dashboard: `app.py`, `index.html`, `style.css`, `chat.html`, `chat.js`
+- Tests: `test_assistant.py` (17), `test_github_monitor.py` (9), `test_coder.py` (15)
+- Go tests: +9 cron tests (252 total Go tests)

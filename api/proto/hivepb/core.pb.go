@@ -1213,6 +1213,418 @@ func (x *SubscribeEventsRequest) GetSinceSeq() uint64 {
 	return 0
 }
 
+type CronEntryProto struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	CronExpression     string                 `protobuf:"bytes,3,opt,name=cron_expression,json=cronExpression,proto3" json:"cron_expression,omitempty"`
+	Action             string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"` // "spawn", "wake", "execute"
+	TargetPid          uint64                 `protobuf:"varint,5,opt,name=target_pid,json=targetPid,proto3" json:"target_pid,omitempty"`
+	ExecuteDescription string                 `protobuf:"bytes,6,opt,name=execute_description,json=executeDescription,proto3" json:"execute_description,omitempty"`
+	ExecuteParams      map[string]string      `protobuf:"bytes,7,rep,name=execute_params,json=executeParams,proto3" json:"execute_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Enabled            bool                   `protobuf:"varint,8,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CronEntryProto) Reset() {
+	*x = CronEntryProto{}
+	mi := &file_core_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CronEntryProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CronEntryProto) ProtoMessage() {}
+
+func (x *CronEntryProto) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CronEntryProto.ProtoReflect.Descriptor instead.
+func (*CronEntryProto) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CronEntryProto) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CronEntryProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CronEntryProto) GetCronExpression() string {
+	if x != nil {
+		return x.CronExpression
+	}
+	return ""
+}
+
+func (x *CronEntryProto) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *CronEntryProto) GetTargetPid() uint64 {
+	if x != nil {
+		return x.TargetPid
+	}
+	return 0
+}
+
+func (x *CronEntryProto) GetExecuteDescription() string {
+	if x != nil {
+		return x.ExecuteDescription
+	}
+	return ""
+}
+
+func (x *CronEntryProto) GetExecuteParams() map[string]string {
+	if x != nil {
+		return x.ExecuteParams
+	}
+	return nil
+}
+
+func (x *CronEntryProto) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type AddCronRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	CronExpression     string                 `protobuf:"bytes,2,opt,name=cron_expression,json=cronExpression,proto3" json:"cron_expression,omitempty"`
+	Action             string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"` // "execute" (default), "spawn", "wake"
+	TargetPid          uint64                 `protobuf:"varint,4,opt,name=target_pid,json=targetPid,proto3" json:"target_pid,omitempty"`
+	ExecuteDescription string                 `protobuf:"bytes,5,opt,name=execute_description,json=executeDescription,proto3" json:"execute_description,omitempty"`
+	ExecuteParams      map[string]string      `protobuf:"bytes,6,rep,name=execute_params,json=executeParams,proto3" json:"execute_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AddCronRequest) Reset() {
+	*x = AddCronRequest{}
+	mi := &file_core_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddCronRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddCronRequest) ProtoMessage() {}
+
+func (x *AddCronRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddCronRequest.ProtoReflect.Descriptor instead.
+func (*AddCronRequest) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AddCronRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AddCronRequest) GetCronExpression() string {
+	if x != nil {
+		return x.CronExpression
+	}
+	return ""
+}
+
+func (x *AddCronRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AddCronRequest) GetTargetPid() uint64 {
+	if x != nil {
+		return x.TargetPid
+	}
+	return 0
+}
+
+func (x *AddCronRequest) GetExecuteDescription() string {
+	if x != nil {
+		return x.ExecuteDescription
+	}
+	return ""
+}
+
+func (x *AddCronRequest) GetExecuteParams() map[string]string {
+	if x != nil {
+		return x.ExecuteParams
+	}
+	return nil
+}
+
+type AddCronResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CronId        string                 `protobuf:"bytes,1,opt,name=cron_id,json=cronId,proto3" json:"cron_id,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddCronResponse) Reset() {
+	*x = AddCronResponse{}
+	mi := &file_core_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddCronResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddCronResponse) ProtoMessage() {}
+
+func (x *AddCronResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddCronResponse.ProtoReflect.Descriptor instead.
+func (*AddCronResponse) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AddCronResponse) GetCronId() string {
+	if x != nil {
+		return x.CronId
+	}
+	return ""
+}
+
+func (x *AddCronResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type RemoveCronRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CronId        string                 `protobuf:"bytes,1,opt,name=cron_id,json=cronId,proto3" json:"cron_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveCronRequest) Reset() {
+	*x = RemoveCronRequest{}
+	mi := &file_core_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveCronRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveCronRequest) ProtoMessage() {}
+
+func (x *RemoveCronRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveCronRequest.ProtoReflect.Descriptor instead.
+func (*RemoveCronRequest) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RemoveCronRequest) GetCronId() string {
+	if x != nil {
+		return x.CronId
+	}
+	return ""
+}
+
+type RemoveCronResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveCronResponse) Reset() {
+	*x = RemoveCronResponse{}
+	mi := &file_core_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveCronResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveCronResponse) ProtoMessage() {}
+
+func (x *RemoveCronResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveCronResponse.ProtoReflect.Descriptor instead.
+func (*RemoveCronResponse) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RemoveCronResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *RemoveCronResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ListCronRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCronRequest) Reset() {
+	*x = ListCronRequest{}
+	mi := &file_core_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCronRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCronRequest) ProtoMessage() {}
+
+func (x *ListCronRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCronRequest.ProtoReflect.Descriptor instead.
+func (*ListCronRequest) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{23}
+}
+
+type ListCronResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*CronEntryProto      `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCronResponse) Reset() {
+	*x = ListCronResponse{}
+	mi := &file_core_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCronResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCronResponse) ProtoMessage() {}
+
+func (x *ListCronResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCronResponse.ProtoReflect.Descriptor instead.
+func (*ListCronResponse) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListCronResponse) GetEntries() []*CronEntryProto {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 var File_core_proto protoreflect.FileDescriptor
 
 const file_core_proto_rawDesc = "" +
@@ -1318,8 +1730,42 @@ const file_core_proto_rawDesc = "" +
 	"\x05level\x18\r \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x0e \x01(\tR\amessage\"5\n" +
 	"\x16SubscribeEventsRequest\x12\x1b\n" +
-	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq2\xf9\n" +
+	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq\"\xfc\x02\n" +
+	"\x0eCronEntryProto\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
+	"\x0fcron_expression\x18\x03 \x01(\tR\x0ecronExpression\x12\x16\n" +
+	"\x06action\x18\x04 \x01(\tR\x06action\x12\x1d\n" +
 	"\n" +
+	"target_pid\x18\x05 \x01(\x04R\ttargetPid\x12/\n" +
+	"\x13execute_description\x18\x06 \x01(\tR\x12executeDescription\x12Y\n" +
+	"\x0eexecute_params\x18\a \x03(\v22.hivekernel.core.CronEntryProto.ExecuteParamsEntryR\rexecuteParams\x12\x18\n" +
+	"\aenabled\x18\b \x01(\bR\aenabled\x1a@\n" +
+	"\x12ExecuteParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x02\n" +
+	"\x0eAddCronRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
+	"\x0fcron_expression\x18\x02 \x01(\tR\x0ecronExpression\x12\x16\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x12\x1d\n" +
+	"\n" +
+	"target_pid\x18\x04 \x01(\x04R\ttargetPid\x12/\n" +
+	"\x13execute_description\x18\x05 \x01(\tR\x12executeDescription\x12Y\n" +
+	"\x0eexecute_params\x18\x06 \x03(\v22.hivekernel.core.AddCronRequest.ExecuteParamsEntryR\rexecuteParams\x1a@\n" +
+	"\x12ExecuteParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"@\n" +
+	"\x0fAddCronResponse\x12\x17\n" +
+	"\acron_id\x18\x01 \x01(\tR\x06cronId\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\",\n" +
+	"\x11RemoveCronRequest\x12\x17\n" +
+	"\acron_id\x18\x01 \x01(\tR\x06cronId\":\n" +
+	"\x12RemoveCronResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x11\n" +
+	"\x0fListCronRequest\"M\n" +
+	"\x10ListCronResponse\x129\n" +
+	"\aentries\x18\x01 \x03(\v2\x1f.hivekernel.core.CronEntryProtoR\aentries2\xef\f\n" +
 	"\vCoreService\x12M\n" +
 	"\n" +
 	"SpawnChild\x12\x1e.hivekernel.agent.SpawnRequest\x1a\x1f.hivekernel.agent.SpawnResponse\x12J\n" +
@@ -1337,7 +1783,11 @@ const file_core_proto_rawDesc = "" +
 	"\x03Log\x12\x1c.hivekernel.agent.LogRequest\x1a\x1d.hivekernel.agent.LogResponse\x12O\n" +
 	"\fReportMetric\x12\x1e.hivekernel.core.MetricRequest\x1a\x1f.hivekernel.core.MetricResponse\x12X\n" +
 	"\vExecuteTask\x12#.hivekernel.core.ExecuteTaskRequest\x1a$.hivekernel.core.ExecuteTaskResponse\x12[\n" +
-	"\x0fSubscribeEvents\x12'.hivekernel.core.SubscribeEventsRequest\x1a\x1d.hivekernel.core.ProcessEvent0\x01B2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
+	"\x0fSubscribeEvents\x12'.hivekernel.core.SubscribeEventsRequest\x1a\x1d.hivekernel.core.ProcessEvent0\x01\x12L\n" +
+	"\aAddCron\x12\x1f.hivekernel.core.AddCronRequest\x1a .hivekernel.core.AddCronResponse\x12U\n" +
+	"\n" +
+	"RemoveCron\x12\".hivekernel.core.RemoveCronRequest\x1a#.hivekernel.core.RemoveCronResponse\x12O\n" +
+	"\bListCron\x12 .hivekernel.core.ListCronRequest\x1a!.hivekernel.core.ListCronResponseB2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
 
 var (
 	file_core_proto_rawDescOnce sync.Once
@@ -1351,7 +1801,7 @@ func file_core_proto_rawDescGZIP() []byte {
 	return file_core_proto_rawDescData
 }
 
-var file_core_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_core_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_core_proto_goTypes = []any{
 	(*ProcessInfoRequest)(nil),     // 0: hivekernel.core.ProcessInfoRequest
 	(*ProcessInfo)(nil),            // 1: hivekernel.core.ProcessInfo
@@ -1371,77 +1821,95 @@ var file_core_proto_goTypes = []any{
 	(*ExecuteTaskResponse)(nil),    // 15: hivekernel.core.ExecuteTaskResponse
 	(*ProcessEvent)(nil),           // 16: hivekernel.core.ProcessEvent
 	(*SubscribeEventsRequest)(nil), // 17: hivekernel.core.SubscribeEventsRequest
-	nil,                            // 18: hivekernel.core.MetricRequest.LabelsEntry
-	nil,                            // 19: hivekernel.core.ExecuteTaskRequest.ParamsEntry
-	(AgentRole)(0),                 // 20: hivekernel.agent.AgentRole
-	(CognitiveTier)(0),             // 21: hivekernel.agent.CognitiveTier
-	(AgentState)(0),                // 22: hivekernel.agent.AgentState
-	(Priority)(0),                  // 23: hivekernel.agent.Priority
-	(*TaskResult)(nil),             // 24: hivekernel.agent.TaskResult
-	(*SpawnRequest)(nil),           // 25: hivekernel.agent.SpawnRequest
-	(*KillRequest)(nil),            // 26: hivekernel.agent.KillRequest
-	(*SendMessageRequest)(nil),     // 27: hivekernel.agent.SendMessageRequest
-	(*StoreArtifactRequest)(nil),   // 28: hivekernel.agent.StoreArtifactRequest
-	(*GetArtifactRequest)(nil),     // 29: hivekernel.agent.GetArtifactRequest
-	(*EscalateRequest)(nil),        // 30: hivekernel.agent.EscalateRequest
-	(*LogRequest)(nil),             // 31: hivekernel.agent.LogRequest
-	(*SpawnResponse)(nil),          // 32: hivekernel.agent.SpawnResponse
-	(*KillResponse)(nil),           // 33: hivekernel.agent.KillResponse
-	(*SendMessageResponse)(nil),    // 34: hivekernel.agent.SendMessageResponse
-	(*AgentMessage)(nil),           // 35: hivekernel.agent.AgentMessage
-	(*StoreArtifactResponse)(nil),  // 36: hivekernel.agent.StoreArtifactResponse
-	(*GetArtifactResponse)(nil),    // 37: hivekernel.agent.GetArtifactResponse
-	(*EscalateResponse)(nil),       // 38: hivekernel.agent.EscalateResponse
-	(*LogResponse)(nil),            // 39: hivekernel.agent.LogResponse
+	(*CronEntryProto)(nil),         // 18: hivekernel.core.CronEntryProto
+	(*AddCronRequest)(nil),         // 19: hivekernel.core.AddCronRequest
+	(*AddCronResponse)(nil),        // 20: hivekernel.core.AddCronResponse
+	(*RemoveCronRequest)(nil),      // 21: hivekernel.core.RemoveCronRequest
+	(*RemoveCronResponse)(nil),     // 22: hivekernel.core.RemoveCronResponse
+	(*ListCronRequest)(nil),        // 23: hivekernel.core.ListCronRequest
+	(*ListCronResponse)(nil),       // 24: hivekernel.core.ListCronResponse
+	nil,                            // 25: hivekernel.core.MetricRequest.LabelsEntry
+	nil,                            // 26: hivekernel.core.ExecuteTaskRequest.ParamsEntry
+	nil,                            // 27: hivekernel.core.CronEntryProto.ExecuteParamsEntry
+	nil,                            // 28: hivekernel.core.AddCronRequest.ExecuteParamsEntry
+	(AgentRole)(0),                 // 29: hivekernel.agent.AgentRole
+	(CognitiveTier)(0),             // 30: hivekernel.agent.CognitiveTier
+	(AgentState)(0),                // 31: hivekernel.agent.AgentState
+	(Priority)(0),                  // 32: hivekernel.agent.Priority
+	(*TaskResult)(nil),             // 33: hivekernel.agent.TaskResult
+	(*SpawnRequest)(nil),           // 34: hivekernel.agent.SpawnRequest
+	(*KillRequest)(nil),            // 35: hivekernel.agent.KillRequest
+	(*SendMessageRequest)(nil),     // 36: hivekernel.agent.SendMessageRequest
+	(*StoreArtifactRequest)(nil),   // 37: hivekernel.agent.StoreArtifactRequest
+	(*GetArtifactRequest)(nil),     // 38: hivekernel.agent.GetArtifactRequest
+	(*EscalateRequest)(nil),        // 39: hivekernel.agent.EscalateRequest
+	(*LogRequest)(nil),             // 40: hivekernel.agent.LogRequest
+	(*SpawnResponse)(nil),          // 41: hivekernel.agent.SpawnResponse
+	(*KillResponse)(nil),           // 42: hivekernel.agent.KillResponse
+	(*SendMessageResponse)(nil),    // 43: hivekernel.agent.SendMessageResponse
+	(*AgentMessage)(nil),           // 44: hivekernel.agent.AgentMessage
+	(*StoreArtifactResponse)(nil),  // 45: hivekernel.agent.StoreArtifactResponse
+	(*GetArtifactResponse)(nil),    // 46: hivekernel.agent.GetArtifactResponse
+	(*EscalateResponse)(nil),       // 47: hivekernel.agent.EscalateResponse
+	(*LogResponse)(nil),            // 48: hivekernel.agent.LogResponse
 }
 var file_core_proto_depIdxs = []int32{
-	20, // 0: hivekernel.core.ProcessInfo.role:type_name -> hivekernel.agent.AgentRole
-	21, // 1: hivekernel.core.ProcessInfo.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
-	22, // 2: hivekernel.core.ProcessInfo.state:type_name -> hivekernel.agent.AgentState
-	22, // 3: hivekernel.core.ListChildrenRequest.filter_state:type_name -> hivekernel.agent.AgentState
+	29, // 0: hivekernel.core.ProcessInfo.role:type_name -> hivekernel.agent.AgentRole
+	30, // 1: hivekernel.core.ProcessInfo.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
+	31, // 2: hivekernel.core.ProcessInfo.state:type_name -> hivekernel.agent.AgentState
+	31, // 3: hivekernel.core.ListChildrenRequest.filter_state:type_name -> hivekernel.agent.AgentState
 	1,  // 4: hivekernel.core.ListChildrenResponse.children:type_name -> hivekernel.core.ProcessInfo
-	23, // 5: hivekernel.core.SubscribeRequest.min_priority:type_name -> hivekernel.agent.Priority
+	32, // 5: hivekernel.core.SubscribeRequest.min_priority:type_name -> hivekernel.agent.Priority
 	7,  // 6: hivekernel.core.ListArtifactsResponse.artifacts:type_name -> hivekernel.core.ArtifactMeta
-	18, // 7: hivekernel.core.MetricRequest.labels:type_name -> hivekernel.core.MetricRequest.LabelsEntry
-	19, // 8: hivekernel.core.ExecuteTaskRequest.params:type_name -> hivekernel.core.ExecuteTaskRequest.ParamsEntry
-	24, // 9: hivekernel.core.ExecuteTaskResponse.result:type_name -> hivekernel.agent.TaskResult
-	25, // 10: hivekernel.core.CoreService.SpawnChild:input_type -> hivekernel.agent.SpawnRequest
-	26, // 11: hivekernel.core.CoreService.KillChild:input_type -> hivekernel.agent.KillRequest
-	0,  // 12: hivekernel.core.CoreService.GetProcessInfo:input_type -> hivekernel.core.ProcessInfoRequest
-	2,  // 13: hivekernel.core.CoreService.ListChildren:input_type -> hivekernel.core.ListChildrenRequest
-	27, // 14: hivekernel.core.CoreService.SendMessage:input_type -> hivekernel.agent.SendMessageRequest
-	4,  // 15: hivekernel.core.CoreService.Subscribe:input_type -> hivekernel.core.SubscribeRequest
-	28, // 16: hivekernel.core.CoreService.StoreArtifact:input_type -> hivekernel.agent.StoreArtifactRequest
-	29, // 17: hivekernel.core.CoreService.GetArtifact:input_type -> hivekernel.agent.GetArtifactRequest
-	5,  // 18: hivekernel.core.CoreService.ListArtifacts:input_type -> hivekernel.core.ListArtifactsRequest
-	8,  // 19: hivekernel.core.CoreService.GetResourceUsage:input_type -> hivekernel.core.ResourceUsageRequest
-	10, // 20: hivekernel.core.CoreService.RequestResources:input_type -> hivekernel.core.ResourceRequest
-	30, // 21: hivekernel.core.CoreService.Escalate:input_type -> hivekernel.agent.EscalateRequest
-	31, // 22: hivekernel.core.CoreService.Log:input_type -> hivekernel.agent.LogRequest
-	12, // 23: hivekernel.core.CoreService.ReportMetric:input_type -> hivekernel.core.MetricRequest
-	14, // 24: hivekernel.core.CoreService.ExecuteTask:input_type -> hivekernel.core.ExecuteTaskRequest
-	17, // 25: hivekernel.core.CoreService.SubscribeEvents:input_type -> hivekernel.core.SubscribeEventsRequest
-	32, // 26: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
-	33, // 27: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
-	1,  // 28: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
-	3,  // 29: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
-	34, // 30: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
-	35, // 31: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
-	36, // 32: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
-	37, // 33: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
-	6,  // 34: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
-	9,  // 35: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
-	11, // 36: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
-	38, // 37: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
-	39, // 38: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
-	13, // 39: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
-	15, // 40: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
-	16, // 41: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
-	26, // [26:42] is the sub-list for method output_type
-	10, // [10:26] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	25, // 7: hivekernel.core.MetricRequest.labels:type_name -> hivekernel.core.MetricRequest.LabelsEntry
+	26, // 8: hivekernel.core.ExecuteTaskRequest.params:type_name -> hivekernel.core.ExecuteTaskRequest.ParamsEntry
+	33, // 9: hivekernel.core.ExecuteTaskResponse.result:type_name -> hivekernel.agent.TaskResult
+	27, // 10: hivekernel.core.CronEntryProto.execute_params:type_name -> hivekernel.core.CronEntryProto.ExecuteParamsEntry
+	28, // 11: hivekernel.core.AddCronRequest.execute_params:type_name -> hivekernel.core.AddCronRequest.ExecuteParamsEntry
+	18, // 12: hivekernel.core.ListCronResponse.entries:type_name -> hivekernel.core.CronEntryProto
+	34, // 13: hivekernel.core.CoreService.SpawnChild:input_type -> hivekernel.agent.SpawnRequest
+	35, // 14: hivekernel.core.CoreService.KillChild:input_type -> hivekernel.agent.KillRequest
+	0,  // 15: hivekernel.core.CoreService.GetProcessInfo:input_type -> hivekernel.core.ProcessInfoRequest
+	2,  // 16: hivekernel.core.CoreService.ListChildren:input_type -> hivekernel.core.ListChildrenRequest
+	36, // 17: hivekernel.core.CoreService.SendMessage:input_type -> hivekernel.agent.SendMessageRequest
+	4,  // 18: hivekernel.core.CoreService.Subscribe:input_type -> hivekernel.core.SubscribeRequest
+	37, // 19: hivekernel.core.CoreService.StoreArtifact:input_type -> hivekernel.agent.StoreArtifactRequest
+	38, // 20: hivekernel.core.CoreService.GetArtifact:input_type -> hivekernel.agent.GetArtifactRequest
+	5,  // 21: hivekernel.core.CoreService.ListArtifacts:input_type -> hivekernel.core.ListArtifactsRequest
+	8,  // 22: hivekernel.core.CoreService.GetResourceUsage:input_type -> hivekernel.core.ResourceUsageRequest
+	10, // 23: hivekernel.core.CoreService.RequestResources:input_type -> hivekernel.core.ResourceRequest
+	39, // 24: hivekernel.core.CoreService.Escalate:input_type -> hivekernel.agent.EscalateRequest
+	40, // 25: hivekernel.core.CoreService.Log:input_type -> hivekernel.agent.LogRequest
+	12, // 26: hivekernel.core.CoreService.ReportMetric:input_type -> hivekernel.core.MetricRequest
+	14, // 27: hivekernel.core.CoreService.ExecuteTask:input_type -> hivekernel.core.ExecuteTaskRequest
+	17, // 28: hivekernel.core.CoreService.SubscribeEvents:input_type -> hivekernel.core.SubscribeEventsRequest
+	19, // 29: hivekernel.core.CoreService.AddCron:input_type -> hivekernel.core.AddCronRequest
+	21, // 30: hivekernel.core.CoreService.RemoveCron:input_type -> hivekernel.core.RemoveCronRequest
+	23, // 31: hivekernel.core.CoreService.ListCron:input_type -> hivekernel.core.ListCronRequest
+	41, // 32: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
+	42, // 33: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
+	1,  // 34: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
+	3,  // 35: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
+	43, // 36: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
+	44, // 37: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
+	45, // 38: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
+	46, // 39: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
+	6,  // 40: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
+	9,  // 41: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
+	11, // 42: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
+	47, // 43: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
+	48, // 44: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
+	13, // 45: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
+	15, // 46: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
+	16, // 47: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
+	20, // 48: hivekernel.core.CoreService.AddCron:output_type -> hivekernel.core.AddCronResponse
+	22, // 49: hivekernel.core.CoreService.RemoveCron:output_type -> hivekernel.core.RemoveCronResponse
+	24, // 50: hivekernel.core.CoreService.ListCron:output_type -> hivekernel.core.ListCronResponse
+	32, // [32:51] is the sub-list for method output_type
+	13, // [13:32] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_core_proto_init() }
@@ -1456,7 +1924,7 @@ func file_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_proto_rawDesc), len(file_core_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -502,6 +502,43 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 	return &pb.ExecuteTaskResponse{Success: true, Result: result}, nil
 }
 
+// --- Cron management ---
+
+func (s *CoreServer) AddCron(ctx context.Context, req *pb.AddCronRequest) (*pb.AddCronResponse, error) {
+	sched, err := s.king.Cron().ParseAndAdd(req.Name, req.CronExpression, req.Action, process.PID(req.TargetPid), req.ExecuteDescription, req.ExecuteParams)
+	if err != nil {
+		return &pb.AddCronResponse{Error: err.Error()}, nil
+	}
+	log.Printf("[grpc] AddCron: %q (%s) -> PID %d, action=%s", req.Name, req.CronExpression, req.TargetPid, req.Action)
+	return &pb.AddCronResponse{CronId: sched}, nil
+}
+
+func (s *CoreServer) RemoveCron(ctx context.Context, req *pb.RemoveCronRequest) (*pb.RemoveCronResponse, error) {
+	if err := s.king.Cron().Remove(req.CronId); err != nil {
+		return &pb.RemoveCronResponse{Ok: false, Error: err.Error()}, nil
+	}
+	log.Printf("[grpc] RemoveCron: %s", req.CronId)
+	return &pb.RemoveCronResponse{Ok: true}, nil
+}
+
+func (s *CoreServer) ListCron(ctx context.Context, req *pb.ListCronRequest) (*pb.ListCronResponse, error) {
+	entries := s.king.Cron().List()
+	resp := &pb.ListCronResponse{}
+	for _, e := range entries {
+		resp.Entries = append(resp.Entries, &pb.CronEntryProto{
+			Id:                 e.ID,
+			Name:               e.Name,
+			CronExpression:     e.Schedule.Raw,
+			Action:             e.Action.String(),
+			TargetPid:          e.TargetPID,
+			ExecuteDescription: e.ExecuteDesc,
+			ExecuteParams:      e.ExecuteParams,
+			Enabled:            e.Enabled,
+		})
+	}
+	return resp, nil
+}
+
 // --- Event sourcing ---
 
 func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc.ServerStreamingServer[pb.ProcessEvent]) error {

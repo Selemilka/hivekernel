@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/cluster"
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/permissions"
@@ -58,6 +59,9 @@ type King struct {
 
 	// Event sourcing
 	eventLog *process.EventLog
+
+	// Task execution (set after creation via SetExecutor).
+	executor *runtime.Executor
 
 	proc *process.Process // king's own process entry
 
@@ -263,6 +267,11 @@ func (k *King) EventLog() *process.EventLog {
 	return k.eventLog
 }
 
+// SetExecutor sets the executor for cron task execution (called during wiring).
+func (k *King) SetExecutor(e *runtime.Executor) {
+	k.executor = e
+}
+
 // PID returns the kernel's process ID.
 func (k *King) PID() process.PID {
 	return k.proc.PID
@@ -439,6 +448,75 @@ func (k *King) routeMessage(msg *ipc.Message) {
 	// Route through broker (validates rules, computes priority, delivers).
 	if err := k.broker.Route(msg); err != nil {
 		log.Printf("[king] routing failed for message %s: %v", msg.ID, err)
+	}
+}
+
+// RunCronPoller ticks every 30 seconds, checks for due cron entries,
+// and executes them. Blocks until ctx is cancelled.
+func (k *King) RunCronPoller(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	log.Printf("[cron] poller started (30s interval)")
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("[cron] poller stopped")
+			return
+		case <-ticker.C:
+			due := k.cron.CheckDue(time.Now())
+			for _, entry := range due {
+				go k.executeCronEntry(ctx, entry)
+			}
+		}
+	}
+}
+
+// executeCronEntry dispatches a single cron entry based on its action type.
+func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry) {
+	log.Printf("[cron] firing %q (action=%s, target=%d)", entry.Name, entry.Action, entry.TargetPID)
+
+	switch entry.Action {
+	case scheduler.CronExecute:
+		if k.executor == nil || k.rtManager == nil {
+			log.Printf("[cron] %q: executor or runtime manager not available", entry.Name)
+			return
+		}
+		rt := k.rtManager.GetRuntime(entry.TargetPID)
+		if rt == nil {
+			log.Printf("[cron] %q: no runtime for PID %d", entry.Name, entry.TargetPID)
+			return
+		}
+		taskReq := &pb.TaskRequest{
+			TaskId:      fmt.Sprintf("cron-%s-%d", entry.ID, time.Now().Unix()),
+			Description: entry.ExecuteDesc,
+			Params:      entry.ExecuteParams,
+		}
+		result, err := k.executor.ExecuteTask(ctx, rt.Addr, entry.TargetPID, taskReq)
+		if err != nil {
+			log.Printf("[cron] %q: execute failed: %v", entry.Name, err)
+			return
+		}
+		log.Printf("[cron] %q: completed (exit=%d, output=%d bytes)",
+			entry.Name, result.ExitCode, len(result.Output))
+
+	case scheduler.CronSpawn:
+		_, err := k.SpawnChild(process.SpawnRequest{
+			ParentPID:     entry.SpawnParent,
+			Name:          entry.SpawnName,
+			Role:          entry.SpawnRole,
+			CognitiveTier: entry.SpawnTier,
+		})
+		if err != nil {
+			log.Printf("[cron] %q: spawn failed: %v", entry.Name, err)
+		}
+
+	case scheduler.CronWake:
+		if err := k.registry.SetState(entry.TargetPID, process.StateRunning); err != nil {
+			log.Printf("[cron] %q: wake failed: %v", entry.Name, err)
+		}
+
+	default:
+		log.Printf("[cron] %q: unknown action %s", entry.Name, entry.Action)
 	}
 }
 

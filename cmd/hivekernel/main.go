@@ -106,6 +106,10 @@ func main() {
 	// Start health monitor.
 	go healthMon.Run(ctx)
 
+	// Start cron poller (checks due entries every 30s).
+	king.SetExecutor(executor)
+	go king.RunCronPoller(ctx)
+
 	// Start kernel main loop.
 	go func() {
 		if err := king.Run(ctx); err != nil && ctx.Err() == nil {

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveKernel Chat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header id="header">
+    <div class="header-left">
+        <h1>HiveKernel</h1>
+        <nav class="header-nav">
+            <a href="/" class="nav-link">Tree</a>
+            <a href="/chat.html" class="nav-link active">Chat</a>
+        </nav>
+    </div>
+    <div class="header-right">
+        <span id="status-indicator" class="status disconnected">Connecting...</span>
+    </div>
+</header>
+
+<!-- Main layout -->
+<div id="chat-main">
+    <!-- Chat area -->
+    <div id="chat-area">
+        <div id="chat-messages">
+            <div class="chat-bubble system">
+                HiveKernel Assistant is ready. Ask questions, schedule tasks, or request code.
+            </div>
+        </div>
+        <div id="chat-typing">Assistant is thinking...</div>
+        <div id="chat-input-area">
+            <textarea id="chat-input" rows="1" placeholder="Type a message..." autofocus></textarea>
+            <button id="chat-send" class="btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div id="chat-sidebar">
+        <!-- Agents section -->
+        <div class="sidebar-section">
+            <h3>Active Agents</h3>
+            <div id="sidebar-agents"><span class="empty">Loading...</span></div>
+        </div>
+
+        <!-- Cron section -->
+        <div class="sidebar-section">
+            <h3>Scheduled Tasks</h3>
+            <div id="sidebar-cron"><span class="empty">No scheduled tasks</span></div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="chat.js"></script>
+</body>
+</html>

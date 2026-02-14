@@ -235,6 +235,135 @@ func TestCronScheduler_ListByVPS(t *testing.T) {
 	}
 }
 
+func TestCronAction_Execute_String(t *testing.T) {
+	if CronExecute.String() != "execute" {
+		t.Errorf("CronExecute.String()=%q, want execute", CronExecute.String())
+	}
+}
+
+func TestCronEntry_ExecuteFields(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("*/30 * * * *")
+
+	id := cs.Add(&CronEntry{
+		Name:          "github-check",
+		Schedule:      sched,
+		Action:        CronExecute,
+		TargetPID:     42,
+		ExecuteDesc:   "Check GitHub repos for updates",
+		ExecuteParams: map[string]string{"repos": "[\"org/repo\"]"},
+	})
+
+	entry, _ := cs.Get(id)
+	if entry.Action != CronExecute {
+		t.Errorf("Action=%s, want execute", entry.Action)
+	}
+	if entry.TargetPID != 42 {
+		t.Errorf("TargetPID=%d, want 42", entry.TargetPID)
+	}
+	if entry.ExecuteDesc != "Check GitHub repos for updates" {
+		t.Errorf("ExecuteDesc=%q", entry.ExecuteDesc)
+	}
+	if entry.ExecuteParams["repos"] != "[\"org/repo\"]" {
+		t.Errorf("ExecuteParams=%v", entry.ExecuteParams)
+	}
+}
+
+func TestCronScheduler_ParseAndAdd(t *testing.T) {
+	cs := NewCronScheduler()
+
+	id, err := cs.ParseAndAdd("test-job", "*/5 * * * *", "execute", 10, "do stuff", map[string]string{"key": "val"})
+	if err != nil {
+		t.Fatalf("ParseAndAdd: %v", err)
+	}
+	if id == "" {
+		t.Error("ID should not be empty")
+	}
+
+	entry, _ := cs.Get(id)
+	if entry.Action != CronExecute {
+		t.Errorf("Action=%s, want execute", entry.Action)
+	}
+	if entry.Schedule.Minute.Interval != 5 {
+		t.Errorf("minute interval=%d, want 5", entry.Schedule.Minute.Interval)
+	}
+	if entry.ExecuteDesc != "do stuff" {
+		t.Errorf("ExecuteDesc=%q", entry.ExecuteDesc)
+	}
+}
+
+func TestCronScheduler_ParseAndAdd_DefaultAction(t *testing.T) {
+	cs := NewCronScheduler()
+
+	// Empty action defaults to CronExecute.
+	id, err := cs.ParseAndAdd("test", "0 8 * * *", "", 10, "desc", nil)
+	if err != nil {
+		t.Fatalf("ParseAndAdd: %v", err)
+	}
+	entry, _ := cs.Get(id)
+	if entry.Action != CronExecute {
+		t.Errorf("Action=%s, want execute (default)", entry.Action)
+	}
+}
+
+func TestCronScheduler_ParseAndAdd_SpawnAction(t *testing.T) {
+	cs := NewCronScheduler()
+
+	id, err := cs.ParseAndAdd("spawn-test", "0 0 * * *", "spawn", 0, "", nil)
+	if err != nil {
+		t.Fatalf("ParseAndAdd: %v", err)
+	}
+	entry, _ := cs.Get(id)
+	if entry.Action != CronSpawn {
+		t.Errorf("Action=%s, want spawn", entry.Action)
+	}
+}
+
+func TestCronScheduler_ParseAndAdd_InvalidCron(t *testing.T) {
+	cs := NewCronScheduler()
+
+	_, err := cs.ParseAndAdd("bad", "not-a-cron", "execute", 10, "", nil)
+	if err == nil {
+		t.Error("should fail on invalid cron expression")
+	}
+}
+
+func TestCronScheduler_ParseAndAdd_InvalidAction(t *testing.T) {
+	cs := NewCronScheduler()
+
+	_, err := cs.ParseAndAdd("bad", "* * * * *", "invalid", 10, "", nil)
+	if err == nil {
+		t.Error("should fail on invalid action")
+	}
+}
+
+func TestCronScheduler_CheckDue_Execute(t *testing.T) {
+	cs := NewCronScheduler()
+	sched, _ := ParseCron("*/5 * * * *")
+
+	cs.Add(&CronEntry{
+		Name:          "periodic-check",
+		Schedule:      sched,
+		Action:        CronExecute,
+		TargetPID:     99,
+		ExecuteDesc:   "check",
+		ExecuteParams: map[string]string{"mode": "fast"},
+	})
+
+	// Minute 10 matches */5.
+	at := time.Date(2025, 6, 1, 12, 10, 0, 0, time.UTC)
+	due := cs.CheckDue(at)
+	if len(due) != 1 {
+		t.Fatalf("due=%d, want 1", len(due))
+	}
+	if due[0].Action != CronExecute {
+		t.Errorf("Action=%s, want execute", due[0].Action)
+	}
+	if due[0].ExecuteParams["mode"] != "fast" {
+		t.Errorf("params=%v", due[0].ExecuteParams)
+	}
+}
+
 func TestCronScheduler_SpawnEntry(t *testing.T) {
 	cs := NewCronScheduler()
 	sched, _ := ParseCron("0 */2 * * *")

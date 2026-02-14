@@ -48,13 +48,16 @@ func main() {
 	syscallHandler.SetExecutor(executor)
 
 	healthMon := runtime.NewHealthMonitor(
-		king.Registry(),
 		rtManager,
 		10*time.Second, // check interval
-		30*time.Second, // timeout
+		3,              // max consecutive failures before kill
+		5*time.Second,  // ping timeout
 	)
 	healthMon.OnUnhealthy(func(pid process.PID) {
-		log.Printf("[main] unhealthy agent PID %d detected", pid)
+		log.Printf("[health] PID %d unreachable, killing", pid)
+		_ = rtManager.StopRuntime(pid)
+		_ = king.Registry().SetState(pid, process.StateZombie)
+		king.Signals().NotifyParent(pid, -1, "health: unreachable")
 	})
 
 	// Set up graceful shutdown.

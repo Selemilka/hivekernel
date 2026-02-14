@@ -1,4 +1,4 @@
-"""Unit tests for QueenAgent Phase 3 features.
+"""Unit tests for QueenAgent (Phases 3-5).
 
 Run: python sdk/python/tests/test_queen.py -v
 """
@@ -19,6 +19,7 @@ from hivekernel_sdk.queen import (
     _word_similarity,
     _SIMPLE_KEYWORDS,
     _COMPLEX_KEYWORDS,
+    _ARCHITECT_KEYWORDS,
     SIMILARITY_THRESHOLD,
 )
 
@@ -381,6 +382,177 @@ class TestMaidIntegration(unittest.IsolatedAsyncioTestCase):
 
         warning = await queen._check_maid_health()
         self.assertEqual(warning, "")
+
+
+# --- Architect Routing Tests (Phase 5) ---
+
+class TestArchitectRouting(unittest.IsolatedAsyncioTestCase):
+    """Test architect keyword detection and routing."""
+
+    async def _make_queen(self):
+        queen = QueenAgent()
+        queen._core = AsyncMock()
+        queen.llm = MagicMock()
+        queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
+        return queen
+
+    async def test_architect_keyword_triggers(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("architect a microservices system")
+        self.assertEqual(result, "architect")
+
+    async def test_blueprint_keyword_triggers(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("create a blueprint for the new API")
+        self.assertEqual(result, "architect")
+
+    async def test_infrastructure_keyword_triggers(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("infrastructure planning for cloud")
+        self.assertEqual(result, "architect")
+
+    async def test_roadmap_keyword_triggers(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("roadmap for Q3 features")
+        self.assertEqual(result, "architect")
+
+    async def test_framework_keyword_triggers(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("design a framework for testing")
+        self.assertEqual(result, "architect")
+
+    async def test_simple_task_not_architect(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("explain what an API is")
+        self.assertEqual(result, "simple")
+
+    async def test_complex_task_not_architect(self):
+        queen = await self._make_queen()
+        result = await queen._assess_complexity("research and analyze AI impact on economy")
+        self.assertEqual(result, "complex")
+
+    async def test_architect_from_history(self):
+        queen = await self._make_queen()
+        queen._task_history.append({
+            "task": "architect a payment system",
+            "complexity": "architect",
+            "exit_code": 0, "ts": 0,
+        })
+        result = await queen._assess_complexity("architect a payment gateway")
+        self.assertEqual(result, "architect")
+
+
+class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
+    """Test _handle_architect flow."""
+
+    async def _make_queen(self):
+        queen = QueenAgent()
+        queen._core = AsyncMock()
+        queen._core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
+        queen.llm = MagicMock()
+        queen.ask = AsyncMock(return_value='{"complexity": "architect"}')
+        return queen
+
+    async def test_architect_flow_spawn_plan_execute(self):
+        queen = await self._make_queen()
+
+        spawn_calls = []
+
+        async def mock_spawn(**kwargs):
+            spawn_calls.append(kwargs)
+            return 100 + len(spawn_calls)
+
+        execute_results = [
+            # Architect result (plan)
+            MagicMock(
+                output='{"groups": [{"name": "g1", "subtasks": ["do stuff"]}]}',
+                exit_code=0, metadata={}, artifacts={},
+            ),
+            # Lead result
+            MagicMock(
+                output="Final result", exit_code=0,
+                metadata={"groups_count": "1"}, artifacts={},
+            ),
+        ]
+        execute_call_count = [0]
+
+        async def mock_execute_on(pid, description, params, **kwargs):
+            idx = execute_call_count[0]
+            execute_call_count[0] += 1
+            return execute_results[idx]
+
+        ctx = _mock_ctx()
+        ctx.spawn = mock_spawn
+        ctx.execute_on = mock_execute_on
+
+        result = await queen._handle_architect("architect a new system", ctx)
+
+        # Should have spawned architect (task) + lead
+        self.assertEqual(len(spawn_calls), 2)
+        self.assertEqual(spawn_calls[0]["role"], "task")  # architect
+        self.assertEqual(spawn_calls[0]["cognitive_tier"], "strategic")
+        self.assertEqual(spawn_calls[1]["role"], "lead")  # lead
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.metadata["strategy"], "architect")
+
+    async def test_architect_failure_falls_back_to_complex(self):
+        queen = await self._make_queen()
+
+        spawn_count = [0]
+
+        async def mock_spawn(**kwargs):
+            spawn_count[0] += 1
+            return 100 + spawn_count[0]
+
+        call_count = [0]
+
+        async def mock_execute_on(pid, description, params, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("architect crashed")
+            # Fallback complex path: lead execution
+            return MagicMock(
+                output="Fallback result", exit_code=0,
+                metadata={}, artifacts={},
+            )
+
+        ctx = _mock_ctx()
+        ctx.spawn = mock_spawn
+        ctx.execute_on = mock_execute_on
+
+        result = await queen._handle_architect("architect a system", ctx)
+
+        # Should still succeed via complex fallback
+        self.assertEqual(result.exit_code, 0)
+        # Spawned: architect (failed) + lead (fallback complex)
+        self.assertGreaterEqual(spawn_count[0], 2)
+
+    async def test_architect_lead_passes_plan(self):
+        """Verify lead receives the plan in params."""
+        queen = await self._make_queen()
+
+        async def mock_spawn(**kwargs):
+            return 42
+
+        execute_params_log = []
+
+        async def mock_execute_on(pid, description, params, **kwargs):
+            execute_params_log.append(params)
+            return MagicMock(
+                output="result", exit_code=0, metadata={}, artifacts={},
+            )
+
+        ctx = _mock_ctx()
+        ctx.spawn = mock_spawn
+        ctx.execute_on = mock_execute_on
+
+        await queen._handle_architect("architect a system", ctx)
+
+        # Second execute_on (to lead) should have "plan" param
+        self.assertGreaterEqual(len(execute_params_log), 2)
+        lead_params = execute_params_log[1]
+        self.assertIn("plan", lead_params)
 
 
 # --- Shutdown Tests ---

@@ -1,7 +1,7 @@
 # Plan 002: System Health & Queen Evolution
 
 **Based on:** `docs/AGENT-ROLES.md`, roadmap sections 8.2-8.5
-**Status:** in progress
+**Status:** DONE (all 5 phases complete)
 **Depends on:** Plan 001 (done)
 
 ---
@@ -281,6 +281,22 @@ class ArchitectAgent(LLMAgent):
 
 **Risk:** high. New role, new lifecycle pattern, opus-tier LLM costs.
 Start with simplified version (architect = task, no sleep/wake).
+
+**Status:** DONE
+
+**Implementation notes:**
+- `architect.py` (NEW): ArchitectAgent produces structured JSON plans via LLM
+- Plan format: `{analysis, approach, groups: [{name, subtasks, rationale}], risks, acceptance_criteria}`
+- Validates plan JSON, fallback to single-subtask plan if LLM returns bad JSON
+- Stores plan as `architect/plan` artifact for reference
+- Queen: `_ARCHITECT_KEYWORDS` frozenset triggers architect path
+- Queen `_handle_architect()`: spawn architect (role=task) -> get plan -> acquire lead -> execute with plan
+- Architect failure gracefully falls back to standard complex path
+- Orchestrator: checks `task.params["plan"]` — if present, uses Architect's groups, skips LLM decomposition
+- `_assess_complexity_llm` updated to support "architect" as third option
+- Simplified v1: architect is role=task, auto-exits (no sleep/wake)
+- Exported `ArchitectAgent` from `__init__.py`
+- 8 architect tests + 11 queen architect tests + 5 orchestrator plan tests = 24 new tests
 
 ---
 

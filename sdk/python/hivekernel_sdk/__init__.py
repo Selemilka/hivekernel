@@ -1,4 +1,5 @@
 from .agent import HiveAgent
+from .architect import ArchitectAgent
 from .llm import LLMClient
 from .llm_agent import LLMAgent
 from .maid import MaidAgent
@@ -10,6 +11,7 @@ from .types import TaskResult, Task, Message, MessageAck, AgentConfig
 
 __all__ = [
     "HiveAgent",
+    "ArchitectAgent",
     "LLMClient",
     "LLMAgent",
     "MaidAgent",

@@ -3,14 +3,16 @@
 Receives tasks from King/dashboard, assesses complexity, decides strategy:
 - Simple task -> spawn task-role worker, single LLM call, collect result
 - Complex task -> spawn lead (orchestrator), full decomposition pipeline
+- Architect task -> spawn architect for strategic plan, then lead executes
 
 Stays alive between tasks (daemon role). Manages child lifecycle.
 
-Phase 3 features:
+Features:
 - Lead reuse: keeps orchestrator leads alive between tasks (saves ~5s spawn)
 - Heuristic complexity: keyword/length check before LLM (saves tokens)
 - Task history: remembers recent results to inform routing
 - Maid integration: reads health report before complex tasks
+- Architect routing: strategic planner for design/architecture tasks (Phase 5)
 
 Runtime image: hivekernel_sdk.queen:QueenAgent
 """
@@ -39,7 +41,13 @@ _SIMPLE_KEYWORDS = frozenset({
 _COMPLEX_KEYWORDS = frozenset({
     "research", "analyze", "compare", "investigate", "plan",
     "design", "implement", "evaluate", "review", "create",
-    "develop", "build", "architect", "optimize", "benchmark",
+    "develop", "build", "optimize", "benchmark",
+})
+
+# Architect keywords — trigger strategic planning path.
+_ARCHITECT_KEYWORDS = frozenset({
+    "architect", "architecture", "blueprint", "roadmap",
+    "infrastructure", "framework",
 })
 
 MAX_HISTORY = 20
@@ -64,6 +72,7 @@ class QueenAgent(LLMAgent):
         self._maid_pid: int = 0
         self._task_history: deque = deque(maxlen=MAX_HISTORY)
         self._reaper_task = None
+        self._max_workers: str = "3"
 
     async def on_init(self, config):
         """Spawn Maid daemon and lead reaper on startup (non-blocking)."""
@@ -143,6 +152,8 @@ class QueenAgent(LLMAgent):
         # 3. Execute based on complexity.
         if complexity == "simple":
             result = await self._handle_simple(description, ctx)
+        elif complexity == "architect":
+            result = await self._handle_architect(description, ctx)
         else:
             result = await self._handle_complex(description, ctx)
 
@@ -188,9 +199,13 @@ class QueenAgent(LLMAgent):
         # 2. Heuristic check: keywords + length.
         lower = description.lower()
         words = set(lower.split())
+        architect_hits = len(words & _ARCHITECT_KEYWORDS)
         simple_hits = len(words & _SIMPLE_KEYWORDS)
         complex_hits = len(words & _COMPLEX_KEYWORDS)
 
+        if architect_hits >= 1:
+            logger.info("Complexity heuristic: architect (architect keywords)")
+            return "architect"
         if len(description) < 80 and simple_hits > 0 and complex_hits == 0:
             logger.info("Complexity heuristic: simple (short + simple keywords)")
             return "simple"
@@ -205,12 +220,17 @@ class QueenAgent(LLMAgent):
         """LLM-based complexity assessment (fallback for ambiguous cases)."""
         try:
             response = await self.ask(
-                "You are a task complexity assessor. Determine if the following task "
-                "is SIMPLE (can be done in a single step by one agent) or COMPLEX "
-                "(needs decomposition into multiple subtasks with separate workers).\n\n"
+                "You are a task complexity assessor. Determine the execution "
+                "strategy for the following task.\n\n"
                 f"Task: {description}\n\n"
-                "Reply with ONLY a JSON object: {\"complexity\": \"simple\"} or "
-                "{\"complexity\": \"complex\"}. No other text.",
+                "Options:\n"
+                '- "simple": single step, one agent can handle it\n'
+                '- "complex": needs decomposition into multiple subtasks\n'
+                '- "architect": needs strategic planning/design before execution\n\n'
+                "Reply with ONLY a JSON object: "
+                "{\"complexity\": \"simple\"} or "
+                "{\"complexity\": \"complex\"} or "
+                "{\"complexity\": \"architect\"}. No other text.",
                 max_tokens=64,
                 temperature=0.0,
             )
@@ -220,7 +240,7 @@ class QueenAgent(LLMAgent):
                 text = "\n".join(l for l in lines if not l.strip().startswith("```"))
             data = json.loads(text)
             complexity = data.get("complexity", "complex")
-            if complexity in ("simple", "complex"):
+            if complexity in ("simple", "complex", "architect"):
                 return complexity
         except Exception as e:
             logger.warning("LLM complexity assessment failed: %s, defaulting to complex", e)
@@ -282,6 +302,74 @@ class QueenAgent(LLMAgent):
                      lead_pid, len(self._idle_leads))
 
     # --- Task Execution ---
+
+    async def _handle_architect(self, description: str, ctx: SyscallContext) -> TaskResult:
+        """Architect path: strategic plan -> lead execution."""
+        await ctx.report_progress("Spawning architect...", 15.0)
+        await ctx.log("info", "Architect strategy: spawning strategic planner")
+
+        # 1. Spawn Architect (task role, auto-exits after plan).
+        arch_pid = await ctx.spawn(
+            name="architect",
+            role="task",
+            cognitive_tier="strategic",
+            model="sonnet",
+            system_prompt=(
+                "You are a strategic architect. Analyze tasks thoroughly, "
+                "identify challenges, and produce detailed execution plans."
+            ),
+            runtime_image="hivekernel_sdk.architect:ArchitectAgent",
+            runtime_type="python",
+        )
+        await ctx.log("info", f"Architect spawned as PID {arch_pid}")
+
+        # 2. Get plan from Architect.
+        await ctx.report_progress("Architect designing plan...", 20.0)
+        try:
+            plan_result = await ctx.execute_on(
+                pid=arch_pid,
+                description=description,
+                params={"task": description, "max_workers": self._max_workers},
+                timeout_seconds=120,
+            )
+        except Exception as e:
+            await ctx.log("error", f"Architect failed: {e}, falling back to complex")
+            return await self._handle_complex(description, ctx)
+
+        plan_json = plan_result.output
+        await ctx.log("info", f"Architect plan received ({len(plan_json)} bytes)")
+
+        # 3. Acquire lead and execute with the Architect's plan.
+        await ctx.report_progress("Acquiring orchestrator...", 30.0)
+        lead_pid = await self._acquire_lead(ctx)
+        await ctx.report_progress("Lead executing plan...", 35.0)
+
+        try:
+            result = await ctx.execute_on(
+                pid=lead_pid,
+                description=description,
+                params={
+                    "task": description,
+                    "plan": plan_json,
+                    "max_workers": self._max_workers,
+                },
+                timeout_seconds=300,
+            )
+            await self._release_lead(lead_pid)
+            return TaskResult(
+                exit_code=result.exit_code,
+                output=result.output,
+                artifacts=result.artifacts,
+                metadata={**result.metadata, "strategy": "architect",
+                          "architect_pid": str(arch_pid)},
+            )
+        except Exception as e:
+            await ctx.log("error", f"Lead execution failed: {e}")
+            try:
+                await ctx.kill(lead_pid)
+            except Exception:
+                pass
+            return TaskResult(exit_code=1, output=f"Architect execution failed: {e}")
 
     async def _handle_simple(self, description: str, ctx: SyscallContext) -> TaskResult:
         """Simple path: spawn a task-role worker, execute, collect result."""

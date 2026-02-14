@@ -36,7 +36,17 @@ class OrchestratorAgent(LLMAgent):
         await ctx.report_progress("Analyzing task...", 5.0)
 
         # --- 1. Decompose + group subtasks ---
-        groups = await self._decompose_and_group(description, max_workers)
+        # Check for pre-defined plan from Architect (Phase 5).
+        plan_json = task.params.get("plan", "")
+        if plan_json:
+            groups = self._parse_groups(plan_json, max_workers)
+            if groups:
+                await ctx.log("info", f"Using Architect plan ({len(groups)} groups)")
+            else:
+                await ctx.log("warn", "Failed to parse Architect plan, falling back to LLM")
+                groups = await self._decompose_and_group(description, max_workers)
+        else:
+            groups = await self._decompose_and_group(description, max_workers)
 
         if not groups:
             return TaskResult(

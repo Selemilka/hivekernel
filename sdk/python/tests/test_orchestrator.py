@@ -394,6 +394,174 @@ class TestOrchestratorHandleTask(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.metadata["workers_reused"], "0")
 
 
+# --- Plan-based execution tests (Phase 5) ---
+
+
+class TestPlanBasedExecution(unittest.IsolatedAsyncioTestCase):
+    """Test orchestrator using Architect's plan instead of LLM decomposition."""
+
+    async def _setup_orch_with_plan(self, synthesis="Synthesized result."):
+        """Create orchestrator that will receive a plan param."""
+        orch = OrchestratorAgent()
+
+        # LLM should only be called for synthesis (not decomposition)
+        call_count = [0]
+
+        async def mock_ask(prompt, **kwargs):
+            call_count[0] += 1
+            return synthesis
+
+        orch.ask = mock_ask
+        orch.llm = MagicMock()
+        orch.llm.total_tokens = 100
+        orch._ask_call_count = call_count
+        return orch
+
+    def _make_ctx(self):
+        ctx = AsyncMock()
+        spawn_counter = [0]
+
+        async def mock_spawn(**kwargs):
+            spawn_counter[0] += 1
+            return 100 + spawn_counter[0]
+
+        ctx.spawn = mock_spawn
+        ctx.execute_on = AsyncMock(return_value=MagicMock(
+            output="result", exit_code=0,
+            metadata={"tokens_used": "50"}, artifacts={},
+        ))
+        return ctx
+
+    async def test_plan_param_skips_decomposition(self):
+        """When plan is provided, LLM is NOT called for decomposition."""
+        orch = await self._setup_orch_with_plan()
+
+        plan = json.dumps({
+            "groups": [{"name": "g1", "subtasks": ["do stuff"]}]
+        })
+        task = MagicMock()
+        task.params = {"task": "execute plan", "plan": plan}
+        task.description = "execute plan"
+
+        ctx = self._make_ctx()
+        await orch.handle_task(task, ctx)
+
+        # Only 1 LLM call (synthesis), not 2 (decomposition + synthesis)
+        self.assertEqual(orch._ask_call_count[0], 1)
+
+    async def test_plan_param_uses_groups_from_plan(self):
+        orch = await self._setup_orch_with_plan()
+
+        plan = json.dumps({
+            "analysis": "Strategic analysis",
+            "groups": [
+                {"name": "data", "subtasks": ["fetch data", "clean data"]},
+                {"name": "report", "subtasks": ["write report"]},
+            ],
+        })
+        task = MagicMock()
+        task.params = {"task": "run analysis", "plan": plan}
+        task.description = "run analysis"
+
+        execution_log = []
+        spawn_counter = [0]
+
+        async def mock_spawn(**kwargs):
+            spawn_counter[0] += 1
+            return 100 + spawn_counter[0]
+
+        async def mock_execute_on(pid, description, params, **kwargs):
+            execution_log.append((pid, params.get("subtask", description)))
+            return MagicMock(
+                output="ok", exit_code=0,
+                metadata={"tokens_used": "30"}, artifacts={},
+            )
+
+        ctx = AsyncMock()
+        ctx.spawn = mock_spawn
+        ctx.execute_on = mock_execute_on
+
+        result = await orch.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(len(execution_log), 3)  # 2 + 1 subtasks
+        self.assertEqual(result.metadata["groups_count"], "2")
+
+    async def test_whitespace_plan_falls_back_to_llm(self):
+        """Whitespace-only plan triggers LLM decomposition fallback."""
+        orch = OrchestratorAgent()
+
+        call_count = [0]
+
+        async def mock_ask(prompt, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # LLM decomposition (fallback)
+                return json.dumps({
+                    "groups": [{"name": "fallback", "subtasks": ["do it"]}]
+                })
+            return "synthesis"
+
+        orch.ask = mock_ask
+        orch.llm = MagicMock()
+        orch.llm.total_tokens = 100
+
+        task = MagicMock()
+        task.params = {"task": "test", "plan": "   "}
+        task.description = "test"
+
+        ctx = self._make_ctx()
+        result = await orch.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        # LLM was called for decomposition (fallback) + synthesis = 2 calls
+        self.assertEqual(call_count[0], 2)
+
+    async def test_invalid_plan_text_used_as_subtask(self):
+        """Non-JSON plan text is parsed as a single subtask (newlines fallback)."""
+        orch = await self._setup_orch_with_plan()
+
+        task = MagicMock()
+        task.params = {"task": "test", "plan": "just do the thing"}
+        task.description = "test"
+
+        ctx = self._make_ctx()
+        result = await orch.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        # Only 1 LLM call (synthesis) — plan text parsed via newlines fallback
+        self.assertEqual(orch._ask_call_count[0], 1)
+
+    async def test_empty_plan_uses_llm(self):
+        """Empty plan string should trigger normal LLM decomposition."""
+        orch = OrchestratorAgent()
+
+        call_count = [0]
+
+        async def mock_ask(prompt, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return json.dumps({
+                    "groups": [{"name": "normal", "subtasks": ["task A"]}]
+                })
+            return "synthesis"
+
+        orch.ask = mock_ask
+        orch.llm = MagicMock()
+        orch.llm.total_tokens = 100
+
+        task = MagicMock()
+        task.params = {"task": "test", "plan": ""}
+        task.description = "test"
+
+        ctx = self._make_ctx()
+        result = await orch.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        # Both decomposition and synthesis LLM calls
+        self.assertEqual(call_count[0], 2)
+
+
 # --- Worker tests ---
 
 

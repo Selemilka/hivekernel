@@ -121,6 +121,10 @@ class HiveAgent:
                 reason = _shutdown_reason(request.reason)
                 logger.info("Shutdown requested: %s", reason)
                 snapshot = await agent.on_shutdown(reason)
+                # Stop gRPC server so the process actually exits
+                # (without this, wait_for_termination blocks forever).
+                if agent._server is not None:
+                    asyncio.create_task(agent._server.stop(grace=2))
                 return agent_pb2.ShutdownResponse(
                     state_snapshot=snapshot or b"",
                 )

@@ -102,6 +102,8 @@ async def Shutdown(self, request, context):
 **Scope:** one line in `agent.py`. Should be done before Phase 2 (Maid will
 also be killed via StopRuntime and will hit the same timeout).
 
+**Status:** DONE
+
 ---
 
 ### Phase 2: Maid Daemon

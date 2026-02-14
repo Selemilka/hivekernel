@@ -1,6 +1,7 @@
 from .agent import HiveAgent
 from .llm import LLMClient
 from .llm_agent import LLMAgent
+from .maid import MaidAgent
 from .orchestrator import OrchestratorAgent
 from .queen import QueenAgent
 from .worker import WorkerAgent
@@ -11,6 +12,7 @@ __all__ = [
     "HiveAgent",
     "LLMClient",
     "LLMAgent",
+    "MaidAgent",
     "OrchestratorAgent",
     "QueenAgent",
     "WorkerAgent",

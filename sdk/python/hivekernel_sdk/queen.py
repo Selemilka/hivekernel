@@ -25,6 +25,22 @@ class QueenAgent(LLMAgent):
     def __init__(self):
         super().__init__()
         self._active_leads: dict[int, str] = {}  # pid -> task description
+        self._maid_pid: int = 0
+
+    async def on_init(self, config):
+        """Spawn Maid daemon on startup."""
+        await super().on_init(config)
+        try:
+            self._maid_pid = await self.core.spawn_child(
+                name="maid@local",
+                role="daemon",
+                cognitive_tier="operational",
+                runtime_image="hivekernel_sdk.maid:MaidAgent",
+                runtime_type="python",
+            )
+            logger.info("Maid daemon spawned as PID %d", self._maid_pid)
+        except Exception as e:
+            logger.warning("Failed to spawn Maid: %s", e)
 
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
         description = task.params.get("task", task.description)

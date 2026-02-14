@@ -2,6 +2,7 @@
 
 Spawned by Queen on startup. Runs periodic health checks:
 - Zombie scan: find zombie processes whose parents didn't reap
+- Orphan detection: find processes whose parent is dead/missing
 - Process count monitoring
 - Anomaly reporting to Queen via escalate syscall
 
@@ -109,7 +110,9 @@ class MaidAgent(HiveAgent):
                 "ts": time.time(),
                 "total": 0,
                 "zombie_count": 0,
+                "orphan_count": 0,
                 "zombies": [],
+                "orphans": [],
                 "anomalies": ["no core client"],
                 "processes": [],
             }
@@ -138,11 +141,31 @@ class MaidAgent(HiveAgent):
             anomalies.append(f"{len(zombies)} zombie(s): "
                              + ", ".join(f"PID {z['pid']} ({z['name']})" for z in zombies))
 
+        # Detect orphans: processes whose parent is dead/zombie/missing.
+        pid_states = {p["pid"]: p["state"] for p in processes}
+        orphans = []
+        for proc in processes:
+            ppid = proc["ppid"]
+            if ppid == 0:
+                continue  # King has no parent
+            if proc["state"] in (_STATE_ZOMBIE, _STATE_DEAD):
+                continue  # Dead/zombie processes aren't orphans, they're done
+            if ppid not in pid_states:
+                orphans.append(proc)  # Parent not found at all
+            elif pid_states[ppid] in (_STATE_ZOMBIE, _STATE_DEAD):
+                orphans.append(proc)  # Parent is zombie or dead
+
+        if orphans:
+            anomalies.append(f"{len(orphans)} orphan(s): "
+                             + ", ".join(f"PID {o['pid']} ({o['name']})" for o in orphans))
+
         return {
             "ts": time.time(),
             "total": len(processes),
             "zombie_count": len(zombies),
+            "orphan_count": len(orphans),
             "zombies": zombies,
+            "orphans": orphans,
             "anomalies": anomalies,
             "processes": processes,
         }
@@ -154,10 +177,14 @@ class MaidAgent(HiveAgent):
             f"Time: {time.strftime('%H:%M:%S')}",
             f"Total processes: {report['total']}",
             f"Zombies: {report['zombie_count']}",
+            f"Orphans: {report.get('orphan_count', 0)}",
         ]
         if report["zombies"]:
             for z in report["zombies"]:
                 lines.append(f"  ZOMBIE: PID {z['pid']} ({z['name']})")
+        if report.get("orphans"):
+            for o in report["orphans"]:
+                lines.append(f"  ORPHAN: PID {o['pid']} ({o['name']}, ppid={o['ppid']})")
         if report["anomalies"]:
             lines.append("Anomalies:")
             for a in report["anomalies"]:

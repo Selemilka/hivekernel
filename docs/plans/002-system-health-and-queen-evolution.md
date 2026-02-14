@@ -180,6 +180,18 @@ No persistent daemon needed for v1.
 
 **Risk:** medium. Lead reuse needs careful state tracking.
 
+**Status:** DONE
+
+**Implementation notes:**
+- `_idle_leads: list[tuple[int, float]]` — idle pool with FIFO reuse
+- `_acquire_lead()` verifies lead alive via `get_process_info()` before reuse
+- `_release_lead()` adds to pool on success; `_lead_reaper()` kills idle > 5min
+- Heuristic complexity: `_SIMPLE_KEYWORDS` / `_COMPLEX_KEYWORDS` frozensets
+- Task history: `deque(maxlen=20)` with Jaccard word similarity matching
+- Maid integration: reads `maid/health-report` artifact before complex tasks
+- `on_shutdown()` kills all idle leads, cancels reaper
+- 31 unit tests in `sdk/python/tests/test_queen.py`
+
 ---
 
 ### Phase 4: Worker Reuse Protocol

@@ -6,12 +6,20 @@ Receives tasks from King/dashboard, assesses complexity, decides strategy:
 
 Stays alive between tasks (daemon role). Manages child lifecycle.
 
+Phase 3 features:
+- Lead reuse: keeps orchestrator leads alive between tasks (saves ~5s spawn)
+- Heuristic complexity: keyword/length check before LLM (saves tokens)
+- Task history: remembers recent results to inform routing
+- Maid integration: reads health report before complex tasks
+
 Runtime image: hivekernel_sdk.queen:QueenAgent
 """
 
 import asyncio
 import json
 import logging
+import time
+from collections import deque
 
 from .llm_agent import LLMAgent
 from .syscall import SyscallContext
@@ -19,21 +27,66 @@ from .types import TaskResult
 
 logger = logging.getLogger("hivekernel.queen")
 
+# Lead reuse settings.
+LEAD_IDLE_TIMEOUT = 300  # 5 minutes
+LEAD_REAPER_INTERVAL = 60  # seconds between reaper checks
+
+# Complexity heuristic keywords.
+_SIMPLE_KEYWORDS = frozenset({
+    "translate", "summarize", "define", "explain", "convert",
+    "format", "count", "list", "describe", "what",
+})
+_COMPLEX_KEYWORDS = frozenset({
+    "research", "analyze", "compare", "investigate", "plan",
+    "design", "implement", "evaluate", "review", "create",
+    "develop", "build", "architect", "optimize", "benchmark",
+})
+
+MAX_HISTORY = 20
+SIMILARITY_THRESHOLD = 0.5
+
+
+def _word_similarity(a: str, b: str) -> float:
+    """Jaccard similarity between word sets of two strings."""
+    wa = set(a.lower().split())
+    wb = set(b.lower().split())
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / len(wa | wb)
+
 
 class QueenAgent(LLMAgent):
     """Local coordinator daemon. Receives tasks, decides execution strategy."""
 
     def __init__(self):
         super().__init__()
-        self._active_leads: dict[int, str] = {}  # pid -> task description
+        self._idle_leads: list[tuple[int, float]] = []  # (pid, idle_since)
         self._maid_pid: int = 0
+        self._task_history: deque = deque(maxlen=MAX_HISTORY)
+        self._reaper_task = None
 
     async def on_init(self, config):
-        """Spawn Maid daemon on startup (non-blocking)."""
+        """Spawn Maid daemon and lead reaper on startup (non-blocking)."""
         await super().on_init(config)
-        # Spawn Maid in background so on_init returns fast
-        # (spawn_child takes ~5s which would timeout the Init RPC).
         asyncio.create_task(self._spawn_maid())
+        self._reaper_task = asyncio.create_task(self._lead_reaper())
+
+    async def on_shutdown(self, reason):
+        """Kill idle leads and cancel reaper on shutdown."""
+        if self._reaper_task and not self._reaper_task.done():
+            self._reaper_task.cancel()
+            try:
+                await self._reaper_task
+            except asyncio.CancelledError:
+                pass
+        # Kill all idle leads.
+        for pid, _ in self._idle_leads:
+            try:
+                await self.core.kill_child(pid)
+            except Exception:
+                pass
+        self._idle_leads.clear()
+        return None
 
     async def _spawn_maid(self):
         """Background: spawn Maid health daemon as child."""
@@ -49,6 +102,26 @@ class QueenAgent(LLMAgent):
         except Exception as e:
             logger.warning("Failed to spawn Maid: %s", e)
 
+    async def _lead_reaper(self):
+        """Background: kill leads that have been idle too long."""
+        while True:
+            await asyncio.sleep(LEAD_REAPER_INTERVAL)
+            now = time.time()
+            still_idle = []
+            for pid, idle_since in self._idle_leads:
+                if now - idle_since > LEAD_IDLE_TIMEOUT:
+                    try:
+                        await self.core.kill_child(pid)
+                        logger.info("Reaped idle lead PID %d (idle %.0fs)",
+                                    pid, now - idle_since)
+                    except Exception:
+                        pass  # Already dead
+                else:
+                    still_idle.append((pid, idle_since))
+            self._idle_leads = still_idle
+
+    # --- Task Handling ---
+
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
         description = task.params.get("task", task.description)
         self._max_workers = task.params.get("max_workers", "3")
@@ -58,17 +131,30 @@ class QueenAgent(LLMAgent):
         await ctx.log("info", f"Queen received task: {description[:100]}")
         await ctx.report_progress("Assessing task complexity...", 5.0)
 
-        # 1. Assess complexity.
+        # 1. Check Maid health report before execution.
+        health_warning = await self._check_maid_health()
+        if health_warning:
+            await ctx.log("warn", f"Maid health: {health_warning}")
+
+        # 2. Assess complexity (history -> heuristics -> LLM).
         complexity = await self._assess_complexity(description)
         await ctx.log("info", f"Task complexity: {complexity}")
 
-        # 2. Execute based on complexity.
+        # 3. Execute based on complexity.
         if complexity == "simple":
             result = await self._handle_simple(description, ctx)
         else:
             result = await self._handle_complex(description, ctx)
 
-        # 3. Store result artifact.
+        # 4. Record in task history.
+        self._task_history.append({
+            "task": description,
+            "complexity": complexity,
+            "exit_code": result.exit_code,
+            "ts": time.time(),
+        })
+
+        # 5. Store result artifact.
         await ctx.report_progress("Storing result...", 95.0)
         safe_key = description.lower().replace(" ", "-")[:40]
         try:
@@ -88,8 +174,35 @@ class QueenAgent(LLMAgent):
         await ctx.log("info", f"Queen task done (exit={result.exit_code})")
         return result
 
+    # --- Complexity Assessment (Phase 3) ---
+
     async def _assess_complexity(self, description: str) -> str:
-        """Ask LLM whether task is simple or complex."""
+        """Three-tier assessment: history -> heuristics -> LLM."""
+        # 1. Check task history for similar past tasks.
+        for entry in self._task_history:
+            if _word_similarity(entry["task"], description) >= SIMILARITY_THRESHOLD:
+                logger.info("Complexity from history: %s (similar to '%s')",
+                            entry["complexity"], entry["task"][:50])
+                return entry["complexity"]
+
+        # 2. Heuristic check: keywords + length.
+        lower = description.lower()
+        words = set(lower.split())
+        simple_hits = len(words & _SIMPLE_KEYWORDS)
+        complex_hits = len(words & _COMPLEX_KEYWORDS)
+
+        if len(description) < 80 and simple_hits > 0 and complex_hits == 0:
+            logger.info("Complexity heuristic: simple (short + simple keywords)")
+            return "simple"
+        if len(description) > 200 or complex_hits >= 2:
+            logger.info("Complexity heuristic: complex (long or complex keywords)")
+            return "complex"
+
+        # 3. Ambiguous: fall back to LLM.
+        return await self._assess_complexity_llm(description)
+
+    async def _assess_complexity_llm(self, description: str) -> str:
+        """LLM-based complexity assessment (fallback for ambiguous cases)."""
         try:
             response = await self.ask(
                 "You are a task complexity assessor. Determine if the following task "
@@ -110,8 +223,65 @@ class QueenAgent(LLMAgent):
             if complexity in ("simple", "complex"):
                 return complexity
         except Exception as e:
-            logger.warning("Complexity assessment failed: %s, defaulting to complex", e)
+            logger.warning("LLM complexity assessment failed: %s, defaulting to complex", e)
         return "complex"
+
+    # --- Maid Integration (Phase 3) ---
+
+    async def _check_maid_health(self) -> str:
+        """Read latest Maid health report artifact. Returns warning or empty."""
+        if not self.core:
+            return ""
+        try:
+            artifact = await self.core.get_artifact(key="maid/health-report")
+            report = json.loads(artifact.content.decode("utf-8"))
+            if report.get("anomalies"):
+                return "; ".join(report["anomalies"])
+        except Exception:
+            pass  # No report yet or Maid not spawned
+        return ""
+
+    # --- Lead Management (Phase 3) ---
+
+    async def _acquire_lead(self, ctx: SyscallContext) -> int:
+        """Get a lead PID: reuse idle lead or spawn new one."""
+        while self._idle_leads:
+            pid, _ = self._idle_leads.pop(0)
+            try:
+                info = await self.core.get_process_info(pid)
+                if info.state == 1:  # STATE_RUNNING
+                    logger.info("Reusing idle lead PID %d", pid)
+                    await ctx.log("info", f"Reusing idle lead PID {pid}")
+                    return pid
+                logger.info("Idle lead PID %d not running (state=%d), skip",
+                            pid, info.state)
+            except Exception:
+                logger.info("Idle lead PID %d gone, skip", pid)
+
+        # No reusable lead: spawn new one.
+        lead_pid = await ctx.spawn(
+            name="queen-lead",
+            role="lead",
+            cognitive_tier="tactical",
+            model="sonnet",
+            system_prompt=(
+                "You are a task orchestrator. You decompose tasks, "
+                "delegate to workers, and synthesize results."
+            ),
+            runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
+            runtime_type="python",
+        )
+        logger.info("Spawned new lead PID %d", lead_pid)
+        await ctx.log("info", f"Spawned new lead PID {lead_pid}")
+        return lead_pid
+
+    async def _release_lead(self, lead_pid: int):
+        """Return a lead to the idle pool instead of killing it."""
+        self._idle_leads.append((lead_pid, time.time()))
+        logger.info("Lead PID %d returned to idle pool (%d idle)",
+                     lead_pid, len(self._idle_leads))
+
+    # --- Task Execution ---
 
     async def _handle_simple(self, description: str, ctx: SyscallContext) -> TaskResult:
         """Simple path: spawn a task-role worker, execute, collect result."""
@@ -140,7 +310,6 @@ class QueenAgent(LLMAgent):
                 params={"subtask": description},
                 timeout_seconds=120,
             )
-            # Worker auto-exits (role=task, Phase 1).
             return TaskResult(
                 exit_code=result.exit_code,
                 output=result.output,
@@ -149,7 +318,6 @@ class QueenAgent(LLMAgent):
             )
         except Exception as e:
             await ctx.log("error", f"Task worker failed: {e}")
-            # Try to kill worker if still alive.
             try:
                 await ctx.kill(worker_pid)
             except Exception:
@@ -157,24 +325,11 @@ class QueenAgent(LLMAgent):
             return TaskResult(exit_code=1, output=f"Task execution failed: {e}")
 
     async def _handle_complex(self, description: str, ctx: SyscallContext) -> TaskResult:
-        """Complex path: spawn lead (orchestrator), delegate, collect, cleanup."""
-        await ctx.report_progress("Spawning orchestrator...", 15.0)
-        await ctx.log("info", "Complex strategy: spawning orchestrator lead")
+        """Complex path: acquire lead (reuse or spawn), delegate, collect."""
+        await ctx.report_progress("Acquiring orchestrator...", 15.0)
+        await ctx.log("info", "Complex strategy: acquiring orchestrator lead")
 
-        lead_pid = await ctx.spawn(
-            name="queen-lead",
-            role="lead",
-            cognitive_tier="tactical",
-            model="sonnet",
-            system_prompt=(
-                "You are a task orchestrator. You decompose tasks, "
-                "delegate to workers, and synthesize results."
-            ),
-            runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
-            runtime_type="python",
-        )
-        self._active_leads[lead_pid] = description
-        await ctx.log("info", f"Orchestrator lead spawned: PID {lead_pid}")
+        lead_pid = await self._acquire_lead(ctx)
         await ctx.report_progress("Lead working on task...", 25.0)
 
         try:
@@ -184,20 +339,20 @@ class QueenAgent(LLMAgent):
                 params={"task": description, "max_workers": self._max_workers},
                 timeout_seconds=300,
             )
+            # Success: return lead to idle pool for reuse.
+            await self._release_lead(lead_pid)
             return TaskResult(
                 exit_code=result.exit_code,
                 output=result.output,
                 artifacts=result.artifacts,
-                metadata={**result.metadata, "strategy": "complex"},
+                metadata={**result.metadata, "strategy": "complex",
+                          "lead_pid": str(lead_pid)},
             )
         except Exception as e:
             await ctx.log("error", f"Orchestrator lead failed: {e}")
-            return TaskResult(exit_code=1, output=f"Task execution failed: {e}")
-        finally:
-            # Kill lead after task completes (Queen manages lead lifecycle).
-            self._active_leads.pop(lead_pid, None)
+            # Failure: kill lead (don't reuse broken state).
             try:
                 await ctx.kill(lead_pid)
-                await ctx.log("info", f"Lead PID {lead_pid} killed after task")
             except Exception:
                 pass
+            return TaskResult(exit_code=1, output=f"Task execution failed: {e}")

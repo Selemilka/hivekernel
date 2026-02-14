@@ -75,8 +75,8 @@ func (h *HealthMonitor) check() {
 		pid := rt.PID
 		lastSeen, ok := h.lastSeen[pid]
 		if !ok {
-			// First check — give it a grace period.
-			h.lastSeen[pid] = rt.ProcessInfo.StartedAt
+			// First check — give it a full grace period from now.
+			h.lastSeen[pid] = now
 			continue
 		}
 

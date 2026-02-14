@@ -1025,7 +1025,7 @@ type ProcessEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
 	TimestampMs   int64                  `protobuf:"varint,2,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // "spawned", "state_changed", "removed"
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // "spawned", "state_changed", "removed", "log"
 	Pid           uint64                 `protobuf:"varint,4,opt,name=pid,proto3" json:"pid,omitempty"`
 	Ppid          uint64                 `protobuf:"varint,5,opt,name=ppid,proto3" json:"ppid,omitempty"`
 	Name          string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
@@ -1035,6 +1035,8 @@ type ProcessEvent struct {
 	State         string                 `protobuf:"bytes,10,opt,name=state,proto3" json:"state,omitempty"`
 	OldState      string                 `protobuf:"bytes,11,opt,name=old_state,json=oldState,proto3" json:"old_state,omitempty"`
 	NewState      string                 `protobuf:"bytes,12,opt,name=new_state,json=newState,proto3" json:"new_state,omitempty"`
+	Level         string                 `protobuf:"bytes,13,opt,name=level,proto3" json:"level,omitempty"`
+	Message       string                 `protobuf:"bytes,14,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1149,6 +1151,20 @@ func (x *ProcessEvent) GetOldState() string {
 func (x *ProcessEvent) GetNewState() string {
 	if x != nil {
 		return x.NewState
+	}
+	return ""
+}
+
+func (x *ProcessEvent) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *ProcessEvent) GetMessage() string {
+	if x != nil {
+		return x.Message
 	}
 	return ""
 }
@@ -1284,7 +1300,7 @@ const file_core_proto_rawDesc = "" +
 	"\x13ExecuteTaskResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x124\n" +
 	"\x06result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\x06result\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x9f\x02\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xcf\x02\n" +
 	"\fProcessEvent\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12\x12\n" +
@@ -1298,7 +1314,9 @@ const file_core_proto_rawDesc = "" +
 	"\x05state\x18\n" +
 	" \x01(\tR\x05state\x12\x1b\n" +
 	"\told_state\x18\v \x01(\tR\boldState\x12\x1b\n" +
-	"\tnew_state\x18\f \x01(\tR\bnewState\"5\n" +
+	"\tnew_state\x18\f \x01(\tR\bnewState\x12\x14\n" +
+	"\x05level\x18\r \x01(\tR\x05level\x12\x18\n" +
+	"\amessage\x18\x0e \x01(\tR\amessage\"5\n" +
 	"\x16SubscribeEventsRequest\x12\x1b\n" +
 	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq2\xf9\n" +
 	"\n" +

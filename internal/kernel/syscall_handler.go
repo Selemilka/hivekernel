@@ -281,11 +281,31 @@ func (h *KernelSyscallHandler) handleEscalate(callID string, callerPID process.P
 }
 
 func (h *KernelSyscallHandler) handleLog(callID string, callerPID process.PID, req *pb.LogRequest) *pb.SyscallResult {
-	log.Printf("[agent:%d] [%s] %s", callerPID, req.Level, req.Message)
+	levelStr := "info"
+	switch req.Level {
+	case pb.LogLevel_LOG_DEBUG:
+		levelStr = "debug"
+	case pb.LogLevel_LOG_WARN:
+		levelStr = "warn"
+	case pb.LogLevel_LOG_ERROR:
+		levelStr = "error"
+	}
+	log.Printf("[agent:%d] [%s] %s", callerPID, levelStr, req.Message)
 
-	// If tokens_consumed metric, record in accounting (same as ReportMetric).
-	if req.Level == pb.LogLevel_LOG_INFO && req.Message != "" {
-		// Logging via syscall is just logging. Token accounting is via ReportMetric.
+	// Emit log event so dashboard can display it.
+	if el := h.king.EventLog(); el != nil {
+		// Look up process name for richer log context.
+		name := ""
+		if p, err := h.king.Registry().Get(callerPID); err == nil {
+			name = p.Name
+		}
+		el.Emit(process.ProcessEvent{
+			Type:    process.EventLogged,
+			PID:     callerPID,
+			Name:    name,
+			Level:   levelStr,
+			Message: req.Message,
+		})
 	}
 
 	return &pb.SyscallResult{

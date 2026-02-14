@@ -65,6 +65,10 @@ function requestRefresh() {
 }
 
 function applyDelta(delta) {
+    if (delta.action === 'log') {
+        appendLogEntry(delta);
+        return;
+    }
     if (!treeData) return;
     if (delta.action === 'add' && delta.node) {
         treeData.push(delta.node);
@@ -387,6 +391,181 @@ async function doExecute() {
     }
 }
 
+// ─── Logs ───
+
+const MAX_LOG_LINES = 200;
+
+function appendLogEntry(data) {
+    const container = document.getElementById('log-entries');
+    if (!container) return;
+
+    const ts = data.ts ? new Date(data.ts).toLocaleTimeString() : '';
+    const level = (data.level || 'info').toUpperCase();
+    const pid = data.pid || 0;
+    const name = data.name || '';
+    const msg = data.message || '';
+
+    const div = document.createElement('div');
+    div.className = `log-line log-${(data.level || 'info').toLowerCase()}`;
+    div.innerHTML =
+        `<span class="log-ts">${ts}</span>` +
+        `<span class="log-pid">PID ${pid}</span>` +
+        (name ? `<span class="log-name">${name}</span>` : '') +
+        `<span class="log-level">[${level}]</span> ` +
+        `<span class="log-msg">${escapeHtml(msg)}</span>`;
+
+    container.appendChild(div);
+
+    // Trim old entries.
+    while (container.children.length > MAX_LOG_LINES) {
+        container.removeChild(container.firstChild);
+    }
+
+    // Auto-scroll to bottom.
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function clearLogs() {
+    const container = document.getElementById('log-entries');
+    if (container) container.innerHTML = '';
+}
+
+function toggleLogPanel() {
+    const content = document.getElementById('log-content');
+    const toggle = document.getElementById('log-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'flex';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
+// ─── Run Task ───
+
+function openRunTaskModal() {
+    if (!selectedNode) return;
+    document.getElementById('rt-target-pid').textContent = selectedNode.pid;
+    document.getElementById('rt-task').value = '';
+    document.getElementById('rt-progress').style.display = 'none';
+    document.getElementById('rt-submit').disabled = false;
+    document.getElementById('run-task-modal').style.display = 'flex';
+    document.getElementById('rt-task').focus();
+}
+
+async function doRunTask() {
+    if (!selectedNode) return;
+    const parentPid = selectedNode.pid;
+    const task = document.getElementById('rt-task').value.trim();
+    if (!task) {
+        toast('error', 'Please describe a task');
+        return;
+    }
+
+    const model = document.getElementById('rt-model').value;
+    const maxWorkers = parseInt(document.getElementById('rt-workers').value);
+    const timeout = parseInt(document.getElementById('rt-timeout').value) || 300;
+
+    // Show progress.
+    document.getElementById('rt-submit').disabled = true;
+    document.getElementById('rt-progress').style.display = 'block';
+    document.getElementById('rt-progress-fill').style.width = '20%';
+    document.getElementById('rt-progress-text').textContent = 'Spawning orchestrator...';
+
+    // Animate progress bar.
+    let progressPct = 20;
+    const progressInterval = setInterval(() => {
+        if (progressPct < 90) {
+            progressPct += Math.random() * 3;
+            document.getElementById('rt-progress-fill').style.width = progressPct + '%';
+        }
+    }, 2000);
+
+    const phases = [
+        { at: 5000, text: 'Decomposing task...' },
+        { at: 15000, text: 'Spawning workers...' },
+        { at: 25000, text: 'Workers processing...' },
+        { at: 60000, text: 'Synthesizing results...' },
+    ];
+    const phaseTimers = phases.map(p =>
+        setTimeout(() => {
+            const el = document.getElementById('rt-progress-text');
+            if (el) el.textContent = p.text;
+        }, p.at)
+    );
+
+    try {
+        const resp = await fetch('/api/run-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                parent_pid: parentPid,
+                task: task,
+                model: model,
+                max_workers: maxWorkers,
+                timeout: timeout,
+            }),
+        });
+        const data = await resp.json();
+
+        clearInterval(progressInterval);
+        phaseTimers.forEach(t => clearTimeout(t));
+
+        if (data.ok) {
+            document.getElementById('rt-progress-fill').style.width = '100%';
+            document.getElementById('rt-progress-text').textContent = 'Done!';
+
+            // Show result panel.
+            showTaskResult(data.result, task);
+            toast('success', 'Task completed!');
+            requestRefresh();
+
+            setTimeout(() => closeModal('run-task-modal'), 1500);
+        } else {
+            document.getElementById('rt-progress-text').textContent = 'Failed: ' + data.error;
+            toast('error', 'Task failed: ' + data.error);
+        }
+    } catch (e) {
+        clearInterval(progressInterval);
+        phaseTimers.forEach(t => clearTimeout(t));
+        document.getElementById('rt-progress-text').textContent = 'Error: ' + e.message;
+        toast('error', 'Request error: ' + e.message);
+    }
+
+    document.getElementById('rt-submit').disabled = false;
+}
+
+function showTaskResult(result, taskDesc) {
+    const panel = document.getElementById('result-panel');
+    panel.style.display = 'block';
+
+    const tokens = result.artifacts.total_tokens || '?';
+    const subtasks = result.metadata.subtasks_count || '?';
+    document.getElementById('result-status').textContent =
+        `Task: "${taskDesc.slice(0, 60)}..." | ${subtasks} subtasks | ${tokens} tokens`;
+
+    document.getElementById('result-output').textContent = result.output;
+}
+
+function toggleResultPanel() {
+    const content = document.getElementById('result-content');
+    const toggle = document.getElementById('result-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
 // ─── Artifacts ───
 
 function toggleArtifacts() {
@@ -458,6 +637,14 @@ function ctxExecuteTask() {
     if (ctxNode) {
         selectedNode = ctxNode;
         openExecuteModal();
+    }
+}
+
+function ctxRunTask() {
+    document.getElementById('context-menu').style.display = 'none';
+    if (ctxNode) {
+        selectedNode = ctxNode;
+        openRunTaskModal();
     }
 }
 

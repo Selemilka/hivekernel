@@ -38,6 +38,11 @@ configs/*.local.yaml
 
 # Event logs
 /logs/
+**/logs/*.jsonl
+
+# Runtime artifacts
+kernel_stderr.log
+/tmp/
 
 # Windows DEVNULL artifact
 nul

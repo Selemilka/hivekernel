@@ -157,7 +157,7 @@ message ExecuteTaskResponse {
 message ProcessEvent {
   uint64 seq = 1;
   int64  timestamp_ms = 2;
-  string type = 3;       // "spawned", "state_changed", "removed"
+  string type = 3;       // "spawned", "state_changed", "removed", "log"
   uint64 pid = 4;
   uint64 ppid = 5;
   string name = 6;
@@ -167,6 +167,8 @@ message ProcessEvent {
   string state = 10;
   string old_state = 11;
   string new_state = 12;
+  string level = 13;
+  string message = 14;
 }
 
 message SubscribeEventsRequest {

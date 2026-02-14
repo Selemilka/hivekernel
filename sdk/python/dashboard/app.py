@@ -154,6 +154,35 @@ def apply_event(event) -> dict | None:
             parent["child_count"] = max(0, cc - 1)
         return {"action": "remove", "pid": event.pid}
 
+    elif event.type == "log":
+        name = event.name
+        if not name and event.pid in tree_cache:
+            name = tree_cache[event.pid].get("name", "")
+        return {
+            "action": "log",
+            "pid": event.pid,
+            "name": name,
+            "level": event.level,
+            "message": event.message,
+            "ts": event.timestamp_ms,
+        }
+
+    return None
+
+
+def make_lifecycle_log(event) -> dict | None:
+    """Generate a synthetic log entry for lifecycle events."""
+    ts = event.timestamp_ms
+    if event.type == "spawned":
+        return {"action": "log", "pid": event.pid, "name": event.name,
+                "level": "info", "message": f"Process spawned (role={event.role}, model={event.model})", "ts": ts}
+    elif event.type == "state_changed":
+        name = tree_cache.get(event.pid, {}).get("name", "")
+        return {"action": "log", "pid": event.pid, "name": name,
+                "level": "info", "message": f"State: {event.old_state} -> {event.new_state}", "ts": ts}
+    elif event.type == "removed":
+        return {"action": "log", "pid": event.pid, "name": "",
+                "level": "info", "message": "Process removed (reaped)", "ts": ts}
     return None
 
 
@@ -186,6 +215,11 @@ async def event_listener():
                 delta = apply_event(event)
                 if delta:
                     await broadcast_delta(delta)
+                # Also send lifecycle events as log entries.
+                if event.type in ("spawned", "state_changed", "removed"):
+                    log_delta = make_lifecycle_log(event)
+                    if log_delta:
+                        await broadcast_delta(log_delta)
         except grpc.aio.AioRpcError as e:
             print(f"[dashboard] event stream error: {e.code().name}: {e.details()}")
             await asyncio.sleep(2)
@@ -349,6 +383,74 @@ async def api_execute(pid: int, body: dict):
         return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
     except grpc.aio.AioRpcError as e:
         return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
+@app.post("/api/run-task")
+async def api_run_task(body: dict):
+    """Spawn an OrchestratorAgent and execute a task on it (all-in-one)."""
+    parent_pid = body.get("parent_pid", 1)
+    task_text = body.get("task", "")
+    model = body.get("model", "sonnet")
+    max_workers = body.get("max_workers", 3)
+    timeout = body.get("timeout", 300)
+
+    if not task_text.strip():
+        return JSONResponse({"ok": False, "error": "Task description is empty"}, status_code=400)
+
+    # 1. Spawn orchestrator.
+    try:
+        spawn_resp = await stub.SpawnChild(
+            agent_pb2.SpawnRequest(
+                name="orchestrator",
+                role=4,  # lead
+                cognitive_tier=1,  # tactical
+                model=model,
+                system_prompt="You are a task orchestrator. You decompose tasks, delegate to workers, and synthesize results.",
+                runtime_type=agent_pb2.RUNTIME_PYTHON,
+                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
+            ),
+            metadata=md(parent_pid),
+            timeout=30,
+        )
+        if not spawn_resp.success:
+            return JSONResponse({"ok": False, "error": f"Spawn failed: {spawn_resp.error}"}, status_code=400)
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": f"Spawn error: {e.details()}"}, status_code=500)
+
+    orch_pid = spawn_resp.child_pid
+
+    # 2. Wait for agent process to start.
+    await asyncio.sleep(2)
+
+    # 3. Execute task.
+    try:
+        exec_resp = await stub.ExecuteTask(
+            core_pb2.ExecuteTaskRequest(
+                target_pid=orch_pid,
+                description=task_text,
+                params={"task": task_text, "max_workers": str(max_workers)},
+                timeout_seconds=timeout,
+            ),
+            metadata=md(parent_pid),
+            timeout=timeout + 30,
+        )
+        if exec_resp.success:
+            result = {
+                "exit_code": exec_resp.result.exit_code,
+                "output": exec_resp.result.output,
+                "artifacts": dict(exec_resp.result.artifacts),
+                "metadata": dict(exec_resp.result.metadata),
+            }
+            return {"ok": True, "orchestrator_pid": orch_pid, "result": result}
+        return JSONResponse(
+            {"ok": False, "error": exec_resp.error, "orchestrator_pid": orch_pid},
+            status_code=400,
+        )
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse(
+            {"ok": False, "error": f"Execute error: {e.details()}", "orchestrator_pid": orch_pid},
+            status_code=500,
+        )
 
 
 @app.get("/api/artifacts")

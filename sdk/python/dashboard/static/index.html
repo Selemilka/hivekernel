@@ -51,10 +51,37 @@
                     <tr><td class="label">Runtime</td><td id="d-runtime"></td></tr>
                 </table>
                 <div id="detail-actions">
+                    <button id="btn-run-task" class="btn-primary" onclick="openRunTaskModal()">Run Task</button>
                     <button id="btn-spawn" onclick="openSpawnModal()">Spawn Child</button>
-                    <button id="btn-execute" onclick="openExecuteModal()">Execute Task</button>
+                    <button id="btn-execute" onclick="openExecuteModal()">Execute</button>
                     <button id="btn-kill" class="btn-danger" onclick="killSelected()">Kill</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Task Result panel -->
+        <div id="result-panel" style="display:none">
+            <div class="panel-header" onclick="toggleResultPanel()">
+                <h2>Task Result</h2>
+                <span id="result-toggle">-</span>
+            </div>
+            <div id="result-content">
+                <div id="result-status"></div>
+                <div id="result-output"></div>
+            </div>
+        </div>
+
+        <!-- Log panel -->
+        <div id="log-panel">
+            <div class="panel-header" onclick="toggleLogPanel()">
+                <h2>Logs</h2>
+                <span id="log-toggle">-</span>
+            </div>
+            <div id="log-content">
+                <div id="log-controls">
+                    <button onclick="clearLogs()" class="btn-secondary" style="padding:3px 8px;font-size:11px">Clear</button>
+                </div>
+                <div id="log-entries"></div>
             </div>
         </div>
 
@@ -151,11 +178,57 @@
     </div>
 </div>
 
+<!-- Run Task Modal -->
+<div id="run-task-modal" class="modal" style="display:none">
+    <div class="modal-content modal-wide">
+        <h2>Run Task on PID <span id="rt-target-pid"></span></h2>
+        <div class="form-group">
+            <label>Task Description</label>
+            <textarea id="rt-task" rows="5" placeholder="Describe what you want to accomplish..."></textarea>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex:1">
+                <label>Orchestrator Model</label>
+                <select id="rt-model">
+                    <option value="sonnet">Sonnet (recommended)</option>
+                    <option value="mini">Gemini Flash (fast)</option>
+                    <option value="haiku">Haiku (light)</option>
+                    <option value="opus">Opus (powerful)</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex:1">
+                <label>Max Workers</label>
+                <select id="rt-workers">
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex:1">
+                <label>Timeout (sec)</label>
+                <input type="number" id="rt-timeout" value="300">
+            </div>
+        </div>
+        <div id="rt-progress" style="display:none">
+            <div class="progress-bar">
+                <div id="rt-progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="rt-progress-text">Starting...</div>
+        </div>
+        <div class="modal-actions">
+            <button id="rt-submit" onclick="doRunTask()">Run</button>
+            <button class="btn-secondary" onclick="closeModal('run-task-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <!-- Context menu -->
 <div id="context-menu" style="display:none">
     <div class="ctx-item" onclick="ctxViewDetails()">View Details</div>
+    <div class="ctx-item ctx-primary" onclick="ctxRunTask()">Run Task</div>
     <div class="ctx-item" onclick="ctxSpawnChild()">Spawn Child</div>
-    <div class="ctx-item" onclick="ctxExecuteTask()">Execute Task</div>
+    <div class="ctx-item" onclick="ctxExecuteTask()">Execute Raw</div>
     <div class="ctx-separator"></div>
     <div class="ctx-item ctx-danger" onclick="ctxKill()">Kill Process</div>
 </div>

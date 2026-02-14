@@ -7,13 +7,29 @@ from .llm import LLMClient, MODEL_MAP
 from .types import AgentConfig
 
 
+def _load_dotenv():
+    """Load .env file from cwd into os.environ (if not already set)."""
+    for candidate in [".env", os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")]:
+        path = os.path.abspath(candidate)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, _, value = line.partition("=")
+                        os.environ.setdefault(key.strip(), value.strip())
+            return
+
+
 class LLMAgent(HiveAgent):
     """HiveAgent that auto-creates an LLMClient from AgentConfig.
 
     Subclass this instead of HiveAgent when your agent needs LLM access.
     Implement handle_task() and use self.ask() / self.chat() for LLM calls.
 
-    Requires OPENROUTER_API_KEY environment variable.
+    Requires OPENROUTER_API_KEY environment variable (or .env file in project root).
     """
 
     def __init__(self):
@@ -24,7 +40,10 @@ class LLMAgent(HiveAgent):
     async def on_init(self, config: AgentConfig) -> None:
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if not api_key:
-            raise RuntimeError("OPENROUTER_API_KEY not set")
+            _load_dotenv()
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not set (no .env file found)")
         model_id = MODEL_MAP.get(config.model, config.model) if config.model else ""
         self.llm = LLMClient(api_key, default_model=model_id)
         self._system_prompt = config.system_prompt

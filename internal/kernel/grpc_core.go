@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"unicode/utf8"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/ipc"
@@ -480,8 +481,13 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 		return &pb.ExecuteTaskResponse{Success: false, Error: fmt.Sprintf("no runtime for PID %d", req.TargetPid)}, nil
 	}
 
+	// Safely truncate description for task ID (preserve valid UTF-8).
+	descForID := req.Description
+	if utf8.RuneCountInString(descForID) > 20 {
+		descForID = string([]rune(descForID)[:20])
+	}
 	taskReq := &pb.TaskRequest{
-		TaskId:         fmt.Sprintf("ext-%d-%s", target.PID, req.Description[:min(len(req.Description), 20)]),
+		TaskId:         fmt.Sprintf("ext-%d-%s", target.PID, descForID),
 		Description:    req.Description,
 		Params:         req.Params,
 		TimeoutSeconds: uint32(req.TimeoutSeconds),
@@ -527,6 +533,8 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				State:       evt.State,
 				OldState:    evt.OldState,
 				NewState:    evt.NewState,
+				Level:       evt.Level,
+				Message:     evt.Message,
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err

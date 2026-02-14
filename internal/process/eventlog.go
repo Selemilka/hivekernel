@@ -17,6 +17,7 @@ const (
 	EventSpawned      EventType = "spawned"
 	EventStateChanged EventType = "state_changed"
 	EventRemoved      EventType = "removed"
+	EventLogged       EventType = "log"
 )
 
 // ProcessEvent represents a single mutation in the process registry.
@@ -33,6 +34,8 @@ type ProcessEvent struct {
 	State     string    `json:"state,omitempty"`
 	OldState  string    `json:"old_state,omitempty"`
 	NewState  string    `json:"new_state,omitempty"`
+	Level     string    `json:"level,omitempty"`
+	Message   string    `json:"message,omitempty"`
 }
 
 // EventLog is a sequenced, append-only log of process events.

@@ -269,11 +269,11 @@ class QueenAgent(LLMAgent):
             pid, _ = self._idle_leads.pop(0)
             try:
                 info = await self.core.get_process_info(pid)
-                if info.state == 1:  # STATE_RUNNING
+                if info.state in (0, 1):  # STATE_IDLE or STATE_RUNNING
                     logger.info("Reusing idle lead PID %d", pid)
                     await ctx.log("info", f"Reusing idle lead PID {pid}")
                     return pid
-                logger.info("Idle lead PID %d not running (state=%d), skip",
+                logger.info("Idle lead PID %d not alive (state=%d), skip",
                             pid, info.state)
             except Exception:
                 logger.info("Idle lead PID %d gone, skip", pid)
@@ -312,7 +312,7 @@ class QueenAgent(LLMAgent):
         arch_pid = await ctx.spawn(
             name="architect",
             role="task",
-            cognitive_tier="strategic",
+            cognitive_tier="tactical",
             model="sonnet",
             system_prompt=(
                 "You are a strategic architect. Analyze tasks thoroughly, "

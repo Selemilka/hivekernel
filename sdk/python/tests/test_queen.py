@@ -222,11 +222,25 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
         queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
         return queen
 
-    async def test_acquire_reuses_idle_lead(self):
+    async def test_acquire_reuses_running_lead(self):
         queen = await self._make_queen()
         queen._idle_leads = [(42, time.time())]
         queen._core.get_process_info = AsyncMock(
             return_value=_mock_process_info(42, state=1)
+        )
+        ctx = _mock_ctx()
+
+        pid = await queen._acquire_lead(ctx)
+        self.assertEqual(pid, 42)
+        self.assertEqual(len(queen._idle_leads), 0)
+        ctx.spawn.assert_not_called()
+
+    async def test_acquire_reuses_idle_state_lead(self):
+        """Lead in IDLE state (0) should be reused -- this is the common case."""
+        queen = await self._make_queen()
+        queen._idle_leads = [(42, time.time())]
+        queen._core.get_process_info = AsyncMock(
+            return_value=_mock_process_info(42, state=0)  # IDLE
         )
         ctx = _mock_ctx()
 
@@ -490,7 +504,7 @@ class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
         # Should have spawned architect (task) + lead
         self.assertEqual(len(spawn_calls), 2)
         self.assertEqual(spawn_calls[0]["role"], "task")  # architect
-        self.assertEqual(spawn_calls[0]["cognitive_tier"], "strategic")
+        self.assertEqual(spawn_calls[0]["cognitive_tier"], "tactical")
         self.assertEqual(spawn_calls[1]["role"], "lead")  # lead
 
         self.assertEqual(result.exit_code, 0)

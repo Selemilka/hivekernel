@@ -1,7 +1,7 @@
 # Plan 001: Role-Based Lifecycle & Live Queen
 
 **Based on:** `docs/AGENT-ROLES.md`
-**Status:** draft
+**Status:** DONE (commit 3c0bf5b)
 **Scope:** implement auto-exit for tasks, live Queen agent, dashboard -> Queen routing
 
 ---

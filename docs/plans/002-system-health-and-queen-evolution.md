@@ -148,6 +148,8 @@ No persistent daemon needed for v1.
 
 **Risk:** low. Independent agent, Queen integration is optional.
 
+**Status:** DONE (commit 0bef752)
+
 ---
 
 ### Phase 3: Queen Improvements

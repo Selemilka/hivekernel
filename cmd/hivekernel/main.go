@@ -61,6 +61,14 @@ func main() {
 		king.Signals().NotifyParent(pid, -1, "health: unreachable")
 	})
 
+	// Process exit watcher: instant death detection for auto-exit and crashes.
+	rtManager.OnProcessExit(func(pid process.PID, exitCode int) {
+		log.Printf("[runtime] PID %d exited (code %d), transitioning to zombie", pid, exitCode)
+		_ = king.Registry().SetState(pid, process.StateZombie)
+		king.Signals().NotifyParent(pid, exitCode, "process exited")
+		healthMon.Remove(pid)
+	})
+
 	// Set up graceful shutdown.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

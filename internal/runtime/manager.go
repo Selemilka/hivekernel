@@ -35,14 +35,16 @@ type AgentRuntime struct {
 	Cmd         *exec.Cmd            // OS process handle (nil for virtual processes)
 	Conn        *grpc.ClientConn     // gRPC client connection to agent
 	Client      pb.AgentServiceClient // stub for Init/Shutdown/Heartbeat/Execute
+	exitCh      chan struct{}         // closed when OS process exits (nil for virtual)
 }
 
 // Manager manages agent runtime processes (OS process spawn + gRPC connection).
 type Manager struct {
-	mu        sync.RWMutex
-	runtimes  map[process.PID]*AgentRuntime
-	coreAddr  string // core's gRPC address (agents connect back to this)
-	pythonBin string // path to python executable
+	mu            sync.RWMutex
+	runtimes      map[process.PID]*AgentRuntime
+	coreAddr      string // core's gRPC address (agents connect back to this)
+	pythonBin     string // path to python executable
+	onProcessExit func(pid process.PID, exitCode int) // called when OS process exits on its own
 }
 
 // NewManager creates a new runtime manager.
@@ -57,6 +59,12 @@ func NewManager(coreAddr string, pythonBin string) *Manager {
 		coreAddr:  coreAddr,
 		pythonBin: pythonBin,
 	}
+}
+
+// OnProcessExit sets a callback invoked when an agent OS process exits on its own
+// (auto-exit, crash, etc.) — NOT when StopRuntime() kills it explicitly.
+func (m *Manager) OnProcessExit(fn func(pid process.PID, exitCode int)) {
+	m.onProcessExit = fn
 }
 
 // StartRuntime launches an agent runtime for the given process.
@@ -191,7 +199,7 @@ func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRu
 	proc.RuntimeAddr = agentAddr
 	log.Printf("[runtime] PID %d (%s) initialized successfully", proc.PID, proc.Name)
 
-	return &AgentRuntime{
+	rt := &AgentRuntime{
 		PID:         proc.PID,
 		Type:        rtType,
 		Addr:        agentAddr,
@@ -199,10 +207,53 @@ func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRu
 		Cmd:         cmd,
 		Conn:        conn,
 		Client:      client,
-	}, nil
+		exitCh:      make(chan struct{}),
+	}
+
+	// Exit watcher: detect when the OS process dies on its own.
+	go m.watchProcessExit(rt)
+
+	return rt, nil
+}
+
+// watchProcessExit waits for cmd.Wait() and handles cleanup if the process
+// died on its own (not via StopRuntime).
+func (m *Manager) watchProcessExit(rt *AgentRuntime) {
+	err := rt.Cmd.Wait()
+	exitCode := 0
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		exitCode = exitErr.ExitCode()
+	}
+	close(rt.exitCh)
+
+	// Try to remove from runtimes map. If already removed (by StopRuntime),
+	// skip cleanup — StopRuntime handles it.
+	m.mu.Lock()
+	_, stillTracked := m.runtimes[rt.PID]
+	if stillTracked {
+		delete(m.runtimes, rt.PID)
+	}
+	m.mu.Unlock()
+
+	if !stillTracked {
+		return // StopRuntime already handled cleanup.
+	}
+
+	// Process died on its own — clean up and notify.
+	log.Printf("[runtime] PID %d (%s) process exited on its own (code %d)", rt.PID, rt.ProcessInfo.Name, exitCode)
+
+	if rt.Conn != nil {
+		rt.Conn.Close()
+	}
+
+	if m.onProcessExit != nil {
+		m.onProcessExit(rt.PID, exitCode)
+	}
 }
 
 // StopRuntime terminates an agent runtime.
+// The exit watcher goroutine will NOT call onProcessExit because we remove
+// the runtime from the map before the process exits.
 func (m *Manager) StopRuntime(pid process.PID) error {
 	m.mu.Lock()
 	rt, ok := m.runtimes[pid]
@@ -230,17 +281,14 @@ func (m *Manager) StopRuntime(pid process.PID) error {
 		cancel()
 	}
 
-	// Wait for process exit (5s timeout).
-	done := make(chan error, 1)
-	go func() { done <- rt.Cmd.Wait() }()
-
+	// Wait for process exit via exitCh (set by the exit watcher goroutine).
 	select {
-	case <-done:
+	case <-rt.exitCh:
 		// Process exited gracefully.
 	case <-time.After(5 * time.Second):
 		log.Printf("[runtime] PID %d did not exit in time, killing", pid)
 		_ = rt.Cmd.Process.Kill()
-		<-done // Reap.
+		<-rt.exitCh // Wait for exit watcher to finish.
 	}
 
 	// Close gRPC connection.

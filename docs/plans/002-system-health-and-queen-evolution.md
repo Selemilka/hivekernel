@@ -77,6 +77,31 @@ in HealthMonitor.check() for safety.
 
 **Risk:** low. Additive change, doesn't break existing flow.
 
+**Status:** DONE (commit d0c9bc2)
+
+---
+
+### Tech Debt (discovered during Phase 1)
+
+**Shutdown RPC doesn't stop the Python process.**
+
+`Shutdown` handler in `agent.py` calls `on_shutdown()` and returns a response,
+but never calls `server.stop()`. The Python process stays blocked on
+`server.wait_for_termination()` forever. Result: StopRuntime always hits the
+5s graceful timeout and force-kills non-task agents.
+
+**Fix:** In `agent.py` Shutdown handler, trigger server stop after on_shutdown:
+```python
+async def Shutdown(self, request, context):
+    snapshot = await agent.on_shutdown(reason)
+    if agent._server is not None:
+        asyncio.create_task(agent._server.stop(grace=2))
+    return ShutdownResponse(state_snapshot=snapshot or b"")
+```
+
+**Scope:** one line in `agent.py`. Should be done before Phase 2 (Maid will
+also be killed via StopRuntime and will hit the same timeout).
+
 ---
 
 ### Phase 2: Maid Daemon

@@ -65,6 +65,7 @@ async def run_agent(agent_spec: str, core_addr: str) -> None:
     port = server.add_insecure_port("[::]:0")
 
     await server.start()
+    agent._server = server  # For auto-exit support (task role)
     logger.info("Agent server started on port %d, core at %s", port, core_addr)
 
     # Signal to Go runtime manager that we are ready.

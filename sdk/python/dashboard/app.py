@@ -387,51 +387,29 @@ async def api_execute(pid: int, body: dict):
 
 @app.post("/api/run-task")
 async def api_run_task(body: dict):
-    """Spawn an OrchestratorAgent and execute a task on it (all-in-one)."""
-    parent_pid = body.get("parent_pid", 1)
+    """Delegate a task to Queen (the local coordinator daemon)."""
     task_text = body.get("task", "")
-    model = body.get("model", "sonnet")
-    max_workers = body.get("max_workers", 3)
+    max_workers = str(body.get("max_workers", 3))
     timeout = body.get("timeout", 300)
 
     if not task_text.strip():
         return JSONResponse({"ok": False, "error": "Task description is empty"}, status_code=400)
 
-    # 1. Spawn orchestrator.
-    try:
-        spawn_resp = await stub.SpawnChild(
-            agent_pb2.SpawnRequest(
-                name="orchestrator",
-                role=4,  # lead
-                cognitive_tier=1,  # tactical
-                model=model,
-                system_prompt="You are a task orchestrator. You decompose tasks, delegate to workers, and synthesize results.",
-                runtime_type=agent_pb2.RUNTIME_PYTHON,
-                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
-            ),
-            metadata=md(parent_pid),
-            timeout=30,
-        )
-        if not spawn_resp.success:
-            return JSONResponse({"ok": False, "error": f"Spawn failed: {spawn_resp.error}"}, status_code=400)
-    except grpc.aio.AioRpcError as e:
-        return JSONResponse({"ok": False, "error": f"Spawn error: {e.details()}"}, status_code=500)
+    # Find Queen PID: daemon child of King (PID 1) with name starting with "queen@".
+    queen_pid = _find_queen_pid()
+    if queen_pid is None:
+        return JSONResponse({"ok": False, "error": "Queen not found in process tree"}, status_code=503)
 
-    orch_pid = spawn_resp.child_pid
-
-    # 2. Wait for agent process to start.
-    await asyncio.sleep(2)
-
-    # 3. Execute task.
+    # Execute task on Queen — she decides the strategy (simple vs complex).
     try:
         exec_resp = await stub.ExecuteTask(
             core_pb2.ExecuteTaskRequest(
-                target_pid=orch_pid,
+                target_pid=queen_pid,
                 description=task_text,
-                params={"task": task_text, "max_workers": str(max_workers)},
+                params={"task": task_text, "max_workers": max_workers},
                 timeout_seconds=timeout,
             ),
-            metadata=md(parent_pid),
+            metadata=md(1),
             timeout=timeout + 30,
         )
         if exec_resp.success:
@@ -441,16 +419,24 @@ async def api_run_task(body: dict):
                 "artifacts": dict(exec_resp.result.artifacts),
                 "metadata": dict(exec_resp.result.metadata),
             }
-            return {"ok": True, "orchestrator_pid": orch_pid, "result": result}
+            return {"ok": True, "queen_pid": queen_pid, "result": result}
         return JSONResponse(
-            {"ok": False, "error": exec_resp.error, "orchestrator_pid": orch_pid},
+            {"ok": False, "error": exec_resp.error, "queen_pid": queen_pid},
             status_code=400,
         )
     except grpc.aio.AioRpcError as e:
         return JSONResponse(
-            {"ok": False, "error": f"Execute error: {e.details()}", "orchestrator_pid": orch_pid},
+            {"ok": False, "error": f"Execute error: {e.details()}", "queen_pid": queen_pid},
             status_code=500,
         )
+
+
+def _find_queen_pid() -> int | None:
+    """Find Queen's PID from tree_cache (daemon child of King named 'queen@...')."""
+    for pid, node in tree_cache.items():
+        if node.get("ppid") == 1 and node.get("role") == "daemon" and node.get("name", "").startswith("queen@"):
+            return pid
+    return None
 
 
 @app.get("/api/artifacts")

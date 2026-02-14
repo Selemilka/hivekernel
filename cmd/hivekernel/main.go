@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -85,10 +86,12 @@ func main() {
 		}
 	}()
 
-	// Demo: spawn virtual queen + worker to verify the pipeline.
+	// Spawn real Queen daemon (Python LLM agent).
 	go func() {
-		if err := demo(king, cfg); err != nil {
-			log.Printf("[demo] error: %v", err)
+		// Small delay to ensure gRPC server is fully ready.
+		time.Sleep(200 * time.Millisecond)
+		if err := spawnQueen(king, cfg); err != nil {
+			log.Printf("[startup] queen spawn error: %v", err)
 		}
 	}()
 
@@ -135,40 +138,24 @@ func listen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// demo spawns the Phase 0 scenario: king -> queen -> worker (virtual, no real Python).
-func demo(king *kernel.King, cfg kernel.Config) error {
-	// Spawn queen@vps1 under king (no RuntimeImage = virtual process).
+// spawnQueen starts a real Python QueenAgent daemon under PID 1.
+func spawnQueen(king *kernel.King, cfg kernel.Config) error {
 	queen, err := king.SpawnChild(process.SpawnRequest{
 		ParentPID:     king.PID(),
-		Name:          "queen@vps1",
+		Name:          "queen@" + cfg.NodeName,
 		Role:          process.RoleDaemon,
 		CognitiveTier: process.CogTactical,
 		Model:         "sonnet",
 		User:          "root",
 		Limits:        cfg.DefaultLimits,
+		RuntimeType:   "RUNTIME_PYTHON",
+		RuntimeImage:  "hivekernel_sdk.queen:QueenAgent",
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("spawn queen: %w", err)
 	}
 
-	// Spawn a worker under queen (no RuntimeImage = virtual process).
-	worker, err := king.SpawnChild(process.SpawnRequest{
-		ParentPID:     queen.PID,
-		Name:          "demo-worker",
-		Role:          process.RoleWorker,
-		CognitiveTier: process.CogTactical,
-		Model:         "sonnet",
-		Limits:        cfg.DefaultLimits,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Print the process table.
 	king.PrintProcessTable()
-
-	log.Printf("[demo] scenario ready: king(PID %d) -> queen(PID %d) -> worker(PID %d)",
-		king.PID(), queen.PID, worker.PID)
-
+	log.Printf("[startup] Queen spawned as PID %d (real Python agent)", queen.PID)
 	return nil
 }

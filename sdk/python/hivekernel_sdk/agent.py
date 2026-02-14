@@ -35,6 +35,7 @@ class HiveAgent:
         self._role: str = ""
         self._config: AgentConfig = AgentConfig()
         self._core: CoreClient | None = None
+        self._server = None  # Set by runner for auto-exit support
 
     # --- Properties (read-only) ---
 
@@ -230,6 +231,16 @@ class HiveAgent:
                 await runner_task
                 await writer_task
                 reader_task.cancel()
+
+                # Auto-exit for one-shot task role.
+                if agent._role == "task" and agent._server is not None:
+                    logger.info("Task role completed, scheduling auto-exit (PID %d)", agent._pid)
+
+                    async def _auto_exit():
+                        await asyncio.sleep(0.5)  # Let final PROGRESS message flush
+                        await agent._server.stop(grace=2)
+
+                    asyncio.create_task(_auto_exit())
 
         return Servicer()
 

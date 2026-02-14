@@ -6,6 +6,7 @@ delegates subtasks, collects results, synthesizes a final report.
 Runtime image: hivekernel_sdk.orchestrator:OrchestratorAgent
 """
 
+import asyncio
 import json
 
 from .llm_agent import LLMAgent
@@ -159,11 +160,15 @@ class OrchestratorAgent(LLMAgent):
         )
 
         # --- 6. Cleanup workers ---
-        for wpid in worker_pids:
+        # Workers are role=task and auto-exit after execute_on completes.
+        # Kill any that might still be alive (safety net), in parallel.
+        async def _kill_safe(wpid):
             try:
                 await ctx.kill(wpid)
             except Exception:
-                pass
+                pass  # Already exited (expected for task role)
+
+        await asyncio.gather(*[_kill_safe(wpid) for wpid in worker_pids])
 
         await ctx.log("info", f"Orchestrator done. {len(results)} subtasks, "
                        f"{self.llm.total_tokens} tokens total")

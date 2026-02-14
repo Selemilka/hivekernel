@@ -200,7 +200,9 @@ python sdk/python/dashboard/app.py
 ```
 
 Open http://localhost:8080 in your browser. Features:
-- **Live process tree** (D3.js) with auto-refresh via WebSocket
+- **Live process tree** (D3.js) with real-time delta updates via event stream
+- **Event sourcing** — dashboard subscribes to kernel's `SubscribeEvents` gRPC stream, no polling
+- **Disk persistence** — all events logged to `logs/events-*.jsonl` for post-mortem analysis
 - **Click** a node to view details, **right-click** for context menu
 - **Spawn/Kill/Execute** agents from the detail panel
 - **Artifacts panel** to inspect shared memory

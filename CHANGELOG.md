@@ -257,3 +257,29 @@
 ### Verified
 - Full pipeline tested: lead spawns workers, real LLM calls, ~2000 tokens total
 - Dashboard shows agents spawning, working, entering zombie state in real-time
+
+---
+
+## Event Sourcing + Disk Persistence (completed)
+
+**Goal:** Replace dashboard polling with event-driven updates. Add sequenced event log with disk persistence and gRPC streaming subscription.
+
+### Go Core
+
+- `internal/process/eventlog.go` — **NEW**: `ProcessEvent` type (seq, timestamp, type, PID, state fields). `EventLog` with ring buffer (configurable capacity), atomic sequence numbers, JSONL disk persistence, fan-out to live subscribers. `Emit()`, `Since()`, `SubscribeSince()` (atomic replay + live with no gap), `Unsubscribe()`, `Close()`
+- `internal/process/registry.go` — Hooked `Register()`, `SetState()`, `Remove()` to emit events. `SetState()` refactored to inline state mutation (captures old state, skips event on same-state). Added `eventLog` field + `SetEventLog()` setter
+- `api/proto/core.proto` — Added `ProcessEvent` message (12 fields), `SubscribeEventsRequest`, `SubscribeEvents` streaming RPC to `CoreService`
+- `internal/kernel/grpc_core.go` — Implemented `SubscribeEvents()`: subscribes to EventLog with replay-from-seq, streams events to gRPC client with context cancellation support
+- `internal/kernel/king.go` — Creates `EventLog` on startup (logs to `logs/events-{timestamp}.jsonl`), wires to Registry via `SetEventLog()`, exposes `EventLog()` accessor
+
+### Python SDK
+
+- `sdk/python/hivekernel_sdk/core_pb2*.py` — Regenerated with `ProcessEvent` + `SubscribeEventsRequest` + `SubscribeEvents` RPC
+
+### Dashboard
+
+- `sdk/python/dashboard/app.py` — Replaced polling `ws_broadcaster()` with `event_listener()`: subscribes to `SubscribeEvents` gRPC stream, maintains `tree_cache` dict, applies deltas in real-time, pushes `{"type":"delta"}` to WS clients. Added `safety_resync()` every 30s as drift detector. WS connect serves tree from cache (no gRPC call). Full resync on stream disconnect/reconnect
+- `sdk/python/dashboard/static/app.js` — Added `applyDelta()` handler for `delta` WS messages. Supports `add` (new node), `update` (state change), `remove` (process reaped). Tree re-renders on each delta
+
+### Tests: 243 passing (+8 new)
+- EventLog: emit+since, subscribe replay+live (no gap), ring buffer trim, disk persistence (JSONL read-back), registry hooks (spawned/state_changed/removed events), no event on same state, concurrent emit+subscribe

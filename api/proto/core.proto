@@ -36,6 +36,9 @@ service CoreService {
 
   // Task execution
   rpc ExecuteTask(ExecuteTaskRequest) returns (ExecuteTaskResponse);
+
+  // Event sourcing
+  rpc SubscribeEvents(SubscribeEventsRequest) returns (stream ProcessEvent);
 }
 
 // ─── Process management ───
@@ -147,4 +150,25 @@ message ExecuteTaskResponse {
   bool success = 1;
   hivekernel.agent.TaskResult result = 2;
   string error = 3;
+}
+
+// ─── Event sourcing ───
+
+message ProcessEvent {
+  uint64 seq = 1;
+  int64  timestamp_ms = 2;
+  string type = 3;       // "spawned", "state_changed", "removed"
+  uint64 pid = 4;
+  uint64 ppid = 5;
+  string name = 6;
+  string role = 7;
+  string tier = 8;
+  string model = 9;
+  string state = 10;
+  string old_state = 11;
+  string new_state = 12;
+}
+
+message SubscribeEventsRequest {
+  uint64 since_seq = 1;  // 0 = from now, >0 = replay from seq
 }

@@ -43,6 +43,8 @@ function connectWS() {
             renderTree();
         } else if (msg.type === 'tree' && !msg.data.ok) {
             setStatus(false, msg.data.error);
+        } else if (msg.type === 'delta') {
+            applyDelta(msg.data);
         }
     };
 
@@ -60,6 +62,21 @@ function requestRefresh() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'refresh' }));
     }
+}
+
+function applyDelta(delta) {
+    if (!treeData) return;
+    if (delta.action === 'add' && delta.node) {
+        treeData.push(delta.node);
+    } else if (delta.action === 'update') {
+        const n = treeData.find(n => n.pid === delta.pid);
+        if (n) {
+            if (delta.state !== undefined) n.state = delta.state;
+        }
+    } else if (delta.action === 'remove') {
+        treeData = treeData.filter(n => n.pid !== delta.pid);
+    }
+    renderTree();
 }
 
 function setStatus(connected, detail) {

@@ -35,3 +35,9 @@ uv.lock
 # Configs with secrets
 configs/*.local.yaml
 .env
+
+# Event logs
+/logs/
+
+# Windows DEVNULL artifact
+nul

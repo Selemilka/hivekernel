@@ -495,3 +495,44 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 
 	return &pb.ExecuteTaskResponse{Success: true, Result: result}, nil
 }
+
+// --- Event sourcing ---
+
+func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc.ServerStreamingServer[pb.ProcessEvent]) error {
+	el := s.king.EventLog()
+	if el == nil {
+		return status.Error(codes.Unavailable, "event log not initialized")
+	}
+
+	ch := el.SubscribeSince(req.SinceSeq, 256)
+	defer el.Unsubscribe(ch)
+
+	ctx := stream.Context()
+	for {
+		select {
+		case evt, ok := <-ch:
+			if !ok {
+				return nil // channel closed (EventLog shutting down)
+			}
+			pbEvt := &pb.ProcessEvent{
+				Seq:         evt.Seq,
+				TimestampMs: evt.Timestamp.UnixMilli(),
+				Type:        string(evt.Type),
+				Pid:         evt.PID,
+				Ppid:        evt.PPID,
+				Name:        evt.Name,
+				Role:        evt.Role,
+				Tier:        evt.Tier,
+				Model:       evt.Model,
+				State:       evt.State,
+				OldState:    evt.OldState,
+				NewState:    evt.NewState,
+			}
+			if err := stream.Send(pbEvt); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}

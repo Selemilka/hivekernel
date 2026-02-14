@@ -34,6 +34,7 @@ const (
 	CoreService_Log_FullMethodName              = "/hivekernel.core.CoreService/Log"
 	CoreService_ReportMetric_FullMethodName     = "/hivekernel.core.CoreService/ReportMetric"
 	CoreService_ExecuteTask_FullMethodName      = "/hivekernel.core.CoreService/ExecuteTask"
+	CoreService_SubscribeEvents_FullMethodName  = "/hivekernel.core.CoreService/SubscribeEvents"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -62,6 +63,8 @@ type CoreServiceClient interface {
 	ReportMetric(ctx context.Context, in *MetricRequest, opts ...grpc.CallOption) (*MetricResponse, error)
 	// Task execution
 	ExecuteTask(ctx context.Context, in *ExecuteTaskRequest, opts ...grpc.CallOption) (*ExecuteTaskResponse, error)
+	// Event sourcing
+	SubscribeEvents(ctx context.Context, in *SubscribeEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ProcessEvent], error)
 }
 
 type coreServiceClient struct {
@@ -231,6 +234,25 @@ func (c *coreServiceClient) ExecuteTask(ctx context.Context, in *ExecuteTaskRequ
 	return out, nil
 }
 
+func (c *coreServiceClient) SubscribeEvents(ctx context.Context, in *SubscribeEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ProcessEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &CoreService_ServiceDesc.Streams[1], CoreService_SubscribeEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SubscribeEventsRequest, ProcessEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CoreService_SubscribeEventsClient = grpc.ServerStreamingClient[ProcessEvent]
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -257,6 +279,8 @@ type CoreServiceServer interface {
 	ReportMetric(context.Context, *MetricRequest) (*MetricResponse, error)
 	// Task execution
 	ExecuteTask(context.Context, *ExecuteTaskRequest) (*ExecuteTaskResponse, error)
+	// Event sourcing
+	SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[ProcessEvent]) error
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -311,6 +335,9 @@ func (UnimplementedCoreServiceServer) ReportMetric(context.Context, *MetricReque
 }
 func (UnimplementedCoreServiceServer) ExecuteTask(context.Context, *ExecuteTaskRequest) (*ExecuteTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteTask not implemented")
+}
+func (UnimplementedCoreServiceServer) SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[ProcessEvent]) error {
+	return status.Error(codes.Unimplemented, "method SubscribeEvents not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -596,6 +623,17 @@ func _CoreService_ExecuteTask_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_SubscribeEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CoreServiceServer).SubscribeEvents(m, &grpc.GenericServerStream[SubscribeEventsRequest, ProcessEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CoreService_SubscribeEventsServer = grpc.ServerStreamingServer[ProcessEvent]
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -664,6 +702,11 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Subscribe",
 			Handler:       _CoreService_Subscribe_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribeEvents",
+			Handler:       _CoreService_SubscribeEvents_Handler,
 			ServerStreams: true,
 		},
 	},

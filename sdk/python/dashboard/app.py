@@ -5,6 +5,9 @@ HiveKernel Web Dashboard
 FastAPI backend that bridges REST/WebSocket to the Go kernel via gRPC.
 Serves a D3.js-based process tree visualization at http://localhost:8080.
 
+Uses event sourcing: subscribes to kernel's SubscribeEvents stream for
+real-time delta updates instead of polling the full tree every 2s.
+
 Usage:
     pip install fastapi uvicorn
     python sdk/python/dashboard/app.py
@@ -41,6 +44,8 @@ STATE_NAMES = {0: "idle", 1: "running", 2: "blocked", 3: "sleeping", 4: "dead", 
 channel: grpc.aio.Channel = None
 stub: core_pb2_grpc.CoreServiceStub = None
 ws_clients: set[WebSocket] = set()
+tree_cache: dict[int, dict] = {}   # pid -> node dict
+last_seq: int = 0
 
 
 def md(pid: int):
@@ -72,8 +77,9 @@ def proc_to_dict(p) -> dict:
     }
 
 
-async def build_tree() -> dict:
-    """Fetch king + all children and return the full tree."""
+async def full_resync():
+    """Fetch full tree from kernel and rebuild tree_cache."""
+    global tree_cache
     try:
         king = await stub.GetProcessInfo(
             core_pb2.ProcessInfoRequest(pid=1), metadata=md(1), timeout=5,
@@ -81,31 +87,145 @@ async def build_tree() -> dict:
         children_resp = await stub.ListChildren(
             core_pb2.ListChildrenRequest(recursive=True), metadata=md(1), timeout=5,
         )
-        nodes = [proc_to_dict(king)]
+        new_cache = {}
+        king_dict = proc_to_dict(king)
+        new_cache[king_dict["pid"]] = king_dict
         for c in children_resp.children:
-            nodes.append(proc_to_dict(c))
-        return {"ok": True, "nodes": nodes}
-    except grpc.aio.AioRpcError as e:
-        return {"ok": False, "error": f"gRPC: {e.code().name}: {e.details()}"}
+            d = proc_to_dict(c)
+            new_cache[d["pid"]] = d
+        tree_cache = new_cache
+        return True
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        print(f"[dashboard] full_resync failed: {e}")
+        return False
 
 
-async def ws_broadcaster():
-    """Background task: poll kernel every 2s and push tree to all WS clients."""
+def get_tree_response() -> dict:
+    """Build tree response from cache."""
+    if not tree_cache:
+        return {"ok": False, "error": "no data yet"}
+    return {"ok": True, "nodes": list(tree_cache.values())}
+
+
+def apply_event(event) -> dict | None:
+    """Apply a ProcessEvent to tree_cache and return a delta dict for WS clients."""
+    global last_seq
+    last_seq = event.seq
+
+    if event.type == "spawned":
+        node = {
+            "pid": event.pid,
+            "ppid": event.ppid,
+            "name": event.name,
+            "user": "",
+            "role": event.role,
+            "role_id": 0,
+            "cognitive_tier": event.tier,
+            "tier_id": 0,
+            "model": event.model,
+            "state": event.state or "idle",
+            "state_id": 0,
+            "vps": "",
+            "tokens_consumed": 0,
+            "context_usage_percent": 0,
+            "child_count": 0,
+            "started_at": 0,
+            "current_task_id": "",
+            "runtime_addr": "",
+        }
+        tree_cache[event.pid] = node
+        # Update parent's child_count.
+        if event.ppid in tree_cache:
+            parent = tree_cache[event.ppid]
+            parent["child_count"] = parent.get("child_count", 0) + 1
+        return {"action": "add", "node": node}
+
+    elif event.type == "state_changed":
+        if event.pid in tree_cache:
+            node = tree_cache[event.pid]
+            node["state"] = event.new_state
+            return {"action": "update", "pid": event.pid, "state": event.new_state}
+
+    elif event.type == "removed":
+        removed = tree_cache.pop(event.pid, None)
+        if removed and removed.get("ppid") in tree_cache:
+            parent = tree_cache[removed["ppid"]]
+            cc = parent.get("child_count", 1)
+            parent["child_count"] = max(0, cc - 1)
+        return {"action": "remove", "pid": event.pid}
+
+    return None
+
+
+async def broadcast_delta(delta: dict):
+    """Send a delta message to all connected WS clients."""
+    global ws_clients
+    msg = json.dumps({"type": "delta", "data": delta})
+    dead = set()
+    for ws in ws_clients:
+        try:
+            await ws.send_text(msg)
+        except Exception:
+            dead.add(ws)
+    ws_clients -= dead
+
+
+async def event_listener():
+    """Subscribe to kernel event stream, apply deltas, push to WS clients."""
+    global last_seq
     while True:
-        await asyncio.sleep(2)
-        if not ws_clients:
+        try:
+            # Do a full resync to populate cache before subscribing.
+            await full_resync()
+            print(f"[dashboard] subscribing to events since seq {last_seq}")
+            stream = stub.SubscribeEvents(
+                core_pb2.SubscribeEventsRequest(since_seq=last_seq),
+                metadata=md(1),
+            )
+            async for event in stream:
+                delta = apply_event(event)
+                if delta:
+                    await broadcast_delta(delta)
+        except grpc.aio.AioRpcError as e:
+            print(f"[dashboard] event stream error: {e.code().name}: {e.details()}")
+            await asyncio.sleep(2)
+        except Exception as e:
+            print(f"[dashboard] event listener error: {e}")
+            await asyncio.sleep(2)
+
+
+async def safety_resync():
+    """Periodic full resync every 30s as safety net (compare vs gRPC truth)."""
+    global ws_clients
+    while True:
+        await asyncio.sleep(30)
+        if not tree_cache:
             continue
-        tree = await build_tree()
-        msg = json.dumps({"type": "tree", "data": tree})
-        dead = set()
-        for ws in ws_clients:
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                dead.add(ws)
-        ws_clients -= dead
+        try:
+            king = await stub.GetProcessInfo(
+                core_pb2.ProcessInfoRequest(pid=1), metadata=md(1), timeout=5,
+            )
+            children_resp = await stub.ListChildren(
+                core_pb2.ListChildrenRequest(recursive=True), metadata=md(1), timeout=5,
+            )
+            truth_pids = {1}
+            for c in children_resp.children:
+                truth_pids.add(c.pid)
+            cache_pids = set(tree_cache.keys())
+            if truth_pids != cache_pids:
+                print(f"[dashboard] DRIFT detected: cache={len(cache_pids)} truth={len(truth_pids)}, resyncing")
+                await full_resync()
+                # Push full tree to all clients.
+                msg = json.dumps({"type": "tree", "data": get_tree_response()})
+                dead = set()
+                for ws in ws_clients:
+                    try:
+                        await ws.send_text(msg)
+                    except Exception:
+                        dead.add(ws)
+                ws_clients -= dead
+        except Exception:
+            pass
 
 
 @asynccontextmanager
@@ -113,10 +233,12 @@ async def lifespan(app: FastAPI):
     global channel, stub
     channel = grpc.aio.insecure_channel(CORE_ADDR)
     stub = core_pb2_grpc.CoreServiceStub(channel)
-    task = asyncio.create_task(ws_broadcaster())
+    listener_task = asyncio.create_task(event_listener())
+    resync_task = asyncio.create_task(safety_resync())
     print(f"Dashboard connecting to kernel at {CORE_ADDR}")
     yield
-    task.cancel()
+    listener_task.cancel()
+    resync_task.cancel()
     await channel.close()
 
 
@@ -127,7 +249,11 @@ app = FastAPI(title="HiveKernel Dashboard", lifespan=lifespan)
 
 @app.get("/api/tree")
 async def api_tree():
-    return await build_tree()
+    if tree_cache:
+        return get_tree_response()
+    # Fallback: fetch directly.
+    await full_resync()
+    return get_tree_response()
 
 
 @app.get("/api/process/{pid}")
@@ -253,8 +379,12 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     ws_clients.add(ws)
     try:
-        # Send initial tree.
-        tree = await build_tree()
+        # Send initial tree from cache.
+        if tree_cache:
+            tree = get_tree_response()
+        else:
+            await full_resync()
+            tree = get_tree_response()
         await ws.send_text(json.dumps({"type": "tree", "data": tree}))
         # Listen for client messages.
         while True:
@@ -262,7 +392,8 @@ async def websocket_endpoint(ws: WebSocket):
             try:
                 msg = json.loads(data)
                 if msg.get("type") == "refresh":
-                    tree = await build_tree()
+                    await full_resync()
+                    tree = get_tree_response()
                     await ws.send_text(json.dumps({"type": "tree", "data": tree}))
             except json.JSONDecodeError:
                 pass

@@ -14,6 +14,12 @@ type Registry struct {
 	processes map[PID]*Process
 	byName    map[string]PID // name → PID for quick lookup
 	nextPID   atomic.Uint64
+	eventLog  *EventLog
+}
+
+// SetEventLog wires an EventLog so that Register/SetState/Remove emit events.
+func (r *Registry) SetEventLog(el *EventLog) {
+	r.eventLog = el
 }
 
 // NewRegistry creates an empty process registry.
@@ -47,6 +53,20 @@ func (r *Registry) Register(p *Process) (PID, error) {
 	if p.Name != "" {
 		r.byName[p.Name] = pid
 	}
+
+	if r.eventLog != nil {
+		r.eventLog.Emit(ProcessEvent{
+			Type:  EventSpawned,
+			PID:   pid,
+			PPID:  p.PPID,
+			Name:  p.Name,
+			Role:  p.Role.String(),
+			Tier:  p.CognitiveTier.String(),
+			Model: p.Model,
+			State: p.State.String(),
+		})
+	}
+
 	return pid, nil
 }
 
@@ -93,11 +113,29 @@ func (r *Registry) Update(pid PID, fn func(*Process)) error {
 	return nil
 }
 
-// SetState is a convenience wrapper for updating process state.
+// SetState updates a process's state and emits a state_changed event if the
+// state actually changed.
 func (r *Registry) SetState(pid PID, state ProcessState) error {
-	return r.Update(pid, func(p *Process) {
-		p.State = state
-	})
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.processes[pid]
+	if !ok {
+		return fmt.Errorf("process %d not found", pid)
+	}
+	oldState := p.State
+	p.State = state
+	p.UpdatedAt = time.Now()
+
+	if r.eventLog != nil && oldState != state {
+		r.eventLog.Emit(ProcessEvent{
+			Type:     EventStateChanged,
+			PID:      pid,
+			OldState: oldState.String(),
+			NewState: state.String(),
+		})
+	}
+	return nil
 }
 
 // Remove deletes a process from the table.
@@ -113,6 +151,14 @@ func (r *Registry) Remove(pid PID) error {
 		delete(r.byName, p.Name)
 	}
 	delete(r.processes, pid)
+
+	if r.eventLog != nil {
+		r.eventLog.Emit(ProcessEvent{
+			Type: EventRemoved,
+			PID:  pid,
+		})
+	}
+
 	return nil
 }
 

@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/selemilka/hivekernel/internal/cluster"
 	"github.com/selemilka/hivekernel/internal/ipc"
@@ -53,6 +56,9 @@ type King struct {
 	// Phase 7: Runtime manager
 	rtManager *runtime.Manager
 
+	// Event sourcing
+	eventLog *process.EventLog
+
 	proc *process.Process // king's own process entry
 
 	mu     sync.RWMutex
@@ -63,6 +69,18 @@ type King struct {
 func New(cfg Config) (*King, error) {
 	registry := process.NewRegistry()
 	spawner := process.NewSpawner(registry)
+
+	// Create event log directory and event log.
+	logDir := "logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("create log dir: %w", err)
+	}
+	logPath := filepath.Join(logDir, fmt.Sprintf("events-%s.jsonl", time.Now().Format("20060102-150405")))
+	eventLog, err := process.NewEventLog(4096, logPath)
+	if err != nil {
+		return nil, fmt.Errorf("create event log: %w", err)
+	}
+	registry.SetEventLog(eventLog)
 
 	// Bootstrap PID 1.
 	kernelProc, err := spawner.SpawnKernel("king", cfg.KernelUser, cfg.NodeName)
@@ -100,6 +118,7 @@ func New(cfg Config) (*King, error) {
 		lifecycle:   process.NewLifecycleManager(registry, signals),
 		signals:     signals,
 		proc:        kernelProc,
+		eventLog:    eventLog,
 	}
 
 	// Register this node in the cluster registry.
@@ -237,6 +256,11 @@ func (k *King) SetRuntimeManager(m *runtime.Manager) {
 // RuntimeManager returns the runtime manager.
 func (k *King) RuntimeManager() *runtime.Manager {
 	return k.rtManager
+}
+
+// EventLog returns the process event log.
+func (k *King) EventLog() *process.EventLog {
+	return k.eventLog
 }
 
 // PID returns the kernel's process ID.

@@ -9,6 +9,7 @@ Stays alive between tasks (daemon role). Manages child lifecycle.
 Runtime image: hivekernel_sdk.queen:QueenAgent
 """
 
+import asyncio
 import json
 import logging
 
@@ -28,8 +29,14 @@ class QueenAgent(LLMAgent):
         self._maid_pid: int = 0
 
     async def on_init(self, config):
-        """Spawn Maid daemon on startup."""
+        """Spawn Maid daemon on startup (non-blocking)."""
         await super().on_init(config)
+        # Spawn Maid in background so on_init returns fast
+        # (spawn_child takes ~5s which would timeout the Init RPC).
+        asyncio.create_task(self._spawn_maid())
+
+    async def _spawn_maid(self):
+        """Background: spawn Maid health daemon as child."""
         try:
             self._maid_pid = await self.core.spawn_child(
                 name="maid@local",

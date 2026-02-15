@@ -44,6 +44,7 @@ type Manager struct {
 	runtimes      map[process.PID]*AgentRuntime
 	coreAddr      string // core's gRPC address (agents connect back to this)
 	pythonBin     string // path to python executable
+	sdkPath       string // path to Python SDK directory (set as PYTHONPATH)
 	onProcessExit func(pid process.PID, exitCode int) // called when OS process exits on its own
 }
 
@@ -59,6 +60,12 @@ func NewManager(coreAddr string, pythonBin string) *Manager {
 		coreAddr:  coreAddr,
 		pythonBin: pythonBin,
 	}
+}
+
+// SetSDKPath sets the Python SDK directory path. When set, PYTHONPATH is
+// automatically injected into spawned agent processes.
+func (m *Manager) SetSDKPath(path string) {
+	m.sdkPath = path
 }
 
 // OnProcessExit sets a callback invoked when an agent OS process exits on its own
@@ -115,10 +122,15 @@ func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRu
 		"--agent", runtimeImage,
 		"--core", m.coreAddr,
 	)
-	cmd.Env = append(cmd.Environ(),
+	env := cmd.Environ()
+	env = append(env,
 		fmt.Sprintf("HIVEKERNEL_PID=%d", proc.PID),
 		fmt.Sprintf("HIVEKERNEL_CORE=%s", m.coreAddr),
 	)
+	if m.sdkPath != "" {
+		env = append(env, fmt.Sprintf("PYTHONPATH=%s", m.sdkPath))
+	}
+	cmd.Env = env
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

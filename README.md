@@ -100,11 +100,14 @@ FastAPI backend + D3.js frontend. Event-driven (subscribes to kernel's
 # Build
 go build -o bin/hivekernel.exe ./cmd/hivekernel
 
-# Start kernel (spawns Queen + Maid automatically)
-PYTHONPATH=sdk/python bin/hivekernel.exe --listen :50051
+# Start pure kernel (no Python needed)
+bin/hivekernel.exe --listen :50051
+
+# Start with agents (Python SDK auto-detected)
+bin/hivekernel.exe --listen :50051 --startup configs/startup-full.json
 
 # Run tests
-go test ./internal/... -v          # 248 Go tests
+go test ./internal/... -v          # 248+ Go tests
 python sdk/python/tests/test_queen.py -v       # 43 tests
 python sdk/python/tests/test_orchestrator.py -v # 36 tests
 python sdk/python/tests/test_architect.py -v    # 8 tests
@@ -201,23 +204,6 @@ ARCHITECTURE.md           Architecture documentation
 QUICKSTART.md             Getting started guide
 CHANGELOG.md              Development log (phases 0-10 + extensions)
 ```
-
-## Known architectural issues
-
-Two issues identified during architectural review (see `docs/investigations/`):
-
-1. **Kernel-Agent Coupling** ([001](docs/investigations/001-kernel-agent-coupling.md)):
-   `cmd/hivekernel/main.go` hardcodes `spawnQueen()` at startup, which cascades
-   into 5 Python processes. The kernel cannot start without Python + SDK installed.
-   The Go internals (`internal/`) are clean -- the coupling is only in the entry point.
-
-2. **Architecture Layer Violations** ([002](docs/investigations/002-architecture-layers.md)):
-   Queen's spec role (per-VPS system daemon: cron, IPC routing, crash handling) diverged
-   from her actual role (LLM task dispatcher). Spec responsibilities migrated to Go kernel
-   during development. Maid has duplicate implementations (Go + Python). Several
-   infrastructure subsystems (scheduler, cluster) are implemented but unused.
-
-These will be addressed in a future iteration.
 
 ## Docs
 

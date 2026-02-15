@@ -1,7 +1,7 @@
 # Investigation 001: Kernel-Agent Coupling
 
 **Date:** 2026-02-15
-**Status:** Investigation complete, fix pending
+**Status:** FIXED (Plan 004: startup config, Queen cleanup)
 **Severity:** Architectural violation
 
 ---

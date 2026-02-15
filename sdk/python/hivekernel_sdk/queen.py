@@ -1,18 +1,20 @@
-"""QueenAgent -- local coordinator daemon for HiveKernel.
+"""QueenAgent -- task dispatcher daemon for HiveKernel.
 
-Receives tasks from King/dashboard, assesses complexity, decides strategy:
+Receives tasks, assesses complexity (history -> heuristics -> LLM),
+routes to execution strategy:
 - Simple task -> spawn task-role worker, single LLM call, collect result
-- Complex task -> spawn lead (orchestrator), full decomposition pipeline
+- Complex task -> spawn/reuse lead (orchestrator), full decomposition pipeline
 - Architect task -> spawn architect for strategic plan, then lead executes
 
-Stays alive between tasks (daemon role). Manages child lifecycle.
+Queen is a pure application agent (Layer 5). She does NOT spawn system daemons --
+daemon spawning is handled by the kernel's startup config (configs/startup-full.json).
 
 Features:
 - Lead reuse: keeps orchestrator leads alive between tasks (saves ~5s spawn)
 - Heuristic complexity: keyword/length check before LLM (saves tokens)
 - Task history: remembers recent results to inform routing
 - Maid integration: reads health report before complex tasks
-- Architect routing: strategic planner for design/architecture tasks (Phase 5)
+- Architect routing: strategic planner for design/architecture tasks
 
 Runtime image: hivekernel_sdk.queen:QueenAgent
 """
@@ -69,21 +71,13 @@ class QueenAgent(LLMAgent):
     def __init__(self):
         super().__init__()
         self._idle_leads: list[tuple[int, float]] = []  # (pid, idle_since)
-        self._maid_pid: int = 0
-        self._assistant_pid: int = 0
-        self._gitmonitor_pid: int = 0
-        self._coder_pid: int = 0
         self._task_history: deque = deque(maxlen=MAX_HISTORY)
         self._reaper_task = None
         self._max_workers: str = "3"
 
     async def on_init(self, config):
-        """Spawn Maid, Assistant, GitMonitor daemons and lead reaper on startup."""
+        """Start lead reaper on startup."""
         await super().on_init(config)
-        asyncio.create_task(self._spawn_maid())
-        asyncio.create_task(self._spawn_assistant())
-        asyncio.create_task(self._spawn_github_monitor())
-        asyncio.create_task(self._spawn_coder())
         self._reaper_task = asyncio.create_task(self._lead_reaper())
 
     async def on_shutdown(self, reason):
@@ -102,84 +96,6 @@ class QueenAgent(LLMAgent):
                 pass
         self._idle_leads.clear()
         return None
-
-    async def _spawn_maid(self):
-        """Background: spawn Maid health daemon as child."""
-        try:
-            self._maid_pid = await self.core.spawn_child(
-                name="maid@local",
-                role="daemon",
-                cognitive_tier="operational",
-                runtime_image="hivekernel_sdk.maid:MaidAgent",
-                runtime_type="python",
-            )
-            logger.info("Maid daemon spawned as PID %d", self._maid_pid)
-        except Exception as e:
-            logger.warning("Failed to spawn Maid: %s", e)
-
-    async def _spawn_assistant(self):
-        """Background: spawn Assistant chat daemon as child."""
-        try:
-            self._assistant_pid = await self.core.spawn_child(
-                name="assistant",
-                role="daemon",
-                cognitive_tier="tactical",
-                model="sonnet",
-                system_prompt=(
-                    "You are HiveKernel Assistant, a helpful AI chat daemon. "
-                    "Answer questions, schedule tasks, delegate to other agents."
-                ),
-                runtime_image="hivekernel_sdk.assistant:AssistantAgent",
-                runtime_type="python",
-            )
-            logger.info("Assistant daemon spawned as PID %d", self._assistant_pid)
-        except Exception as e:
-            logger.warning("Failed to spawn Assistant: %s", e)
-
-    async def _spawn_github_monitor(self):
-        """Background: spawn GitHub Monitor daemon and set up default cron."""
-        try:
-            self._gitmonitor_pid = await self.core.spawn_child(
-                name="github-monitor",
-                role="daemon",
-                cognitive_tier="operational",
-                runtime_image="hivekernel_sdk.github_monitor:GitHubMonitorAgent",
-                runtime_type="python",
-            )
-            logger.info("GitMonitor daemon spawned as PID %d", self._gitmonitor_pid)
-            # Schedule default check every 30 minutes.
-            try:
-                await self.core.add_cron(
-                    name="github-check",
-                    cron_expression="*/30 * * * *",
-                    target_pid=self._gitmonitor_pid,
-                    description="Check GitHub repos for updates",
-                    params={"repos": json.dumps(["Selemilka/hivekernel"])},
-                )
-                logger.info("Default GitHub cron scheduled (*/30 * * * *)")
-            except Exception as e:
-                logger.warning("Failed to schedule GitHub cron: %s", e)
-        except Exception as e:
-            logger.warning("Failed to spawn GitMonitor: %s", e)
-
-    async def _spawn_coder(self):
-        """Background: spawn Coder code-generation daemon as child."""
-        try:
-            self._coder_pid = await self.core.spawn_child(
-                name="coder",
-                role="daemon",
-                cognitive_tier="tactical",
-                model="sonnet",
-                system_prompt=(
-                    "You are a skilled programmer inside HiveKernel. "
-                    "Write clean, well-structured code on demand."
-                ),
-                runtime_image="hivekernel_sdk.coder:CoderAgent",
-                runtime_type="python",
-            )
-            logger.info("Coder daemon spawned as PID %d", self._coder_pid)
-        except Exception as e:
-            logger.warning("Failed to spawn Coder: %s", e)
 
     async def _lead_reaper(self):
         """Background: kill leads that have been idle too long."""

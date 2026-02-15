@@ -1,0 +1,51 @@
+{
+  "agents": [
+    {
+      "name": "queen",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.queen:QueenAgent"
+    },
+    {
+      "name": "maid@local",
+      "role": "daemon",
+      "cognitive_tier": "operational",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.maid:MaidAgent"
+    },
+    {
+      "name": "assistant",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.assistant:AssistantAgent",
+      "system_prompt": "You are HiveKernel Assistant, a helpful AI chat daemon. Answer questions, schedule tasks, delegate to other agents."
+    },
+    {
+      "name": "github-monitor",
+      "role": "daemon",
+      "cognitive_tier": "operational",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.github_monitor:GitHubMonitorAgent",
+      "cron": [
+        {
+          "name": "github-check",
+          "expression": "*/30 * * * *",
+          "description": "Check GitHub repos for updates",
+          "params": {"repos": "[\"Selemilka/hivekernel\"]"}
+        }
+      ]
+    },
+    {
+      "name": "coder",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.coder:CoderAgent"
+    }
+  ]
+}

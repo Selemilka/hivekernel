@@ -1,5 +1,25 @@
 # HiveKernel Changelog
 
+## Plan 004 — Architecture Cleanup (completed)
+
+**Goal:** Decouple kernel from Python agents. Kernel starts clean.
+
+### Changes
+- **Deleted Go Maid** (`internal/daemons/maid.go`) — Supervisor + HealthMonitor cover all its responsibilities
+- **Removed `spawnQueen()` from main.go** — kernel no longer hardcodes any Python agent
+- **Added startup config** (`--startup config.json`) — agents spawned from JSON config file, not hardcoded
+- **Added `--sdk-path` flag** + PYTHONPATH auto-detection — kernel finds SDK relative to binary/cwd
+- **Cleaned up Queen** — removed hardcoded daemon spawning from `on_init()`, Queen is now a pure task dispatcher
+- **Config files**: `configs/startup.json` (empty), `configs/startup-full.json` (all agents)
+- **New files**: `internal/kernel/startup.go` (config loader + parser), `internal/kernel/startup_test.go` (7 tests)
+
+### Architecture Decisions (documented in `docs/investigations/002`)
+- King = init(1), root process (keeps name, clarifies role)
+- Zombie lifecycle already correct (Layer 2, no agents involved)
+- Cron stays in kernel (reliability over spec purity)
+- Clustering: mechanism in kernel, decisions in agents
+- Go Maid deleted, Python MaidAgent stays as optional agent
+
 ## Phase 0 — Proof of Concept (completed)
 
 **Goal:** king -> queen -> worker, verify IPC works end-to-end.

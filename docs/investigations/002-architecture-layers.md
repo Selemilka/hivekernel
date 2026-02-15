@@ -1,7 +1,7 @@
 # Investigation 002: Architecture Layers & Responsibility Boundaries
 
 **Date:** 2026-02-15
-**Status:** Investigation complete, decisions documented
+**Status:** COMPLETE (implemented in Plan 004)
 **Related:** Investigation 001 (Kernel-Agent Coupling)
 
 ---

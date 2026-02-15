@@ -18,21 +18,36 @@ cd HiveKernel
 # Build the Go binary
 go build -o bin/hivekernel.exe ./cmd/hivekernel
 
-# Start the core (gRPC server on port 50051)
+# Start pure kernel (no agents, no Python needed)
 bin\hivekernel.exe --listen :50051
+
+# Start with agents (requires Python + SDK)
+bin\hivekernel.exe --listen :50051 --startup configs/startup-full.json
 ```
 
-You should see:
+**Pure kernel mode** (no `--startup`):
 ```
 HiveKernel starting on node vps1
 [king] bootstrapped as PID 1 on vps1
+[startup] pure kernel mode (no agents)
 [grpc] CoreService listening on :50051
-[king] spawned queen@vps1 (PID 2) under PID 1, role=daemon, cog=tactical
-[king] spawned demo-worker (PID 3) under PID 2, role=worker, cog=tactical
-[demo] Phase 0 scenario ready: king(PID 1) -> queen(PID 2) -> worker(PID 3)
 ```
 
-The demo automatically spawns king -> queen -> worker and prints the process table.
+**With agents** (`--startup configs/startup-full.json`):
+```
+HiveKernel starting on node vps1
+[king] bootstrapped as PID 1 on vps1
+[startup] loaded 5 agent(s) from configs/startup-full.json
+[startup] Python SDK path: F:\AI\Claude\HiveKernel\sdk\python
+[grpc] CoreService listening on :50051
+[startup] spawned queen (PID 2)
+[startup] spawned maid@local (PID 3)
+[startup] spawned assistant (PID 4)
+...
+```
+
+The kernel auto-detects the Python SDK path. Override with `--sdk-path` or
+`HIVEKERNEL_SDK_PATH` env var if needed.
 
 ## Run Go Tests
 

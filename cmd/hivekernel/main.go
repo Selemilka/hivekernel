@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -22,6 +22,8 @@ import (
 func main() {
 	nodeName := flag.String("node", "vps1", "VPS node name")
 	listenAddr := flag.String("listen", ":50051", "gRPC listen address (host:port or unix:///path)")
+	startupPath := flag.String("startup", "", "path to startup config JSON (empty = pure kernel, no agents)")
+	sdkPath := flag.String("sdk-path", "", "path to Python SDK directory (auto-detected if empty)")
 	flag.Parse()
 
 	cfg := kernel.DefaultConfig()
@@ -37,12 +39,31 @@ func main() {
 		log.Fatalf("Failed to bootstrap kernel: %v", err)
 	}
 
+	// Load startup config (empty = no agents).
+	startupCfg, err := kernel.LoadStartupConfig(*startupPath)
+	if err != nil {
+		log.Fatalf("Failed to load startup config: %v", err)
+	}
+	if len(startupCfg.Agents) > 0 {
+		log.Printf("[startup] loaded %d agent(s) from %s", len(startupCfg.Agents), *startupPath)
+	} else {
+		log.Printf("[startup] pure kernel mode (no agents)")
+	}
+
 	// Normalize coreAddr for agents to dial back.
-	// ":50051" is valid for listening but agents need "localhost:50051" to connect.
 	coreAddr := normalizeCoreAddr(cfg.ListenAddr)
+
+	// Resolve SDK path for Python agents.
+	resolvedSDK := resolveSDKPath(*sdkPath)
+	if resolvedSDK != "" {
+		log.Printf("[startup] Python SDK path: %s", resolvedSDK)
+	}
 
 	// Start runtime manager, executor, and health monitor.
 	rtManager := runtime.NewManager(coreAddr, "python")
+	if resolvedSDK != "" {
+		rtManager.SetSDKPath(resolvedSDK)
+	}
 	king.SetRuntimeManager(rtManager)
 	syscallHandler := kernel.NewKernelSyscallHandler(king, rtManager)
 	executor := runtime.NewExecutor(syscallHandler)
@@ -94,14 +115,14 @@ func main() {
 		}
 	}()
 
-	// Spawn real Queen daemon (Python LLM agent).
-	go func() {
-		// Small delay to ensure gRPC server is fully ready.
-		time.Sleep(200 * time.Millisecond)
-		if err := spawnQueen(king, cfg); err != nil {
-			log.Printf("[startup] queen spawn error: %v", err)
-		}
-	}()
+	// Spawn agents from startup config.
+	if len(startupCfg.Agents) > 0 {
+		go func() {
+			// Small delay to ensure gRPC server is fully ready.
+			time.Sleep(200 * time.Millisecond)
+			spawnStartupAgents(king, cfg, startupCfg)
+		}()
+	}
 
 	// Start health monitor.
 	go healthMon.Run(ctx)
@@ -127,12 +148,10 @@ func main() {
 }
 
 // normalizeCoreAddr converts a listen address to a dialable address.
-// ":50051" -> "localhost:50051", "unix:///path" stays as-is.
 func normalizeCoreAddr(listenAddr string) string {
 	if strings.HasPrefix(listenAddr, "unix://") {
 		return listenAddr
 	}
-	// TCP: if host is empty (":port"), prepend localhost.
 	if strings.HasPrefix(listenAddr, ":") {
 		return "localhost" + listenAddr
 	}
@@ -143,31 +162,90 @@ func normalizeCoreAddr(listenAddr string) string {
 func listen(addr string) (net.Listener, error) {
 	if strings.HasPrefix(addr, "unix://") {
 		path := strings.TrimPrefix(addr, "unix://")
-		// Remove stale socket file.
 		os.Remove(path)
 		return net.Listen("unix", path)
 	}
 	return net.Listen("tcp", addr)
 }
 
-// spawnQueen starts a real Python QueenAgent daemon under PID 1.
-func spawnQueen(king *kernel.King, cfg kernel.Config) error {
-	queen, err := king.SpawnChild(process.SpawnRequest{
-		ParentPID:     king.PID(),
-		Name:          "queen@" + cfg.NodeName,
-		Role:          process.RoleDaemon,
-		CognitiveTier: process.CogTactical,
-		Model:         "sonnet",
-		User:          "root",
-		Limits:        cfg.DefaultLimits,
-		RuntimeType:   "RUNTIME_PYTHON",
-		RuntimeImage:  "hivekernel_sdk.queen:QueenAgent",
-	})
-	if err != nil {
-		return fmt.Errorf("spawn queen: %w", err)
+// spawnStartupAgents spawns all agents defined in the startup config.
+func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.StartupConfig) {
+	for _, agent := range startupCfg.Agents {
+		name := agent.Name
+		// Append node name to daemon names if not already present.
+		if agent.Role == "daemon" && !strings.Contains(name, "@") {
+			name = name + "@" + cfg.NodeName
+		}
+
+		proc, err := king.SpawnChild(process.SpawnRequest{
+			ParentPID:     king.PID(),
+			Name:          name,
+			Role:          kernel.ParseRole(agent.Role),
+			CognitiveTier: kernel.ParseTier(agent.CognitiveTier),
+			Model:         agent.Model,
+			User:          "root",
+			Limits:        cfg.DefaultLimits,
+			RuntimeType:   agent.RuntimeType,
+			RuntimeImage:  agent.RuntimeImage,
+			SystemPrompt:  agent.SystemPrompt,
+		})
+		if err != nil {
+			log.Printf("[startup] failed to spawn %s: %v", agent.Name, err)
+			continue
+		}
+		log.Printf("[startup] spawned %s (PID %d)", agent.Name, proc.PID)
+
+		// Register cron entries for this agent.
+		for _, cronEntry := range agent.Cron {
+			if _, err := king.Cron().ParseAndAdd(cronEntry.Name, cronEntry.Expression, "execute", proc.PID, cronEntry.Description, cronEntry.Params); err != nil {
+				log.Printf("[startup] failed to add cron %q for %s: %v", cronEntry.Name, agent.Name, err)
+			} else {
+				log.Printf("[startup] cron %q (%s) registered for %s (PID %d)", cronEntry.Name, cronEntry.Expression, agent.Name, proc.PID)
+			}
+		}
 	}
 
 	king.PrintProcessTable()
-	log.Printf("[startup] Queen spawned as PID %d (real Python agent)", queen.PID)
-	return nil
+}
+
+// resolveSDKPath finds the Python SDK directory.
+// Priority: explicit flag > env var > relative to exe > relative to cwd.
+func resolveSDKPath(explicit string) string {
+	if explicit != "" {
+		if info, err := os.Stat(explicit); err == nil && info.IsDir() {
+			abs, _ := filepath.Abs(explicit)
+			return abs
+		}
+		log.Printf("[startup] WARNING: --sdk-path %q not found", explicit)
+		return ""
+	}
+
+	// Check env var.
+	if envPath := os.Getenv("HIVEKERNEL_SDK_PATH"); envPath != "" {
+		if info, err := os.Stat(envPath); err == nil && info.IsDir() {
+			abs, _ := filepath.Abs(envPath)
+			return abs
+		}
+	}
+
+	// Check relative to executable.
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidate := filepath.Join(exeDir, "..", "sdk", "python")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			abs, _ := filepath.Abs(candidate)
+			return abs
+		}
+	}
+
+	// Check relative to current working directory.
+	if cwd, err := os.Getwd(); err == nil {
+		candidate := filepath.Join(cwd, "sdk", "python")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			abs, _ := filepath.Abs(candidate)
+			return abs
+		}
+	}
+
+	return ""
 }

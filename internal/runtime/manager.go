@@ -311,6 +311,48 @@ func (m *Manager) StopRuntime(pid process.PID) error {
 	return nil
 }
 
+// StopAll terminates all running agent runtimes.
+// Used during graceful shutdown.
+func (m *Manager) StopAll() {
+	m.mu.RLock()
+	pids := make([]process.PID, 0, len(m.runtimes))
+	for pid := range m.runtimes {
+		pids = append(pids, pid)
+	}
+	m.mu.RUnlock()
+
+	for _, pid := range pids {
+		if err := m.StopRuntime(pid); err != nil {
+			log.Printf("[runtime] StopAll: PID %d: %v", pid, err)
+		}
+	}
+}
+
+// KillAll forcefully terminates all running agent runtimes without graceful shutdown.
+// Used when the user sends a second interrupt signal.
+func (m *Manager) KillAll() {
+	m.mu.Lock()
+	rts := make([]*AgentRuntime, 0, len(m.runtimes))
+	for _, rt := range m.runtimes {
+		rts = append(rts, rt)
+	}
+	// Clear the map so exit watchers skip cleanup.
+	for _, rt := range rts {
+		delete(m.runtimes, rt.PID)
+	}
+	m.mu.Unlock()
+
+	for _, rt := range rts {
+		if rt.Cmd != nil && rt.Cmd.Process != nil {
+			log.Printf("[runtime] force-killing PID %d (%s)", rt.PID, rt.ProcessInfo.Name)
+			_ = rt.Cmd.Process.Kill()
+		}
+		if rt.Conn != nil {
+			rt.Conn.Close()
+		}
+	}
+}
+
 // GetRuntime returns the runtime for a PID, or nil.
 func (m *Manager) GetRuntime(pid process.PID) *AgentRuntime {
 	m.mu.RLock()

@@ -140,10 +140,35 @@ func main() {
 
 	// Wait for shutdown signal.
 	sig := <-sigCh
-	log.Printf("Received %s, shutting down...", sig)
-	grpcServer.GracefulStop()
-	king.Stop()
+	log.Printf("Received %s, shutting down gracefully... (Ctrl+C again to force)", sig)
+
+	// 1. Cancel context — signals all goroutines (cron poller, health monitor, king.Run).
 	cancel()
+
+	// 2. Close event log — unblocks SubscribeEvents streams by closing subscriber channels.
+	if el := king.EventLog(); el != nil {
+		el.Close()
+	}
+
+	// 3. Graceful shutdown in background: stop agents, then gRPC server.
+	done := make(chan struct{})
+	go func() {
+		rtManager.StopAll()
+		grpcServer.GracefulStop()
+		close(done)
+	}()
+
+	// 4. Wait for graceful completion OR second signal for force shutdown.
+	select {
+	case <-done:
+		// Clean exit.
+	case <-sigCh:
+		log.Printf("Force shutdown!")
+		rtManager.KillAll()
+		grpcServer.Stop()
+	}
+
+	king.Stop()
 	log.Printf("HiveKernel stopped.")
 }
 

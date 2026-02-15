@@ -248,41 +248,107 @@ The kernel should not import, reference, or know about any of these classes.
 
 ---
 
-## The Gray Zones (Summary)
+## Gray Zone Resolutions
 
-| Gray Zone | Currently | Issue | Recommendation |
-|-----------|-----------|-------|---------------|
-| **Who spawns Queen** | main.go hardcodes it | Kernel depends on Python | Config file or CLI flag |
-| **Who spawns Queen's children** | Queen.on_init() hardcodes them | Can't change without editing code | Config or params |
-| **Cron execution** | Go kernel CronScheduler | Spec says "Queen holds crontab" | Keep in kernel (reliability), rename to reflect |
-| **Cron management** | gRPC AddCron/RemoveCron | Who decides what to schedule? | API is fine, decisions are agent-side |
-| **Accountant** | Kernel records usage | Only records, doesn't enforce | Keep (low overhead, no lost events) |
-| **Scheduler** | Kernel task queue | Not used by agents yet | Keep but clarify role |
-| **Migration decisions** | Kernel handleOverloadEscalation | Business logic in kernel | Move decision to agent |
-| **Maid (Go version)** | internal/daemons/maid.go | Duplicated by Python MaidAgent | Remove Go maid or Python maid |
-| **Supervisor restart** | Kernel decides restart policy | Policy could be agent-configurable | Keep mechanism in kernel, make policy configurable |
+All gray zones have been resolved. Summary of decisions:
 
----
+| Gray Zone | Decision | Rationale |
+|-----------|----------|-----------|
+| **Cron** | **KERNEL** | Agents request cron via RPC; kernel holds crontab and fires reliably even if agents crash |
+| **Cron management** | **KERNEL API** | AddCron/RemoveCron are kernel RPCs; agents decide *what* to schedule, kernel decides *when* to fire |
+| **Accountant** | **KERNEL** | Zero-latency recording, no lost events; doesn't enforce, just records |
+| **Scheduler** | **KERNEL** | Task queue with priority aging is an OS primitive; agents submit tasks, kernel orders them |
+| **Clustering: mechanism** | **KERNEL** | NodeRegistry, Connector, MigrationManager stay in kernel — plumbing |
+| **Clustering: decisions** | **AGENT** | "When/where to migrate" is business logic; agent requests migration via syscall, kernel executes |
+| **Go Maid** | **DELETE** | Supervisor + HealthMonitor already do zombie reaping and crash detection; Go Maid is dead code |
+| **Python MaidAgent** | **KEEP (optional)** | LLM-powered anomaly detection is application logic (Layer 5); not part of kernel |
+| **Supervisor restart** | **KERNEL** | Policy is derived from role (daemon=always, task=never, agent=notify); mechanism stays in kernel |
+| **Who spawns Queen** | **CONFIG/CLI** | Remove hardcoded spawnQueen() from main.go; kernel starts clean |
+| **Queen's daemon spawns** | **CONFIG** | Remove hardcoded on_init() spawns; read from config or startup params |
 
-## The Maid Duplication Problem
+### Decision 4: Cron Is a Kernel Primitive
 
-There are TWO Maids:
+Cron stays in the kernel (Layer 3 Infrastructure). This is the right place because:
 
-1. **Go Maid** (`internal/daemons/maid.go`) — per-VPS health daemon,
-   scans for zombies, monitors memory, reports to parent via message queue.
-   Runs inside the kernel process.
+1. **Reliability** — agents crash; kernel doesn't. Cron must fire on schedule.
+2. **Clean API** — agents use `AddCron`/`RemoveCron`/`ListCron` RPCs to manage schedules.
+   They don't need their own timers or polling loops.
+3. **Separation** — agents decide *what* to schedule (business logic).
+   Kernel decides *when* to fire (timer infrastructure).
 
-2. **Python MaidAgent** (`sdk/python/hivekernel_sdk/maid.py`) — LLM-powered
-   health agent, spawned by Queen as a separate Python process.
-   Communicates via syscalls.
+Linux analogy: `crond` is a userspace daemon, but in HiveKernel agents ARE the
+userspace — and they can't be trusted to stay alive. Kernel-side cron is more
+like a watchdog timer in an embedded OS.
 
-They do similar things but differently:
-- Go Maid: lightweight, no LLM, runs in kernel process
-- Python Maid: heavier, LLM-capable, separate process
+### Decision 5: Clustering — Mechanism in Kernel, Decisions in Agents
 
-**Recommendation:** Keep ONE. The Python MaidAgent is more capable and follows
-the agent architecture. The Go Maid was created early (Phase 1) before
-Python agents worked. It should probably be removed.
+**Kernel provides (Layer 3):**
+- `NodeRegistry` — knows which VPS nodes exist, their health/load
+- `Connector` — TCP/TLS plumbing between VPS kernels
+- `MigrationManager` — snapshot → transfer → restore mechanism
+
+**Agents decide (Layer 5):**
+- *When* to migrate (load threshold, user request, etc.)
+- *Where* to migrate (which VPS, based on business criteria)
+- Request migration via syscall; kernel executes blindly
+
+**Current violation:** `King.handleOverloadEscalation()` contains migration
+decision logic ("find least loaded node, migrate there"). This should move to
+an agent. King should only expose a `migrate(branch_pid, target_vps)` mechanism.
+
+**Future:** Add `migrate` syscall so agents can request migrations directly.
+
+### Decision 6: Queen = Task Dispatcher (Not System Daemon)
+
+Queen has two unrelated responsibilities mixed together:
+
+**A. Daemon Spawner (on_init) — REMOVE from Queen**
+
+```
+on_init():
+  spawn Maid, Assistant, GitMonitor, Coder
+  schedule github-check cron
+```
+
+This is **startup configuration**, not agent logic. It belongs in a config file
+or startup script, not hardcoded in a Python class. Removing it makes Queen
+a pure optional agent that the kernel doesn't depend on.
+
+**B. Task Dispatcher (handle_task) — KEEP in Queen**
+
+```
+handle_task(task):
+  assess complexity (history -> heuristics -> LLM)
+  route: simple | complex | architect
+  manage leads (idle pool, reaper)
+  store result
+```
+
+This IS Queen's real job: LLM-powered task routing with 3-tier strategy.
+It's application logic (Layer 5), uses only syscalls, and is fully optional.
+
+**After cleanup, Queen is:**
+- An optional Python agent (not required for kernel to run)
+- A task dispatcher with LLM-based complexity assessment
+- A lead pool manager (reuse orchestrators between tasks)
+- Spawned by config/CLI, not hardcoded in main.go
+
+### Decision 7: Go Maid Deleted, HealthMonitor Stays
+
+| Component | Layer | Action |
+|-----------|-------|--------|
+| `internal/daemons/maid.go` (Go) | Kernel | **DELETE** — superseded by Supervisor + HealthMonitor |
+| `internal/runtime/health.go` (Go) | Layer 4 (Bridge) | **KEEP** — pings agent runtimes, detects failures |
+| `process/supervisor.go` (Go) | Layer 2 (Core) | **KEEP** — zombie reaping, restart policies, crash handling |
+| `hivekernel_sdk/maid.py` (Python) | Layer 5 (Agent) | **KEEP** — optional LLM anomaly detection agent |
+
+Go Maid was created in Phase 1 before Python agents worked. Its responsibilities
+(zombie scanning, health reporting) are now handled by:
+- **Supervisor** — zombie reaping (15s scan, 60s timeout)
+- **HealthMonitor** — runtime ping (10s interval, callback on failure)
+- **EventLog** — all state changes logged for observability
+
+Python MaidAgent adds LLM-powered analysis on top, which is application logic.
 
 ---
 
@@ -420,41 +486,154 @@ logic on top — the subsystems are the real architecture.
 
 ---
 
-## What Needs to Change
+## Roadmap: Code Changes
 
-### Definite Changes
+### Phase R1: Decouple Kernel from Python (main.go cleanup)
 
-1. **Remove hardcoded Queen spawn from main.go**
-   - Kernel should start clean (just King PID 1)
-   - Agent spawning is controlled by config or external caller
+**Goal:** Kernel starts clean — just King (PID 1), gRPC server, no agents.
 
-2. **Make Queen's daemon list configurable**
-   - Queen.on_init() should read from config/params
-   - Not hardcode Maid + Assistant + GitMonitor + Coder
+| # | File | Change | Risk |
+|---|------|--------|------|
+| 1 | `cmd/hivekernel/main.go` | Remove `spawnQueen()` function and its goroutine call | Low |
+| 2 | `cmd/hivekernel/main.go` | Add `--startup` flag: path to YAML config file | Low |
+| 3 | `cmd/hivekernel/main.go` | Add startup config loader: read YAML, spawn listed agents | Medium |
+| 4 | NEW `configs/startup.yaml` | Default config: empty (pure kernel) | Low |
+| 5 | NEW `configs/startup-full.yaml` | Example: queen + daemons (opt-in demo mode) | Low |
 
-3. **Remove Go Maid** (`internal/daemons/maid.go`)
-   - Replaced by Python MaidAgent
-   - Or vice versa — but only keep ONE
+**After R1:** `bin/hivekernel.exe --listen :50051` starts pure kernel.
+`bin/hivekernel.exe --listen :50051 --startup configs/startup-full.yaml` starts with agents.
 
-### Debatable Changes
+**Tests:** All existing Go tests pass (they don't depend on spawnQueen).
+New test: kernel starts without `--startup`, no Python processes spawned.
 
-4. **Move migration DECISIONS to agent**
-   - Keep MigrationManager mechanism in kernel
-   - Move "when to migrate" logic to a ClusterAgent
+### Phase R2: Queen cleanup (remove daemon spawning)
 
-5. **Clarify Scheduler role**
-   - Currently not used by any agent
-   - Either wire it up or remove dead code
+**Goal:** Queen is a pure task dispatcher. No hardcoded on_init() spawns.
 
-6. **PYTHONPATH auto-detection**
-   - Kernel should find SDK automatically
-   - Or accept `--sdk-path` flag
+| # | File | Change | Risk |
+|---|------|--------|------|
+| 1 | `sdk/python/hivekernel_sdk/queen.py` | Remove `_spawn_maid()`, `_spawn_assistant()`, `_spawn_github_monitor()`, `_spawn_coder()` | Medium |
+| 2 | `sdk/python/hivekernel_sdk/queen.py` | Remove the 4 `asyncio.create_task()` calls from `on_init()` | Low |
+| 3 | `sdk/python/hivekernel_sdk/queen.py` | Remove `_maid_pid`, `_assistant_pid`, `_gitmonitor_pid`, `_coder_pid` fields | Low |
+| 4 | `sdk/python/hivekernel_sdk/queen.py` | Update docstring to reflect "task dispatcher" role | Low |
+| 5 | `configs/startup-full.yaml` | List all agents: queen, maid, assistant, gitmonitor, coder | Low |
+
+**After R2:** Queen only does: assess complexity -> route to strategy -> manage leads.
+All daemon spawning is in YAML config, not Python code.
+
+**Tests:** Queen unit tests pass (mock task handling, no spawn side effects).
+
+### Phase R3: Delete Go Maid
+
+**Goal:** Remove dead code. HealthMonitor + Supervisor cover everything.
+
+| # | File | Change | Risk |
+|---|------|--------|------|
+| 1 | `internal/daemons/maid.go` | **DELETE** | Low |
+| 2 | `internal/daemons/maid_test.go` | **DELETE** (if exists) | Low |
+| 3 | Any imports of `daemons` package | Remove if no other daemons remain | Low |
+
+**After R3:** `internal/daemons/` directory removed or empty.
+Zombie reaping: Supervisor. Runtime health: HealthMonitor. Anomaly detection: Python MaidAgent.
+
+**Tests:** All Go tests pass (maid tests removed, others unaffected).
+
+### Phase R4: PYTHONPATH auto-detection
+
+**Goal:** Kernel finds Python SDK automatically.
+
+| # | File | Change | Risk |
+|---|------|--------|------|
+| 1 | `cmd/hivekernel/main.go` | Add `--sdk-path` flag (default: auto-detect) | Low |
+| 2 | `internal/runtime/manager.go` | Auto-detect SDK: check `./sdk/python`, `../sdk/python`, env `HIVEKERNEL_SDK_PATH` | Medium |
+| 3 | `internal/runtime/manager.go` | Set PYTHONPATH in spawned process env automatically | Low |
+
+**After R4:** `bin/hivekernel.exe --listen :50051 --startup configs/startup-full.yaml`
+works without manual PYTHONPATH. SDK found automatically relative to binary.
+
+### Phase R5: Migration syscall
+
+**Goal:** Agents can request branch migration via syscall.
+
+| # | File | Change | Risk |
+|---|------|--------|------|
+| 1 | `api/proto/core.proto` | Add `migrate` syscall message in ExecuteRequest | Medium |
+| 2 | `internal/kernel/syscall_handler.go` | Add `handleMigrate()` — validate ownership, delegate to MigrationManager | Medium |
+| 3 | `internal/kernel/king.go` | Remove business logic from `handleOverloadEscalation()` — just log, let agents decide | Low |
+| 4 | `sdk/python/hivekernel_sdk/syscall.py` | Add `ctx.migrate(branch_pid, target_vps)` | Low |
+
+**After R5:** Migration decisions are agent-side. Kernel only provides the mechanism.
+
+### Phase R6: Startup config format
+
+**Goal:** Define the YAML schema for agent startup configuration.
+
+```yaml
+# configs/startup-full.yaml
+agents:
+  - name: queen
+    role: daemon
+    cognitive_tier: tactical
+    model: sonnet
+    runtime_type: python
+    runtime_image: hivekernel_sdk.queen:QueenAgent
+    system_prompt: "You are a task dispatcher..."
+
+  - name: maid@local
+    role: daemon
+    cognitive_tier: operational
+    runtime_type: python
+    runtime_image: hivekernel_sdk.maid:MaidAgent
+
+  - name: assistant
+    role: daemon
+    cognitive_tier: tactical
+    model: sonnet
+    runtime_type: python
+    runtime_image: hivekernel_sdk.assistant:AssistantAgent
+    system_prompt: "You are HiveKernel Assistant..."
+
+  - name: github-monitor
+    role: daemon
+    cognitive_tier: operational
+    runtime_type: python
+    runtime_image: hivekernel_sdk.github_monitor:GitHubMonitorAgent
+    cron:
+      - name: github-check
+        expression: "*/30 * * * *"
+        description: "Check GitHub repos for updates"
+
+  - name: coder
+    role: daemon
+    cognitive_tier: tactical
+    model: sonnet
+    runtime_type: python
+    runtime_image: hivekernel_sdk.coder:CoderAgent
+```
+
+This replaces both `spawnQueen()` in main.go AND `Queen.on_init()` daemon spawning.
+Queen is just another agent in the list — not the spawner of others.
+
+### Implementation Order
+
+```
+R1 (decouple main.go)     -- highest priority, unblocks everything
+R3 (delete Go Maid)        -- easy cleanup, no dependencies
+R4 (PYTHONPATH)            -- quality of life
+R2 (Queen cleanup)         -- depends on R1 (config format must exist first)
+R6 (config format)         -- design work, parallel with R1
+R5 (migrate syscall)       -- lowest priority, clustering not used yet
+```
+
+Phases R1 + R3 can be done immediately with minimal risk.
+R2 + R6 should be done together (Queen needs config to replace hardcoded spawns).
+R5 is future work (clustering is not production-ready).
 
 ---
 
-## Appendix: Complete Kernel Subsystem Inventory
+## Appendix: Complete Kernel Subsystem Inventory (Updated)
 
-### King owns 29 subsystems:
+### King owns 28 subsystems (after Go Maid removal):
 
 | # | Subsystem | Package | Layer | Verdict |
 |---|-----------|---------|-------|---------|
@@ -475,21 +654,21 @@ logic on top — the subsystems are the real architecture.
 | 15 | BudgetManager | resources | Infrastructure | KERNEL |
 | 16 | RateLimiter | resources | Infrastructure | KERNEL |
 | 17 | LimitChecker | resources | Infrastructure | KERNEL |
-| 18 | Accountant | resources | Infrastructure | KERNEL (gray) |
+| 18 | Accountant | resources | Infrastructure | KERNEL |
 | 19 | CGroupManager | resources | Infrastructure | KERNEL |
-| 20 | Scheduler | scheduler | Infrastructure | KERNEL (gray) |
-| 21 | CronScheduler | scheduler | Infrastructure | KERNEL (gray) |
-| 22 | NodeRegistry | cluster | Infrastructure | KERNEL (gray) |
-| 23 | Connector | cluster | Infrastructure | KERNEL (gray) |
-| 24 | MigrationManager | cluster | Infrastructure | GRAY ZONE |
+| 20 | Scheduler | scheduler | Infrastructure | KERNEL |
+| 21 | CronScheduler | scheduler | Infrastructure | KERNEL |
+| 22 | NodeRegistry | cluster | Infrastructure | KERNEL |
+| 23 | Connector | cluster | Infrastructure | KERNEL |
+| 24 | MigrationManager | cluster | Infrastructure | KERNEL (mechanism only) |
 | 25 | RuntimeManager | runtime | Bridge | KERNEL |
 | 26 | Executor | runtime | Bridge | KERNEL |
 | 27 | HealthMonitor | runtime | Bridge | KERNEL |
 | 28 | Config | kernel | Core | KERNEL |
-| 29 | Process (self) | process | Core | KERNEL |
 
 **Core kernel (pure OS primitives):** 11 subsystems
 **Infrastructure (policy + scheduling):** 13 subsystems
 **Runtime bridge:** 3 subsystems
-**Gray zones:** 5 subsystems (accountant, scheduler, cron, cluster)
-**Violations:** 2 (hardcoded Queen in main.go, Go Maid duplication)
+**Config:** 1 subsystem
+**Gray zones:** 0 (all resolved)
+**Violations to fix:** 2 (hardcoded Queen in main.go, Go Maid duplication)

@@ -1,5 +1,7 @@
 # Plan 006: Hybrid Hive Mode + Channels (Telegram)
 
+**Status: COMPLETE** (2026-02-16)
+
 ## Goal
 
 PicoClaw agents running in hive mode should also be able to listen on

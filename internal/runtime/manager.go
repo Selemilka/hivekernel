@@ -300,7 +300,12 @@ func (m *Manager) StopRuntime(pid process.PID) error {
 	case <-time.After(5 * time.Second):
 		log.Printf("[runtime] PID %d did not exit in time, killing", pid)
 		_ = rt.Cmd.Process.Kill()
-		<-rt.exitCh // Wait for exit watcher to finish.
+		select {
+		case <-rt.exitCh:
+			// Process exited after kill.
+		case <-time.After(2 * time.Second):
+			log.Printf("[runtime] PID %d: kill did not take effect, abandoning", pid)
+		}
 	}
 
 	// Close gRPC connection.

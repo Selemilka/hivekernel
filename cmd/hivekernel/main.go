@@ -158,12 +158,16 @@ func main() {
 		close(done)
 	}()
 
-	// 4. Wait for graceful completion OR second signal for force shutdown.
+	// 4. Wait for graceful completion, second signal, or total timeout.
 	select {
 	case <-done:
 		// Clean exit.
 	case <-sigCh:
 		log.Printf("Force shutdown!")
+		rtManager.KillAll()
+		grpcServer.Stop()
+	case <-time.After(15 * time.Second):
+		log.Printf("[shutdown] graceful shutdown timed out after 15s, forcing stop")
 		rtManager.KillAll()
 		grpcServer.Stop()
 	}

@@ -79,7 +79,7 @@ func (s *CoreServer) SpawnChild(ctx context.Context, req *pb.SpawnRequest) (*pb.
 		Tools:         req.Tools,
 		Limits:        protoLimitsToInternal(req.Limits),
 		InitialTask:   req.InitialTask,
-		RuntimeType:   req.RuntimeType.String(),
+		RuntimeType:   ParseRuntimeType(req.RuntimeType.String()),
 		RuntimeImage:  req.RuntimeImage,
 	})
 	if err != nil {

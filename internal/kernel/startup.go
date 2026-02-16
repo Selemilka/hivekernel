@@ -4,9 +4,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/selemilka/hivekernel/internal/process"
 )
+
+// ClawAgentConfig holds PicoClaw-specific settings for a startup agent.
+type ClawAgentConfig struct {
+	Workspace           string            `json:"workspace,omitempty"`
+	Provider            string            `json:"provider,omitempty"`
+	MaxToolIterations   int               `json:"max_tool_iterations,omitempty"`
+	RestrictToWorkspace bool              `json:"restrict_to_workspace,omitempty"`
+	Channels            []string          `json:"channels,omitempty"`
+	Env                 map[string]string `json:"env,omitempty"`
+}
+
+// ClawConfigToMetadata converts ClawAgentConfig into a flat metadata map
+// suitable for passing through SpawnRequest.Metadata and ultimately to
+// the PicoClaw process via InitRequest.Config.Metadata.
+func ClawConfigToMetadata(cc *ClawAgentConfig) map[string]string {
+	if cc == nil {
+		return nil
+	}
+	m := make(map[string]string)
+	if cc.Workspace != "" {
+		m["claw.workspace"] = cc.Workspace
+	}
+	if cc.Provider != "" {
+		m["claw.provider"] = cc.Provider
+	}
+	if cc.MaxToolIterations > 0 {
+		m["claw.max_tool_iterations"] = fmt.Sprintf("%d", cc.MaxToolIterations)
+	}
+	if cc.RestrictToWorkspace {
+		m["claw.restrict_to_workspace"] = "true"
+	}
+	if len(cc.Channels) > 0 {
+		m["claw.channels"] = strings.Join(cc.Channels, ",")
+	}
+	for k, v := range cc.Env {
+		m["claw.env."+k] = os.ExpandEnv(v)
+	}
+	return m
+}
 
 // StartupAgent describes an agent to spawn at kernel startup.
 type StartupAgent struct {
@@ -17,6 +57,7 @@ type StartupAgent struct {
 	RuntimeType   string            `json:"runtime_type"`
 	RuntimeImage  string            `json:"runtime_image"`
 	SystemPrompt  string            `json:"system_prompt,omitempty"`
+	ClawConfig    *ClawAgentConfig  `json:"claw_config,omitempty"`
 	Cron          []StartupCron     `json:"cron,omitempty"`
 }
 
@@ -70,6 +111,21 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// ParseRuntimeType normalizes a runtime type string from config.
+// Accepts both proto-style ("RUNTIME_PYTHON", "RUNTIME_CLAW") and short ("python", "claw").
+func ParseRuntimeType(s string) string {
+	switch strings.ToUpper(s) {
+	case "RUNTIME_CLAW", "CLAW":
+		return "claw"
+	case "RUNTIME_PYTHON", "PYTHON", "":
+		return "python"
+	case "RUNTIME_CUSTOM", "CUSTOM":
+		return "custom"
+	default:
+		return strings.ToLower(s)
+	}
 }
 
 // ParseRole converts a string role to process.AgentRole.

@@ -126,6 +126,10 @@ type Process struct {
 	StartedAt time.Time
 	UpdatedAt time.Time
 
+	// Agent configuration
+	SystemPrompt string
+	Metadata     map[string]string
+
 	// gRPC connection address (unix socket path or tcp addr)
 	RuntimeAddr string
 }

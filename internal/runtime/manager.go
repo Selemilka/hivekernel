@@ -45,6 +45,7 @@ type Manager struct {
 	coreAddr      string // core's gRPC address (agents connect back to this)
 	pythonBin     string // path to python executable
 	sdkPath       string // path to Python SDK directory (set as PYTHONPATH)
+	clawBin       string // path to picoclaw binary (for RUNTIME_CLAW)
 	onProcessExit func(pid process.PID, exitCode int) // called when OS process exits on its own
 }
 
@@ -66,6 +67,11 @@ func NewManager(coreAddr string, pythonBin string) *Manager {
 // automatically injected into spawned agent processes.
 func (m *Manager) SetSDKPath(path string) {
 	m.sdkPath = path
+}
+
+// SetClawBin sets the path to the PicoClaw binary for RUNTIME_CLAW agents.
+func (m *Manager) SetClawBin(path string) {
+	m.clawBin = path
 }
 
 // OnProcessExit sets a callback invoked when an agent OS process exits on its own
@@ -108,14 +114,25 @@ func (m *Manager) StartRuntime(proc *process.Process, rtType RuntimeType) (*Agen
 	return rt, nil
 }
 
-// spawnReal launches the Python runner process, waits for READY, connects gRPC, calls Init.
+// spawnReal dispatches to the appropriate runtime spawner based on type.
 func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRuntime, error) {
 	runtimeImage := proc.RuntimeAddr // abused as runtime image spec before real addr is set
 	if runtimeImage == "" {
 		return nil, fmt.Errorf("no RuntimeImage for PID %d", proc.PID)
 	}
 
-	// Build command: python -m hivekernel_sdk.runner --agent <image> --core <addr>
+	switch rtType {
+	case RuntimePython:
+		return m.spawnPython(proc, runtimeImage)
+	case RuntimeClaw:
+		return m.spawnClaw(proc, runtimeImage)
+	default:
+		return nil, fmt.Errorf("unsupported runtime type %q for PID %d", rtType, proc.PID)
+	}
+}
+
+// spawnPython builds the command to launch a Python agent runtime.
+func (m *Manager) spawnPython(proc *process.Process, runtimeImage string) (*AgentRuntime, error) {
 	cmd := exec.Command(
 		m.pythonBin,
 		"-m", "hivekernel_sdk.runner",
@@ -132,6 +149,47 @@ func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRu
 	}
 	cmd.Env = env
 
+	return m.launchAndConnect(proc, RuntimePython, cmd)
+}
+
+// spawnClaw builds the command to launch a PicoClaw agent runtime.
+func (m *Manager) spawnClaw(proc *process.Process, runtimeImage string) (*AgentRuntime, error) {
+	clawBin := m.resolveClawBinary(runtimeImage)
+	cmd := exec.Command(clawBin, "hive", "--core", m.coreAddr)
+
+	env := cmd.Environ()
+	env = append(env,
+		fmt.Sprintf("HIVEKERNEL_PID=%d", proc.PID),
+		fmt.Sprintf("HIVEKERNEL_CORE=%s", m.coreAddr),
+	)
+	// Inject claw-specific env vars from metadata.
+	for k, v := range proc.Metadata {
+		if strings.HasPrefix(k, "claw.env.") {
+			envKey := strings.TrimPrefix(k, "claw.env.")
+			env = append(env, fmt.Sprintf("%s=%s", envKey, v))
+		}
+	}
+	cmd.Env = env
+
+	return m.launchAndConnect(proc, RuntimeClaw, cmd)
+}
+
+// resolveClawBinary determines the PicoClaw binary path.
+// If runtimeImage is "picoclaw" (default), uses the configured clawBin path.
+// Otherwise treats runtimeImage as an explicit path to the binary.
+func (m *Manager) resolveClawBinary(runtimeImage string) string {
+	if runtimeImage == "picoclaw" || runtimeImage == "" {
+		if m.clawBin != "" {
+			return m.clawBin
+		}
+		return "picoclaw" // hope it's on PATH
+	}
+	return runtimeImage
+}
+
+// launchAndConnect is the common logic for spawning any runtime process:
+// starts the OS process, waits for READY <port>, dials gRPC, calls Init.
+func (m *Manager) launchAndConnect(proc *process.Process, rtType RuntimeType, cmd *exec.Cmd) (*AgentRuntime, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdout pipe for PID %d: %w", proc.PID, err)
@@ -184,18 +242,23 @@ func (m *Manager) spawnReal(proc *process.Process, rtType RuntimeType) (*AgentRu
 
 	client := pb.NewAgentServiceClient(conn)
 
-	// Call Init.
+	// Call Init with full process info.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	initResp, err := client.Init(ctx, &pb.InitRequest{
-		Pid:  proc.PID,
-		Ppid: proc.PPID,
-		User: proc.User,
-		Role: roleToProto(proc.Role),
+		Pid:           proc.PID,
+		Ppid:          proc.PPID,
+		User:          proc.User,
+		Role:          roleToProto(proc.Role),
+		CognitiveTier: cogToProto(proc.CognitiveTier),
 		Config: &pb.AgentConfig{
-			Name: proc.Name,
+			Name:         proc.Name,
+			Model:        proc.Model,
+			SystemPrompt: proc.SystemPrompt,
+			Metadata:     proc.Metadata,
 		},
+		Limits: limitsToProto(proc.Limits),
 	})
 	if err != nil {
 		conn.Close()
@@ -386,6 +449,32 @@ func (m *Manager) ListRuntimes() []*AgentRuntime {
 		list = append(list, rt)
 	}
 	return list
+}
+
+// cogToProto converts internal CognitiveTier to proto enum.
+func cogToProto(c process.CognitiveTier) pb.CognitiveTier {
+	switch c {
+	case process.CogStrategic:
+		return pb.CognitiveTier_COG_STRATEGIC
+	case process.CogTactical:
+		return pb.CognitiveTier_COG_TACTICAL
+	case process.CogOperational:
+		return pb.CognitiveTier_COG_OPERATIONAL
+	default:
+		return pb.CognitiveTier_COG_OPERATIONAL
+	}
+}
+
+// limitsToProto converts internal ResourceLimits to proto message.
+func limitsToProto(l process.ResourceLimits) *pb.ResourceLimits {
+	return &pb.ResourceLimits{
+		MaxTokensPerHour:   l.MaxTokensPerHour,
+		MaxContextTokens:   l.MaxContextTokens,
+		MaxChildren:        l.MaxChildren,
+		MaxConcurrentTasks: l.MaxConcurrentTasks,
+		TimeoutSeconds:     l.TimeoutSeconds,
+		MaxTokensTotal:     l.MaxTokensTotal,
+	}
 }
 
 // roleToProto converts internal AgentRole to proto enum.

@@ -89,9 +89,13 @@ func (e *Executor) ExecuteTask(
 			return progress.Result, nil
 
 		case pb.ProgressType_PROGRESS_FAILED:
-			log.Printf("[executor] task %s failed: %s", progress.TaskId, progress.Message)
+			errMsg := progress.Message
+			if errMsg == "" && progress.Result != nil {
+				errMsg = progress.Result.Output
+			}
+			log.Printf("[executor] task %s failed: %s", progress.TaskId, errMsg)
 			_ = stream.CloseSend()
-			return progress.Result, fmt.Errorf("task failed: %s", progress.Message)
+			return progress.Result, fmt.Errorf("task failed: %s", errMsg)
 
 		case pb.ProgressType_PROGRESS_UPDATE:
 			log.Printf("[executor] task %s progress: %.0f%% %s",

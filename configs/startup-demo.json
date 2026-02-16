@@ -1,0 +1,22 @@
+{
+  "agents": [
+    {
+      "name": "worker",
+      "role": "agent",
+      "cognitive_tier": "operational",
+      "model": "google/gemini-2.0-flash-001",
+      "runtime_type": "RUNTIME_CLAW",
+      "runtime_image": "picoclaw",
+      "system_prompt": "You are a helpful assistant. Keep answers concise (2-3 sentences max).",
+      "claw_config": {
+        "workspace": "./workspaces/demo-worker",
+        "provider": "openrouter",
+        "max_tool_iterations": 5,
+        "restrict_to_workspace": true,
+        "env": {
+          "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"
+        }
+      }
+    }
+  ]
+}

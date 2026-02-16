@@ -152,3 +152,126 @@ func TestGetClient_NotFound(t *testing.T) {
 		t.Error("non-existent PID should return nil Client")
 	}
 }
+
+func TestSetClawBin(t *testing.T) {
+	m := NewManager("localhost:50051", "python")
+	m.SetClawBin("/usr/local/bin/picoclaw")
+	if m.clawBin != "/usr/local/bin/picoclaw" {
+		t.Errorf("clawBin = %q, want %q", m.clawBin, "/usr/local/bin/picoclaw")
+	}
+}
+
+func TestResolveClawBinary(t *testing.T) {
+	m := NewManager("localhost:50051", "python")
+
+	tests := []struct {
+		name         string
+		clawBin      string
+		runtimeImage string
+		want         string
+	}{
+		{"default image with clawBin set", "/opt/picoclaw", "picoclaw", "/opt/picoclaw"},
+		{"default image without clawBin", "", "picoclaw", "picoclaw"},
+		{"empty image with clawBin", "/opt/picoclaw", "", "/opt/picoclaw"},
+		{"explicit path overrides clawBin", "/opt/picoclaw", "/custom/path/claw", "/custom/path/claw"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m.clawBin = tt.clawBin
+			got := m.resolveClawBinary(tt.runtimeImage)
+			if got != tt.want {
+				t.Errorf("resolveClawBinary(%q) = %q, want %q", tt.runtimeImage, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpawnReal_UnsupportedRuntime(t *testing.T) {
+	m := NewManager("localhost:50051", "python")
+
+	proc := &process.Process{
+		PID:         10,
+		PPID:        1,
+		Name:        "test-agent",
+		RuntimeAddr: "some-image",
+	}
+
+	_, err := m.spawnReal(proc, RuntimeCustom)
+	if err == nil {
+		t.Fatal("spawnReal with unsupported runtime type should fail")
+	}
+	if !contains(err.Error(), "unsupported runtime type") {
+		t.Errorf("error = %q, want to contain 'unsupported runtime type'", err)
+	}
+}
+
+func TestSpawnReal_NoRuntimeImage(t *testing.T) {
+	m := NewManager("localhost:50051", "python")
+
+	proc := &process.Process{
+		PID:  10,
+		PPID: 1,
+		Name: "test-agent",
+		// RuntimeAddr is empty
+	}
+
+	_, err := m.spawnReal(proc, RuntimePython)
+	if err == nil {
+		t.Fatal("spawnReal with empty RuntimeAddr should fail")
+	}
+	if !contains(err.Error(), "no RuntimeImage") {
+		t.Errorf("error = %q, want to contain 'no RuntimeImage'", err)
+	}
+}
+
+func TestCogToProto(t *testing.T) {
+	tests := []struct {
+		in   process.CognitiveTier
+		want string
+	}{
+		{process.CogStrategic, "COG_STRATEGIC"},
+		{process.CogTactical, "COG_TACTICAL"},
+		{process.CogOperational, "COG_OPERATIONAL"},
+	}
+	for _, tt := range tests {
+		got := cogToProto(tt.in)
+		if got.String() != tt.want {
+			t.Errorf("cogToProto(%v) = %s, want %s", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestLimitsToProto(t *testing.T) {
+	limits := process.ResourceLimits{
+		MaxTokensPerHour:   1000,
+		MaxContextTokens:   2000,
+		MaxChildren:        5,
+		MaxConcurrentTasks: 3,
+		TimeoutSeconds:     60,
+		MaxTokensTotal:     50000,
+	}
+	pb := limitsToProto(limits)
+	if pb.MaxTokensPerHour != 1000 {
+		t.Errorf("MaxTokensPerHour = %d, want 1000", pb.MaxTokensPerHour)
+	}
+	if pb.MaxChildren != 5 {
+		t.Errorf("MaxChildren = %d, want 5", pb.MaxChildren)
+	}
+	if pb.MaxTokensTotal != 50000 {
+		t.Errorf("MaxTokensTotal = %d, want 50000", pb.MaxTokensTotal)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchSubstr(s, substr)
+}
+
+func searchSubstr(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

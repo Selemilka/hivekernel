@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"log"
@@ -24,7 +25,18 @@ func main() {
 	listenAddr := flag.String("listen", ":50051", "gRPC listen address (host:port or unix:///path)")
 	startupPath := flag.String("startup", "", "path to startup config JSON (empty = pure kernel, no agents)")
 	sdkPath := flag.String("sdk-path", "", "path to Python SDK directory (auto-detected if empty)")
+	clawBin := flag.String("claw-bin", "", "path to PicoClaw binary (for RUNTIME_CLAW agents)")
+	envFile := flag.String("env-file", ".env", "path to .env file (empty to skip)")
 	flag.Parse()
+
+	// Load .env file if it exists.
+	if *envFile != "" {
+		if n, err := loadDotEnv(*envFile); err != nil {
+			log.Printf("[startup] WARNING: could not load %s: %v", *envFile, err)
+		} else if n > 0 {
+			log.Printf("[startup] loaded %d var(s) from %s", n, *envFile)
+		}
+	}
 
 	cfg := kernel.DefaultConfig()
 	cfg.NodeName = *nodeName
@@ -63,6 +75,10 @@ func main() {
 	rtManager := runtime.NewManager(coreAddr, "python")
 	if resolvedSDK != "" {
 		rtManager.SetSDKPath(resolvedSDK)
+	}
+	if *clawBin != "" {
+		rtManager.SetClawBin(*clawBin)
+		log.Printf("[startup] PicoClaw binary: %s", *clawBin)
 	}
 	king.SetRuntimeManager(rtManager)
 	syscallHandler := kernel.NewKernelSyscallHandler(king, rtManager)
@@ -206,6 +222,9 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 			name = name + "@" + cfg.NodeName
 		}
 
+		// Convert ClawConfig to flat metadata map if present.
+		metadata := kernel.ClawConfigToMetadata(agent.ClawConfig)
+
 		proc, err := king.SpawnChild(process.SpawnRequest{
 			ParentPID:     king.PID(),
 			Name:          name,
@@ -214,9 +233,10 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 			Model:         agent.Model,
 			User:          "root",
 			Limits:        cfg.DefaultLimits,
-			RuntimeType:   agent.RuntimeType,
+			RuntimeType:   kernel.ParseRuntimeType(agent.RuntimeType),
 			RuntimeImage:  agent.RuntimeImage,
 			SystemPrompt:  agent.SystemPrompt,
+			Metadata:      metadata,
 		})
 		if err != nil {
 			log.Printf("[startup] failed to spawn %s: %v", agent.Name, err)
@@ -277,4 +297,45 @@ func resolveSDKPath(explicit string) string {
 	}
 
 	return ""
+}
+
+// loadDotEnv reads a .env file and sets variables into os environment.
+// Lines must be KEY=VALUE (quotes around value are stripped).
+// Lines starting with # and empty lines are skipped.
+// Only sets vars that are not already set in the environment.
+// Returns the number of variables loaded.
+func loadDotEnv(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil // missing .env is not an error
+		}
+		return 0, err
+	}
+	defer f.Close()
+
+	n := 0
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		// Strip surrounding quotes.
+		if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+			val = val[1 : len(val)-1]
+		}
+		// Only set if not already present.
+		if _, exists := os.LookupEnv(key); !exists {
+			os.Setenv(key, val)
+			n++
+		}
+	}
+	return n, scanner.Err()
 }

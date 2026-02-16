@@ -1,0 +1,44 @@
+{
+  "agents": [
+    {
+      "name": "queen",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "runtime_type": "RUNTIME_CLAW",
+      "runtime_image": "picoclaw",
+      "system_prompt": "You are the Queen agent. Decompose complex tasks, spawn workers, coordinate results.",
+      "claw_config": {
+        "workspace": "./workspaces/queen",
+        "provider": "anthropic",
+        "max_tool_iterations": 25,
+        "restrict_to_workspace": false,
+        "env": {
+          "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+        }
+      }
+    },
+    {
+      "name": "assistant",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "runtime_type": "RUNTIME_CLAW",
+      "runtime_image": "picoclaw",
+      "system_prompt": "You are the Assistant. Handle user messages from Telegram and Discord.",
+      "claw_config": {
+        "workspace": "./workspaces/assistant",
+        "provider": "anthropic",
+        "channels": ["telegram", "discord"]
+      }
+    },
+    {
+      "name": "coder",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.coder:CoderAgent"
+    }
+  ]
+}

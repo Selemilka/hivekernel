@@ -14,6 +14,7 @@ type SpawnRequest struct {
 	User          string // empty = inherit from parent
 	VPS           string // empty = same as parent
 	SystemPrompt  string
+	Metadata      map[string]string
 	Tools         []string
 	Limits        ResourceLimits
 	InitialTask   string
@@ -78,6 +79,8 @@ func (s *Spawner) Spawn(req SpawnRequest) (*Process, error) {
 		VPS:           vps,
 		State:         StateIdle,
 		Limits:        req.Limits,
+		SystemPrompt:  req.SystemPrompt,
+		Metadata:      req.Metadata,
 	}
 
 	pid, err := s.registry.Register(proc)

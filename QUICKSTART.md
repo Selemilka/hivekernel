@@ -309,6 +309,36 @@ King (PID 1)
 | `ArchitectAgent` | Strategic planner | Designs execution plans for complex tasks |
 | `MaidAgent` | Health daemon | Monitors process health, detects anomalies |
 
+## Live Demo Client
+
+Interactive demo that connects to a running kernel and sends tasks to agents.
+Results visible in console and in the web dashboard.
+
+```bash
+# Terminal 1: start kernel with all agents
+set OPENROUTER_API_KEY=sk-or-v1-...
+bin\hivekernel.exe --listen :50051 --startup configs/startup-full.json
+
+# Terminal 2 (optional): start dashboard
+python sdk/python/dashboard/app.py
+
+# Terminal 3: run demos
+python sdk/python/examples/demo_live.py maid          # health check (no LLM)
+python sdk/python/examples/demo_live.py github        # repo check (no LLM)
+python sdk/python/examples/demo_live.py assistant     # chat (LLM)
+python sdk/python/examples/demo_live.py coder         # code gen (LLM)
+python sdk/python/examples/demo_live.py queen         # full pipeline (LLM) -- STAR DEMO
+python sdk/python/examples/demo_live.py showcase      # all demos sequentially
+```
+
+The `queen` command is the most impressive -- watch the dashboard as the Queen
+spawns a Lead, the Lead spawns Workers, they research in parallel, complete
+(become zombies), and get reaped. Custom tasks supported:
+
+```bash
+python sdk/python/examples/demo_live.py queen "Design a REST API for a todo app"
+```
+
 ## Run the Plan 003 E2E Test
 
 ```bash

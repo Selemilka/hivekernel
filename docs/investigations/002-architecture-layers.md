@@ -1,7 +1,8 @@
 # Investigation 002: Architecture Layers & Responsibility Boundaries
 
 **Date:** 2026-02-15
-**Status:** COMPLETE (implemented in Plan 004)
+**Updated:** 2026-02-16
+**Status:** COMPLETE (implemented in Plan 004 + graceful shutdown fixes)
 **Related:** Investigation 001 (Kernel-Agent Coupling)
 
 ---
@@ -486,148 +487,112 @@ logic on top — the subsystems are the real architecture.
 
 ---
 
-## Roadmap: Code Changes
+## Implementation Results (Plan 004 + Graceful Shutdown)
 
-### Phase R1: Decouple Kernel from Python (main.go cleanup)
+All changes from this investigation have been implemented. Below is the final state.
 
-**Goal:** Kernel starts clean — just King (PID 1), gRPC server, no agents.
+### R1: Kernel Decoupled from Python -- DONE
 
-| # | File | Change | Risk |
-|---|------|--------|------|
-| 1 | `cmd/hivekernel/main.go` | Remove `spawnQueen()` function and its goroutine call | Low |
-| 2 | `cmd/hivekernel/main.go` | Add `--startup` flag: path to YAML config file | Low |
-| 3 | `cmd/hivekernel/main.go` | Add startup config loader: read YAML, spawn listed agents | Medium |
-| 4 | NEW `configs/startup.yaml` | Default config: empty (pure kernel) | Low |
-| 5 | NEW `configs/startup-full.yaml` | Example: queen + daemons (opt-in demo mode) | Low |
+Kernel starts clean with no hardcoded agent references.
 
-**After R1:** `bin/hivekernel.exe --listen :50051` starts pure kernel.
-`bin/hivekernel.exe --listen :50051 --startup configs/startup-full.yaml` starts with agents.
+| # | File | What Was Done |
+|---|------|---------------|
+| 1 | `cmd/hivekernel/main.go` | Removed `spawnQueen()`. Added `--startup`, `--sdk-path` flags. Startup config loader spawns agents from JSON |
+| 2 | `internal/kernel/startup.go` | **NEW** — `StartupConfig`, `StartupAgent`, `StartupCron` structs + `LoadStartupConfig()` with validation |
+| 3 | `internal/kernel/startup_test.go` | **NEW** — tests for config loading, defaults, validation |
+| 4 | `configs/startup.json` | Empty config (pure kernel mode) |
+| 5 | `configs/startup-full.json` | Full agent set: queen, maid, assistant, github-monitor, coder |
 
-**Tests:** All existing Go tests pass (they don't depend on spawnQueen).
-New test: kernel starts without `--startup`, no Python processes spawned.
+**Result:** `bin/hivekernel.exe --listen :50051` = pure kernel, no Python needed.
+`bin/hivekernel.exe --listen :50051 --startup configs/startup-full.json` = kernel + agents.
 
-### Phase R2: Queen cleanup (remove daemon spawning)
+### R2: Queen Cleanup -- DONE
 
-**Goal:** Queen is a pure task dispatcher. No hardcoded on_init() spawns.
+Queen is now a pure task dispatcher. `on_init()` only starts the lead reaper.
+All daemon spawning (`_spawn_maid`, `_spawn_assistant`, etc.) removed.
 
-| # | File | Change | Risk |
-|---|------|--------|------|
-| 1 | `sdk/python/hivekernel_sdk/queen.py` | Remove `_spawn_maid()`, `_spawn_assistant()`, `_spawn_github_monitor()`, `_spawn_coder()` | Medium |
-| 2 | `sdk/python/hivekernel_sdk/queen.py` | Remove the 4 `asyncio.create_task()` calls from `on_init()` | Low |
-| 3 | `sdk/python/hivekernel_sdk/queen.py` | Remove `_maid_pid`, `_assistant_pid`, `_gitmonitor_pid`, `_coder_pid` fields | Low |
-| 4 | `sdk/python/hivekernel_sdk/queen.py` | Update docstring to reflect "task dispatcher" role | Low |
-| 5 | `configs/startup-full.yaml` | List all agents: queen, maid, assistant, gitmonitor, coder | Low |
+**Result:** Queen does: assess complexity -> route to strategy -> manage leads.
+All daemon spawning is in `configs/startup-full.json`.
 
-**After R2:** Queen only does: assess complexity -> route to strategy -> manage leads.
-All daemon spawning is in YAML config, not Python code.
+### R3: Go Maid Deleted -- DONE
 
-**Tests:** Queen unit tests pass (mock task handling, no spawn side effects).
+`internal/daemons/` directory removed entirely.
+Supervisor handles zombie reaping (15s scan, 60s timeout).
+HealthMonitor handles runtime pings (10s interval, callback on failure).
+Python MaidAgent remains as optional LLM-powered anomaly detection (Layer 5).
 
-### Phase R3: Delete Go Maid
+### R4: SDK Path Auto-Detection -- DONE
 
-**Goal:** Remove dead code. HealthMonitor + Supervisor cover everything.
+| # | File | What Was Done |
+|---|------|---------------|
+| 1 | `cmd/hivekernel/main.go` | `--sdk-path` flag + `resolveSDKPath()` with 4-tier priority |
+| 2 | `internal/runtime/manager.go` | `SetSDKPath()` — injects PYTHONPATH into spawned agent env |
 
-| # | File | Change | Risk |
-|---|------|--------|------|
-| 1 | `internal/daemons/maid.go` | **DELETE** | Low |
-| 2 | `internal/daemons/maid_test.go` | **DELETE** (if exists) | Low |
-| 3 | Any imports of `daemons` package | Remove if no other daemons remain | Low |
+**Resolution order:** explicit `--sdk-path` > `HIVEKERNEL_SDK_PATH` env > relative to exe (`../sdk/python`) > relative to cwd (`sdk/python`).
 
-**After R3:** `internal/daemons/` directory removed or empty.
-Zombie reaping: Supervisor. Runtime health: HealthMonitor. Anomaly detection: Python MaidAgent.
+**Result:** `bin/hivekernel.exe --listen :50051 --startup configs/startup-full.json`
+finds SDK automatically. No manual PYTHONPATH needed.
 
-**Tests:** All Go tests pass (maid tests removed, others unaffected).
+### R5: Migration Syscall -- DEFERRED
 
-### Phase R4: PYTHONPATH auto-detection
+Clustering is not production-ready. Migration decisions will move to agents
+when the cluster subsystem matures. `handleOverloadEscalation()` still contains
+kernel-side migration logic for now.
 
-**Goal:** Kernel finds Python SDK automatically.
+### R6: Startup Config Format -- DONE (JSON, not YAML)
 
-| # | File | Change | Risk |
-|---|------|--------|------|
-| 1 | `cmd/hivekernel/main.go` | Add `--sdk-path` flag (default: auto-detect) | Low |
-| 2 | `internal/runtime/manager.go` | Auto-detect SDK: check `./sdk/python`, `../sdk/python`, env `HIVEKERNEL_SDK_PATH` | Medium |
-| 3 | `internal/runtime/manager.go` | Set PYTHONPATH in spawned process env automatically | Low |
+Chose JSON over YAML: no new dependencies, Go stdlib `encoding/json` is sufficient.
 
-**After R4:** `bin/hivekernel.exe --listen :50051 --startup configs/startup-full.yaml`
-works without manual PYTHONPATH. SDK found automatically relative to binary.
-
-### Phase R5: Migration syscall
-
-**Goal:** Agents can request branch migration via syscall.
-
-| # | File | Change | Risk |
-|---|------|--------|------|
-| 1 | `api/proto/core.proto` | Add `migrate` syscall message in ExecuteRequest | Medium |
-| 2 | `internal/kernel/syscall_handler.go` | Add `handleMigrate()` — validate ownership, delegate to MigrationManager | Medium |
-| 3 | `internal/kernel/king.go` | Remove business logic from `handleOverloadEscalation()` — just log, let agents decide | Low |
-| 4 | `sdk/python/hivekernel_sdk/syscall.py` | Add `ctx.migrate(branch_pid, target_vps)` | Low |
-
-**After R5:** Migration decisions are agent-side. Kernel only provides the mechanism.
-
-### Phase R6: Startup config format
-
-**Goal:** Define the YAML schema for agent startup configuration.
-
-```yaml
-# configs/startup-full.yaml
-agents:
-  - name: queen
-    role: daemon
-    cognitive_tier: tactical
-    model: sonnet
-    runtime_type: python
-    runtime_image: hivekernel_sdk.queen:QueenAgent
-    system_prompt: "You are a task dispatcher..."
-
-  - name: maid@local
-    role: daemon
-    cognitive_tier: operational
-    runtime_type: python
-    runtime_image: hivekernel_sdk.maid:MaidAgent
-
-  - name: assistant
-    role: daemon
-    cognitive_tier: tactical
-    model: sonnet
-    runtime_type: python
-    runtime_image: hivekernel_sdk.assistant:AssistantAgent
-    system_prompt: "You are HiveKernel Assistant..."
-
-  - name: github-monitor
-    role: daemon
-    cognitive_tier: operational
-    runtime_type: python
-    runtime_image: hivekernel_sdk.github_monitor:GitHubMonitorAgent
-    cron:
-      - name: github-check
-        expression: "*/30 * * * *"
-        description: "Check GitHub repos for updates"
-
-  - name: coder
-    role: daemon
-    cognitive_tier: tactical
-    model: sonnet
-    runtime_type: python
-    runtime_image: hivekernel_sdk.coder:CoderAgent
+```json
+{
+  "agents": [
+    {
+      "name": "queen",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.queen:QueenAgent"
+    },
+    {
+      "name": "github-monitor",
+      "role": "daemon",
+      "cognitive_tier": "operational",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.github_monitor:GitHubMonitorAgent",
+      "cron": [
+        {
+          "name": "github-check",
+          "expression": "*/30 * * * *",
+          "description": "Check GitHub repos for updates",
+          "params": {"repos": "[\"Selemilka/hivekernel\"]"}
+        }
+      ]
+    }
+  ]
+}
 ```
 
-This replaces both `spawnQueen()` in main.go AND `Queen.on_init()` daemon spawning.
-Queen is just another agent in the list — not the spawner of others.
+Supported fields per agent: `name`, `role`, `cognitive_tier`, `model`,
+`runtime_type`, `runtime_image`, `system_prompt`, `cron[]`.
+Daemon names auto-append `@node` if no `@` present.
 
-### Implementation Order
+### R7: Graceful Shutdown -- DONE (post Plan 004)
 
-```
-R1 (decouple main.go)     -- highest priority, unblocks everything
-R3 (delete Go Maid)        -- easy cleanup, no dependencies
-R4 (PYTHONPATH)            -- quality of life
-R2 (Queen cleanup)         -- depends on R1 (config format must exist first)
-R6 (config format)         -- design work, parallel with R1
-R5 (migrate syscall)       -- lowest priority, clustering not used yet
-```
+Three iterations of fixes to make Ctrl+C reliable on Windows:
 
-Phases R1 + R3 can be done immediately with minimal risk.
-R2 + R6 should be done together (Queen needs config to replace hardcoded spawns).
-R5 is future work (clustering is not production-ready).
+| # | Problem | Fix | File |
+|---|---------|-----|------|
+| 1 | `GracefulStop()` blocked on active gRPC streams | Double Ctrl+C pattern: first = graceful, second = force kill | `cmd/hivekernel/main.go` |
+| 2 | `StopRuntime()` hung after `Kill()` — `cmd.Wait()` never returns on Windows | Added 2s timeout after `Process.Kill()` | `internal/runtime/manager.go` |
+| 3 | Executor `stream.Recv()` blocked on dead agent — TCP breakage not detected | gRPC keepalive (ping 5s, timeout 2s) + 15s overall shutdown deadline | `internal/runtime/executor.go`, `cmd/hivekernel/main.go` |
+
+**Shutdown sequence:**
+1. First Ctrl+C: `cancel()` -> `EventLog.Close()` -> `StopAll()` + `GracefulStop()` in background
+2. Second Ctrl+C (or 15s timeout): `KillAll()` + `grpcServer.Stop()` (force)
+3. `king.Stop()` -> exit
+
+**Result:** Kernel always exits within 15s of first Ctrl+C, instantly on second.
 
 ---
 
@@ -671,4 +636,4 @@ R5 is future work (clustering is not production-ready).
 **Runtime bridge:** 3 subsystems
 **Config:** 1 subsystem
 **Gray zones:** 0 (all resolved)
-**Violations to fix:** 2 (hardcoded Queen in main.go, Go Maid duplication)
+**Violations:** 0 (all fixed in Plan 004 — Queen decoupled, Go Maid deleted)

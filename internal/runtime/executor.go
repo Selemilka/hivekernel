@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"time"
-
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/process"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 )
 
 // SyscallHandler dispatches syscalls from agent streams to kernel subsystems.
@@ -38,13 +35,13 @@ func (e *Executor) ExecuteTask(
 	callerPID process.PID,
 	task *pb.TaskRequest,
 ) (*pb.TaskResult, error) {
+	// No client-side keepalive: these are task-scoped connections with active
+	// streams and context deadlines. Aggressive keepalive pings (e.g. every 5s)
+	// trigger the Python gRPC server's default enforcement policy (min 5min
+	// between pings), causing GOAWAY and connection loss during long execute_on
+	// syscalls that block the stream for 60-300s.
 	conn, err := grpc.NewClient(agentAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                5 * time.Second, // ping every 5s
-			Timeout:             2 * time.Second, // wait 2s for pong
-			PermitWithoutStream: false,
-		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("executor: dial %s: %w", agentAddr, err)

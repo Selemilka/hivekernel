@@ -287,14 +287,14 @@ Open http://localhost:8080/static/chat.html in your browser. Features:
 - **Generate code** — Ask "Write a Python fibonacci function" and Assistant delegates to the Coder agent
 - **Sidebar** — Shows running agents and active cron schedules
 
-The process tree automatically includes 4 daemon agents:
+With `--startup configs/startup-full.json`, the process tree includes 5 agents:
 ```
 King (PID 1)
-  +-- Queen (daemon, tactical)
-        +-- Maid (daemon, operational) -- health checks
-        +-- Assistant (daemon, tactical) -- 24/7 chat
-        +-- GitMonitor (daemon, operational) -- repo monitoring
-        +-- Coder (daemon, tactical) -- code generation
+  +-- Queen (daemon, tactical) -- task dispatcher
+  +-- Maid (daemon, operational) -- health checks
+  +-- Assistant (daemon, tactical) -- 24/7 chat
+  +-- GitMonitor (daemon, operational) -- repo monitoring
+  +-- Coder (daemon, tactical) -- code generation
 ```
 
 ### Built-in Agent Types
@@ -368,23 +368,20 @@ uv run python examples\echo_worker.py --port 50100 --core localhost:50051
 ## Project Layout
 
 ```
-cmd/hivekernel/       Go entry point
+cmd/hivekernel/       Go entry point, gRPC server, startup config
 internal/
-  kernel/             King (PID 1), config, gRPC CoreService
-  process/            Registry, spawner, supervisor, signals, tree
+  kernel/             King (PID 1), config, gRPC CoreService, startup config
+  process/            Registry, spawner, supervisor, signals, tree, event log
   ipc/                Broker, priority queue, shared memory, pipes, events
   resources/          Token budgets, rate limiter, accounting, cgroups
   permissions/        Auth (USER identity), ACL, role capabilities
   cluster/            Node discovery, VPS connector, branch migration
   scheduler/          Task priority, scheduler, cron scheduling
   runtime/            Agent runtime manager (OS process spawning), executor, health
-  daemons/            Maid health daemon
 api/proto/            Protobuf definitions + generated Go code
 sdk/python/           Async Python agent SDK (HiveAgent, CoreClient, SyscallContext)
-sdk/python/dashboard/ Web dashboard (FastAPI + D3.js)
+sdk/python/dashboard/ Web dashboard (FastAPI + D3.js + chat UI)
+configs/              Startup configs (empty, full agent set)
 HIVEKERNEL-SPEC.md    Full project specification
-ARCHITECTURE.md       Full architecture documentation (10 sections, API ref)
-USAGE-GUIDE.md        Practical "How do I..." guide with examples
-CLAUDE.md             Development guide for Claude Code
 CHANGELOG.md          Progress log
 ```

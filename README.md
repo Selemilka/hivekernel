@@ -7,22 +7,48 @@ Python agents make LLM calls and do the actual work. They communicate over gRPC.
 
 ## Architecture
 
+HiveKernel follows a 5-layer architecture inspired by operating system design:
+
 ```
-                        King (PID 1, Go kernel)
-                              |
-                        Queen (PID 2, sonnet)
-                       /      |       \
-                  Maid      Lead     Architect
-               (health)   (sonnet)   (sonnet)
-                          /      \
-                     Worker-1  Worker-2
-                     (flash)   (flash)
+  Layer 5  APPLICATION AGENTS (Python)        Queen, Assistant, Coder, Workers...
+  Layer 4  RUNTIME BRIDGE (Go)                Manager, Executor, HealthMonitor
+  Layer 3  INFRASTRUCTURE (Go)                Scheduler, Cron, Cluster, Permissions, Resources
+  Layer 2  CORE KERNEL PRIMITIVES (Go)        Registry, Spawner, Signals, Broker, EventLog...
+  Layer 1  SYSCALL INTERFACE (gRPC proto)     10 syscalls: the contract between kernel and agents
 ```
 
-**King** is PID 1. Manages the process tree, routes messages, enforces budgets.
-Spawns Queen on startup.
+**Kernel starts clean.** `bin/hivekernel.exe --listen :50051` runs a pure kernel
+with no Python dependencies. Agents are optional and spawned from config:
 
-**Queen** is the local coordinator daemon. Receives tasks, assesses complexity
+```
+bin/hivekernel.exe --listen :50051 --startup configs/startup-full.json
+```
+
+### Process tree (with startup-full.json)
+
+```
+  King (PID 1, Go kernel)         -- init(1), owns all subsystems
+    +-- Queen (daemon, sonnet)    -- task dispatcher: complexity assessment + routing
+    +-- Assistant (daemon, sonnet) -- 24/7 chat, cron scheduling, code delegation
+    +-- Coder (daemon, sonnet)    -- on-demand code generation
+    +-- GitMonitor (daemon, mini) -- cron-triggered repo monitoring
+    +-- Maid (daemon, mini)       -- LLM-powered health monitoring
+```
+
+When Queen receives a complex task, she spawns orchestrator leads and workers:
+
+```
+  Queen
+    +-- Lead (tactical, orchestrator)
+          +-- Worker-0 (operational, gemini-flash)
+          +-- Worker-1 (operational, gemini-flash)
+          +-- Worker-2 (operational, gemini-flash)
+```
+
+**King** is init(1). Manages the process tree, routes messages, enforces budgets.
+Does not know about specific agents -- just manages processes.
+
+**Queen** is an optional task dispatcher daemon. Receives tasks, assesses complexity
 (heuristic keywords + LLM fallback), picks a strategy:
 
 - **Simple** -- single worker, one LLM call
@@ -35,19 +61,16 @@ Spawns Queen on startup.
 same worker (sequential, shared context). Independent groups run in parallel.
 Leads are reused across tasks from an idle pool.
 
-**Workers** are `role=worker` (not task), so they stay alive between subtasks
-and accumulate context. Each worker remembers previous results and uses them
-to inform the next response.
+**Workers** stay alive between subtasks and accumulate context.
+Each worker remembers previous results and uses them to inform the next response.
 
-**Maid** is a health daemon. Periodically scans for zombies and orphans,
-escalates anomalies to King.
-
-**Architect** produces a `{groups, analysis, risks, acceptance_criteria}` JSON
-plan. The orchestrator uses it directly instead of calling LLM for decomposition.
+**Maid** is an optional Python agent for LLM-powered anomaly detection.
+Zombie reaping and crash detection are handled by the kernel itself
+(Supervisor + HealthMonitor).
 
 ## What's implemented
 
-### Go kernel (37 source files, 248 tests)
+### Go kernel (37 source files, 265 tests)
 
 | Subsystem | What it does |
 |-----------|-------------|
@@ -63,17 +86,20 @@ plan. The orchestrator uses it directly instead of calling LLM for decomposition
 | Event sourcing | Ring buffer + atomic sequence, JSONL disk persistence (`logs/events-*.jsonl`), gRPC `SubscribeEvents` streaming with replay-from-seq |
 | gRPC API | CoreService: spawn, kill, process info, list children, send message, store/get/list artifacts, execute task, resource usage, subscribe events |
 
-### Python SDK (14 source files, 104 tests)
+### Python SDK (17 source files, 145 tests)
 
 | Module | What it does |
 |--------|-------------|
 | `HiveAgent` | Base class. Lifecycle (init/shutdown), Execute bidi stream, auto-exit for task role |
 | `LLMAgent` | Adds async OpenRouter client. `ask(prompt)` and `chat(messages)` with model routing |
-| `QueenAgent` | Coordinator daemon. 3-tier routing, lead reuse (idle pool with 5min timeout), heuristic + LLM complexity assessment, task history (Jaccard similarity), Maid integration |
+| `QueenAgent` | Task dispatcher daemon. 3-tier routing, lead reuse (idle pool with 5min timeout), heuristic + LLM complexity assessment, task history (Jaccard similarity) |
+| `AssistantAgent` | 24/7 chat daemon. Answers questions, schedules cron, delegates code generation to Coder |
+| `CoderAgent` | Code generation daemon. Generates code via LLM, strips markdown fences, stores as artifact |
+| `GitHubMonitorAgent` | Cron-triggered daemon. Checks GitHub repos for new commits, stores state, escalates updates |
 | `OrchestratorAgent` | Task decomposition into groups via LLM. Parallel group execution, sequential subtasks within group. Accepts pre-built plans from Architect |
 | `WorkerAgent` | Stateful worker. `_task_memory` accumulates context across sequential tasks |
 | `ArchitectAgent` | Strategic planner. Produces structured JSON plan with groups, risks, acceptance criteria |
-| `MaidAgent` | Health daemon. Zombie/orphan detection, escalation to King |
+| `MaidAgent` | Optional health daemon. LLM-powered anomaly detection, escalation to parent |
 | `SyscallContext` | In-stream syscalls: spawn, kill, send, execute_on, store/get artifact, escalate, log, report_progress, wait_child |
 | `LLMClient` | Async OpenRouter HTTP client. Zero deps beyond stdlib (`urllib` + `asyncio.to_thread`) |
 | `CoreClient` | gRPC wrapper for CoreService |
@@ -107,11 +133,8 @@ bin/hivekernel.exe --listen :50051
 bin/hivekernel.exe --listen :50051 --startup configs/startup-full.json
 
 # Run tests
-go test ./internal/... -v          # 248+ Go tests
-python sdk/python/tests/test_queen.py -v       # 43 tests
-python sdk/python/tests/test_orchestrator.py -v # 36 tests
-python sdk/python/tests/test_architect.py -v    # 8 tests
-python sdk/python/tests/test_maid.py -v         # 14 tests
+go test ./internal/... -v          # 265 Go tests
+python -m pytest sdk/python/tests/ -v          # 145 Python tests
 ```
 
 ### LLM demo (real AI calls)
@@ -174,18 +197,18 @@ Available syscalls in `ctx`:
 
 | | Files | Tests | Lines |
 |---|-------|-------|-------|
-| Go (kernel) | 37 src + 30 test | 248 | ~20,400 |
-| Python (SDK) | 14 src + 5 test | 104 | ~2,400 |
-| Examples/demos | 11 | -- | -- |
-| Dashboard | 3 | -- | -- |
-| **Total** | **100** | **352** | **~22,800** |
+| Go (kernel) | 37 src + 31 test | 265 | ~14,500 |
+| Python (SDK) | 17 src + 8 test | 145 | ~6,900 |
+| Examples/demos | 13 | -- | ~3,500 |
+| Dashboard | 7 | -- | ~3,000 |
+| **Total** | **113** | **410** | **~28,000** |
 
 ## Project layout
 
 ```
-cmd/hivekernel/           Entry point, gRPC server, Queen spawn
+cmd/hivekernel/           Entry point, gRPC server, startup config
 internal/
-  kernel/                 King (PID 1), gRPC CoreService, syscall handler
+  kernel/                 King (PID 1), gRPC CoreService, syscall handler, startup config
   process/                Registry, spawner, supervisor, signals, tree, event log
   ipc/                    Broker, priority queue, shared memory, pipes, events
   resources/              Token budgets, rate limiter, accounting, cgroups
@@ -196,23 +219,22 @@ internal/
 api/proto/                Protobuf definitions + generated Go code
 sdk/python/
   hivekernel_sdk/         Agent SDK: base agent, LLM client, syscalls, types
-  tests/                  Unit tests (queen, orchestrator, architect, maid, agent)
-  examples/               Demos and E2E tests
-  dashboard/              FastAPI + D3.js web UI
+  tests/                  Unit tests (8 files, 145 tests)
+  examples/               Demos and E2E tests (13 files)
+  dashboard/              FastAPI + D3.js web UI + chat interface
+configs/                  Startup configs (empty, full agent set)
 HIVEKERNEL-SPEC.md        Full specification
-ARCHITECTURE.md           Architecture documentation
-QUICKSTART.md             Getting started guide
 CHANGELOG.md              Development log (phases 0-10 + extensions)
 ```
 
 ## Docs
 
 - [HIVEKERNEL-SPEC.md](HIVEKERNEL-SPEC.md) -- full specification
-- [ARCHITECTURE.md](ARCHITECTURE.md) -- system internals
-- [QUICKSTART.md](QUICKSTART.md) -- getting started
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) -- system internals (5-layer model)
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) -- getting started
+- [docs/USAGE-GUIDE.md](docs/USAGE-GUIDE.md) -- practical examples
+- [docs/AGENT-ROLES.md](docs/AGENT-ROLES.md) -- role design and lifecycle
 - [CHANGELOG.md](CHANGELOG.md) -- development history
-- [USAGE-GUIDE.md](USAGE-GUIDE.md) -- practical examples
-- [docs/AGENT-ROLES.md](docs/AGENT-ROLES.md) -- role design
 
 ## License
 

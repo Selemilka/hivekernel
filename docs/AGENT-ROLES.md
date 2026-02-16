@@ -25,13 +25,16 @@ in HiveKernel. It serves as the design spec for implementation.
 
 **One per cluster. PID 1. Strategic/Opus.**
 
-- Bootstraps the system, spawns daemons (queen per VPS)
+King is **init(1)** -- the root process that owns all kernel subsystems (28 total).
+It does not know about specific agents.
+
+- Bootstraps the system (process table, IPC, scheduler, event log, ...)
+- Spawns agents from startup config (`--startup config.json`)
 - Routes cross-VPS messages
-- Makes migration decisions
-- Human interface (receives user requests)
+- Provides syscall interface for all agents
 - Never dies; if it does, everything restarts
 
-**Lifecycle:** permanent. No task pipeline — runs an event loop.
+**Lifecycle:** permanent. No task pipeline -- runs an event loop.
 
 ### 2.2 Daemon (Queen, Maid)
 
@@ -39,42 +42,46 @@ in HiveKernel. It serves as the design spec for implementation.
 
 #### Queen
 
-**Tactical/Sonnet. Child of King.**
+**Tactical/Sonnet. Child of King. Optional -- kernel works without her.**
 
-Purpose: local coordinator for a VPS. The "brain" that receives tasks
-from King (or dashboard) and decides how to execute them.
+Purpose: task dispatcher. Receives tasks from dashboard or external callers,
+assesses complexity, and routes to the appropriate strategy. Does NOT spawn
+other daemons -- that is done via startup config.
 
 Pipeline:
 ```
-1. Receive task (from King, dashboard, or cron)
-2. Decide strategy:
-   - Simple task? Execute directly or spawn a task-agent
-   - Complex task? Spawn a lead/orchestrator, delegate
-   - Recurring? Store in crontab, trigger on schedule
-3. Monitor execution (SIGCHLD on child completion)
-4. Collect result, store artifact, report to King
-5. Manage child lifecycle: reuse lead or kill, based on result
-6. Wait for next task
+1. Receive task (from dashboard, external caller, or cron)
+2. Assess complexity (task history -> heuristics -> LLM fallback)
+3. Decide strategy:
+   - Simple task? Spawn a task-agent (one-shot worker)
+   - Complex task? Spawn/reuse a lead, delegate
+   - Architecture needed? Spawn architect, then lead from plan
+4. Monitor execution (SIGCHLD on child completion)
+5. Collect result, store artifact
+6. Manage lead lifecycle: reuse (idle pool with 5min timeout) or kill
+7. Wait for next task
 ```
 
 Memory:
 - Persistent across tasks (daemon never exits)
-- Holds crontab (scheduled tasks)
-- Knows which leads/agents are alive and available for reuse
-- Accumulates knowledge about task patterns (which decomposition works)
+- Task history with Jaccard similarity for complexity prediction
+- Knows which leads are alive and available for reuse (idle pool)
+- Accumulates knowledge about task patterns
 
 #### Maid
 
-**Tactical/Sonnet. Child of Queen.**
+**Operational. Child of King. Optional -- kernel handles zombies without her.**
 
-Purpose: per-VPS health and cleanup daemon.
+Purpose: LLM-powered anomaly detection daemon. Note: zombie reaping and
+crash detection are handled by the kernel itself (Supervisor + HealthMonitor).
+Maid adds LLM-powered analysis on top.
 
 Pipeline:
 ```
-1. Periodically spawn monitoring tasks (memory, disk, zombie scan)
-2. Collect results from monitors
-3. Report anomalies to Queen
-4. Clean up zombie processes that parents forgot to reap
+1. Receive health check task (from cron or manual trigger)
+2. Query process tree and resource usage
+3. Use LLM to detect anomalies beyond simple thresholds
+4. Report anomalies to parent
 5. Wait for next check cycle
 ```
 
@@ -344,11 +351,11 @@ To get from 5.2 to 5.1:
 |----------|-------------------|-----------|
 | task | supervisor auto-reap | task auto-exits -> zombie -> reap after 60s |
 | worker | parent (lead) | lead kills after task, or reuses |
-| lead | parent (queen) | queen kills after project, or reuses |
+| lead | parent (queen) | queen kills after project, or reuses (idle pool) |
 | architect | supervisor | architect auto-sleeps, parent kills when done |
 | agent | parent or user | session end -> kill |
 | daemon | kernel auto-restart | if crash: restart. if kill: intentional |
-| queen/maid orphans | maid detects | maid periodic zombie scan |
+| orphans | supervisor | supervisor reaps zombies after 60s, reparents children |
 
 **Invariant:** every process has exactly one lifecycle manager (its parent).
 The parent is responsible for killing children when they're no longer needed.
@@ -356,25 +363,24 @@ Supervisor is the safety net for zombies that parents forgot to collect.
 
 ---
 
-## 7. Open Questions for Implementation
+## 7. Open Questions (Resolved)
 
-1. **Worker reuse protocol**: How does a lead signal "I want to reuse this worker"?
-   Currently: just send another execute_on. Worker stays alive, handles next task.
-   Question: should worker clear its LLM context between tasks? Configurable?
+1. **Worker reuse protocol**: Resolved. Lead sends another `execute_on`. Worker
+   stays alive, handles next task. `_task_memory` accumulates context. Lead decides
+   whether to reuse (stateful) or kill+respawn (stateless).
 
-2. **Queen task routing**: How does Queen decide between spawning a task vs a lead?
-   Heuristic: if task description is short/atomic -> task. If complex -> lead.
-   Or: always ask LLM to classify.
+2. **Queen task routing**: Resolved. Three-step assessment: task history (Jaccard
+   similarity) -> heuristic keywords -> LLM fallback. Routes to simple/complex/architect.
 
-3. **Budget inheritance for reused workers**: If a lead gets budget B for task 1,
-   and budget B2 for task 2, do reused workers get fresh budget or carry over?
+3. **Budget inheritance for reused workers**: Not yet needed in practice. Workers
+   use parent's budget implicitly (token consumption recorded against the worker PID).
 
-4. **Architect wake protocol**: When architect is woken for revision, does it
-   reload its previous artifact automatically, or does parent pass it?
+4. **Architect wake protocol**: Architect reads its own previous artifact on wake.
+   Parent passes the original task description, architect loads context from stored plan.
 
-5. **Graceful shutdown timeout**: Currently 5s. Workers doing LLM calls
-   can't exit gracefully in 5s. Increase to 15-30s? Or send SIGTERM
-   then let LLM call finish naturally?
+5. **Graceful shutdown timeout**: Resolved. 5s agent shutdown + 2s kill timeout.
+   gRPC keepalive (ping 5s, timeout 2s). Overall 15s shutdown deadline with
+   double Ctrl+C pattern (first = graceful, second = force kill).
 
 ---
 
@@ -382,7 +388,9 @@ Supervisor is the safety net for zombies that parents forgot to collect.
 
 ### 8.1 Architect Role & Strategic Planning Layer
 
-**Status:** role defined, infrastructure exists (sleep/wake, artifacts), not yet used.
+**Status:** Role defined, infrastructure exists (sleep/wake, artifacts). ArchitectAgent
+implemented as LLM-powered planner (produces structured JSON plan with groups,
+risks, acceptance criteria). Used by Queen for complex/novel tasks.
 
 **Why it will be needed:**
 
@@ -440,26 +448,27 @@ User -> Dashboard -> Queen
 **When to implement:** after Queen is a live LLM agent and has encountered
 tasks where tactical-tier decomposition is insufficient.
 
-### 8.2 Live Queen
+### 8.2 Live Queen -- COMPLETE
 
-Make Queen an LLM daemon that receives tasks from dashboard/King,
-assesses complexity, manages lead lifecycle, holds crontab.
-Prerequisite for architect integration.
+Queen is a live LLM daemon. Receives tasks from dashboard/external callers,
+assesses complexity (history -> heuristics -> LLM), manages lead lifecycle
+(idle pool with 5min timeout, reaper), routes to 3 strategies (simple/complex/architect).
 
-### 8.3 Worker Reuse & Memory
+### 8.3 Worker Reuse & Memory -- COMPLETE
 
-Define protocol for stateful vs stateless workers. Lead decides per-worker
-whether to reuse (send new execute_on) or kill+respawn (fresh context).
-Investigate agent memory via artifacts (load previous context on init).
+Workers stay alive between tasks. Lead sends `execute_on` for reuse.
+`WorkerAgent._task_memory` accumulates context across sequential tasks.
+Kill+respawn gives fresh context (stateless restart).
 
-### 8.4 Maid as Active Health Daemon
+### 8.4 Maid -- PARTIAL
 
-Maid spawns monitoring tasks periodically, detects resource anomalies,
-cleans up forgotten zombies, reports to Queen. Currently just a struct
-in `internal/daemons/` with no real implementation.
+Go Maid (`internal/daemons/`) deleted -- Supervisor + HealthMonitor handle
+zombie reaping and crash detection. Python MaidAgent exists as optional
+LLM-powered anomaly detection daemon.
 
 ### 8.5 Cross-VPS Coordination
 
 King routes tasks to queens on different VPS nodes. Migration of agents
-between nodes. Queen-to-queen message routing. Requires cluster module
-integration with real networking.
+between nodes. Requires cluster module integration with real networking.
+Mechanism is in kernel (NodeRegistry, Connector, MigrationManager),
+migration decisions should move to agents.

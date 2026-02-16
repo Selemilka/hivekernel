@@ -23,53 +23,60 @@
 HiveKernel models LLM agent orchestration after the Linux process model:
 agents are processes in a tree, with the kernel (PID 1) at the root.
 
-### Three-Layer Architecture
+The kernel starts clean -- no hardcoded agents, no Python dependency.
+Agents are optional and spawned from a JSON startup config.
+
+### Five-Layer Architecture
 
 ```
-+-----------------------------------------------------+
-|                   External Callers                    |
-|           (Python scripts, other services)            |
-+---------------------------+--------------------------+
-                            | gRPC (ExecuteTask, SpawnChild, ...)
-                            v
-+-----------------------------------------------------+
-|                    Go Core (King)                     |
-|  +--------+ +--------+ +-------+ +--------+ +-----+ |
-|  |Registry| | Broker | |Budget | |  ACL   | |Sched| |
-|  +--------+ +--------+ +-------+ +--------+ +-----+ |
-|  |Spawner | |SharedMem| |CGroups| | Caps  | | Cron| |
-|  +--------+ +--------+ +-------+ +--------+ +-----+ |
-|  |Lifecycle| | Pipes  | |Acctng | | Auth  | |Migr. | |
-|  +--------+ +--------+ +-------+ +--------+ +-----+ |
-+---------------------------+--------------------------+
-                            | gRPC (Init, Execute, Shutdown, ...)
-                            v
-+-----------------------------------------------------+
-|                Python Agent Runtime                   |
-|  +----------+ +----------+ +---------+ +---------+  |
-|  | HiveAgent| | Syscall  | |  Core   | | Runner  |  |
-|  |  (base)  | | Context  | | Client  | |         |  |
-|  +----------+ +----------+ +---------+ +---------+  |
-+-----------------------------------------------------+
++==================================================================+
+|  Layer 5: APPLICATION AGENTS (Python)                            |
+|  Queen, Assistant, GitMonitor, Coder, Orchestrator, Worker, etc. |
+|  --- business logic, LLM calls, user-facing features ---         |
++==================================================================+
+|  Layer 4: RUNTIME BRIDGE (Go)                                    |
+|  Manager, Executor, HealthMonitor                                |
+|  --- spawn processes, gRPC dial, task dispatch ---               |
++==================================================================+
+|  Layer 3: INFRASTRUCTURE (Go)                                    |
+|  Scheduler, Cron, Cluster, Permissions, Resources                |
+|  --- policy, scheduling, multi-VPS, budgets ---                  |
++==================================================================+
+|  Layer 2: CORE KERNEL PRIMITIVES (Go)                            |
+|  Registry, Spawner, Signals, Lifecycle, Broker, SharedMem,       |
+|  Pipes, EventBus, EventLog, Supervisor                           |
+|  --- process table, IPC, signals, event sourcing ---             |
++==================================================================+
+|  Layer 1: SYSCALL INTERFACE (gRPC proto)                         |
+|  10 syscalls: spawn, kill, send, store, get_artifact,            |
+|  escalate, log, execute_on, wait_child, report_progress          |
+|  --- the contract between kernel and agents ---                  |
++==================================================================+
 ```
+
+Agents (Layer 5) interact with the kernel exclusively through syscalls (Layer 1).
+The kernel does not know about specific agent implementations -- it only manages
+processes, routes messages, enforces security, and bridges runtimes.
 
 ### Design Philosophy
 
 - **Process tree**: Every agent is a process with PID, PPID, role, cognitive tier, state
-- **Hierarchical control**: Parent spawns, delegates, kills children. No peer-to-peer.
-- **Cognitive tiers**: Strategic (opus) > Tactical (sonnet) > Operational (mini). Child tier <= parent tier.
+- **Hierarchical control**: Parent spawns, delegates, kills children. No peer-to-peer
+- **Cognitive tiers**: Strategic (opus) > Tactical (sonnet) > Operational (mini). Child tier <= parent tier
 - **Syscalls over stream**: Agents perform kernel operations (spawn, kill, send, store) via bidirectional gRPC stream during task execution
-- **Budget inheritance**: Token budgets flow down the tree. Parent allocates to child from its own pool.
+- **Budget inheritance**: Token budgets flow down the tree. Parent allocates to child from its own pool
 - **USER inheritance**: All children share the parent's user identity (except kernel can assign different users)
+- **Config-driven startup**: Agents are spawned from `--startup config.json`, not hardcoded in Go
 
 ### Key Source Files
 
 | File | Description |
 |------|-------------|
-| `cmd/hivekernel/main.go` | Entry point, gRPC server setup, demo scenario |
-| `internal/kernel/king.go` | King (PID 1), owns all subsystems |
+| `cmd/hivekernel/main.go` | Entry point, gRPC server, startup config loader |
+| `internal/kernel/king.go` | King (PID 1), owns all 28 subsystems |
 | `internal/kernel/grpc_core.go` | gRPC CoreService implementation |
 | `internal/kernel/syscall_handler.go` | Dispatches in-stream syscalls to subsystems |
+| `internal/kernel/startup.go` | Startup config (JSON agent definitions) |
 | `api/proto/agent.proto` | Agent service + common types + syscalls |
 | `api/proto/core.proto` | Core service definition |
 | `sdk/python/hivekernel_sdk/agent.py` | HiveAgent base class |
@@ -587,7 +594,7 @@ Core-managed recurring actions (`internal/scheduler/cron.go`):
 - **Two actions**: `CronSpawn` (create new process) and `CronWake` (wake sleeping process)
 - **Per-VPS**: Each entry is associated with a VPS node
 - **Dedup**: Won't re-trigger within the same minute
-- Queen holds the crontab (from spec)
+- Kernel holds the crontab for reliability (agents can add/remove via gRPC RPCs)
 
 ### Lifecycle Manager
 

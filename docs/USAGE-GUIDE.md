@@ -36,12 +36,16 @@ go build -o bin/hivekernel.exe ./cmd/hivekernel
 ### Start the kernel
 
 ```bash
+# Pure kernel (no Python agents)
 bin\hivekernel.exe --listen :50051
+
+# With agents (from startup config)
+bin\hivekernel.exe --listen :50051 --startup configs/startup-full.json
 ```
 
-The kernel bootstraps two built-in processes:
-- **king** (PID 1) — the root process, strategic tier
-- **queen** (PID 2) — system daemon, tactical tier
+In pure mode, only **king** (PID 1) exists -- the root process, strategic tier.
+With `--startup configs/startup-full.json`, agents (queen, assistant, coder, etc.)
+are spawned from the config file.
 
 ### Verify with Go tests
 
@@ -723,16 +727,16 @@ from hivekernel_sdk import agent_pb2, core_pb2, core_pb2_grpc
 
 KERNEL_BIN = "bin/hivekernel.exe"
 CORE_ADDR = "localhost:50051"
-QUEEN_PID = 2
+QUEEN_PID = 2  # First agent spawned from startup config gets PID 2
 
 async def main():
-    # 1. Start kernel
+    # 1. Start kernel with agents
     sdk_dir = os.path.abspath("sdk/python")
     env = os.environ.copy()
     env["PYTHONPATH"] = sdk_dir
 
     kernel = subprocess.Popen(
-        [KERNEL_BIN, "--listen", ":50051"],
+        [KERNEL_BIN, "--listen", ":50051", "--startup", "configs/startup-full.json"],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -829,7 +833,7 @@ Every gRPC call requires `x-hivekernel-pid` metadata to identify the caller:
 # Call as king (PID 1) -- full admin access
 king_md = [("x-hivekernel-pid", "1")]
 
-# Call as queen (PID 2)
+# Call as queen (PID 2 when spawned first from startup config)
 queen_md = [("x-hivekernel-pid", "2")]
 
 # Call as a specific agent

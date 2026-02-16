@@ -1,0 +1,688 @@
+18:07:45.290281 HiveKernel starting on node vps1
+18:07:45.314083 [king] bootstrapped as PID 1 on vps1
+18:07:45.314606 [grpc] CoreService listening on :50051 (agents dial localhost:50051)
+18:07:45.314606 [king] running, listening for messages...
+18:07:45.734204 [runtime] PID 2 agent listening on localhost:56963
+18:07:45.796903 [runtime] PID 2 (queen@vps1) initialized successfully
+18:07:45.796903 [king] spawned queen@vps1 (PID 2) under PID 1, role=daemon, cog=tactical
+18:07:45.796903 PID  PPID USER       ROLE       COG        MODEL   VPS   STATE    COMMAND
+18:07:45.796903 -------------------------------------------------------------------
+18:07:45.796903 1    0    root       kernel     strategic  opus    vps1  running  king
+18:07:45.796903 2    1    root       daemon     tactical   sonnet  vps1  idle     queen@vps1
+18:07:45.796903 [startup] Queen spawned as PID 2 (real Python agent)
+18:07:46.002985 [runtime] PID 3 agent listening on localhost:56970
+18:07:46.006593 [runtime] PID 3 (maid@local) initialized successfully
+18:07:46.006593 [king] spawned maid@local (PID 3) under PID 2, role=daemon, cog=operational
+18:07:46.006593 [grpc] SpawnChild: PID 2 spawned maid@local (PID 3)
+18:07:56.073862 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-1, vis=global)
+18:08:56.144609 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-2, vis=global)
+18:09:24.710519 [grpc] ExecuteTask: target PID 2 (queen@vps1), task=разбери русский массмаркет
+18:09:24.763827 [syscall] PID 2 call_id=de41b0f9-d364-4108-bfe0-fa4bdd381041
+18:09:24.763827 [agent:2] [info] Queen received task: разбери русский массмаркет
+18:09:24.770581 [executor] task ext-2-разбери русский масс progress: 5% Assessing task complexity...
+18:09:25.603356 [syscall] PID 2 call_id=e83e4b2b-ecf5-4622-a466-8a3ead517b1f
+18:09:25.603356 [agent:2] [info] Task complexity: complex
+18:09:25.603861 [executor] task ext-2-разбери русский масс progress: 15% Acquiring orchestrator...
+18:09:25.603888 [syscall] PID 2 call_id=805f5cdf-ba3d-466d-9278-6d5236fff9f6
+18:09:25.603888 [agent:2] [info] Complex strategy: acquiring orchestrator lead
+18:09:25.603888 [syscall] PID 2 call_id=06f64936-f5ab-4a08-9564-2cf95b5dbb11
+18:09:25.809758 [runtime] PID 4 agent listening on localhost:61321
+18:09:25.811875 [runtime] PID 4 (queen-lead) initialized successfully
+18:09:25.811875 [king] spawned queen-lead (PID 4) under PID 2, role=lead, cog=tactical
+18:09:25.811875 [syscall] spawn: PID 2 spawned queen-lead (PID 4)
+18:09:25.812402 [syscall] PID 2 call_id=be8b42d6-cd38-4c8e-975f-7e69cb8719f1
+18:09:25.812402 [agent:2] [info] Spawned new lead PID 4
+18:09:25.812932 [executor] task ext-2-разбери русский масс progress: 25% Lead working on task...
+18:09:25.812932 [syscall] PID 2 call_id=bac750c6-1b7e-4130-ae50-ad12cd86c6db
+18:09:25.812932 [syscall] execute_on: PID 2 -> PID 4, task=разбери русский массмаркет
+18:09:25.814564 [syscall] PID 4 call_id=2d6bab8d-7488-4ed7-b254-00583b4419d7
+18:09:25.814564 [agent:4] [info] Orchestrator starting: разбери русский массмаркет
+18:09:25.817207 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 5% Analyzing task...
+18:09:27.054424 [syscall] PID 4 call_id=407cc7c3-0e3e-4e34-bf48-86e161e23be5
+18:09:27.054424 [agent:4] [info] Decomposed into 2 subtasks
+18:09:27.054956 [syscall] PID 4 call_id=82f5be70-fed3-4f6f-a4da-e681503cf5f0
+18:09:27.054956 [agent:4] [info]   [1] Исследовать ключевых игроков и бренды российского массмаркета, их ассортимент и ценовую политику.
+18:09:27.055488 [syscall] PID 4 call_id=8d1f9e87-50bb-46fa-877f-1526b6e22b16
+18:09:27.055488 [agent:4] [info]   [2] Проанализировать потребительские предпочтения и тренды в российском массмаркете, включая демографиче
+18:09:27.069315 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 15% Spawning 2 workers...
+18:09:27.069315 [syscall] PID 4 call_id=98e70a7a-0b9f-44e0-acad-2f734d2b7c11
+18:09:27.281764 [runtime] PID 5 agent listening on localhost:61329
+18:09:27.283849 [runtime] PID 5 (worker-1) initialized successfully
+18:09:27.283849 [king] spawned worker-1 (PID 5) under PID 4, role=task, cog=operational
+18:09:27.283849 [syscall] spawn: PID 4 spawned worker-1 (PID 5)
+18:09:27.283849 [syscall] PID 4 call_id=efd48de6-a574-42e9-b5d7-e646f04d6943
+18:09:27.283849 [agent:4] [info] Spawned worker-1 as PID 5
+18:09:27.284388 [syscall] PID 4 call_id=0af622ea-c9c8-4423-8ee8-4ddf0d930fb5
+18:09:27.491839 [runtime] PID 6 agent listening on localhost:61335
+18:09:27.493950 [runtime] PID 6 (worker-2) initialized successfully
+18:09:27.493950 [king] spawned worker-2 (PID 6) under PID 4, role=task, cog=operational
+18:09:27.493950 [syscall] spawn: PID 4 spawned worker-2 (PID 6)
+18:09:27.493950 [syscall] PID 4 call_id=17facd72-98fe-4e47-b570-f3d11bf709be
+18:09:27.493950 [agent:4] [info] Spawned worker-2 as PID 6
+18:09:27.494485 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 25% Delegating subtasks...
+18:09:27.494485 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 50% Worker 1/2: Исследовать ключевых игроков и бренды ро...
+18:09:27.495022 [syscall] PID 4 call_id=b2db4fe7-6b87-48d2-a3fa-37ff53a9e342
+18:09:27.495022 [syscall] execute_on: PID 4 -> PID 5, task=Исследовать ключевых игроков и бренды российского массмаркета, их ассортимент и ценовую политику.
+18:09:27.496668 [syscall] PID 5 call_id=70c1dabf-b840-4bae-bacb-9ff9ec2dd383
+18:09:27.496668 [agent:5] [info] Worker PID 5 starting: Исследовать ключевых игроков и бренды российского массмаркета, их ассортимент и 
+18:09:27.499880 [executor] task 995ffe76-47fc-410b-ad15-1f8f233d7bd0 progress: 10% Working...
+18:09:39.177870 [syscall] PID 5 call_id=df6e0781-5106-4f1f-a3fc-f89f184aad2f
+18:09:39.177870 [agent:5] [info] Worker PID 5 done, 2094 tokens
+18:09:39.178406 [executor] task 995ffe76-47fc-410b-ad15-1f8f233d7bd0 progress: 100% Done
+18:09:39.178406 [executor] task 995ffe76-47fc-410b-ad15-1f8f233d7bd0 completed
+18:09:39.179463 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 75% Worker 2/2: Проанализировать потребительские предпоч...
+18:09:39.179463 [syscall] PID 4 call_id=22c07b97-67e1-4158-bab5-2ee143f7aa46
+18:09:39.179463 [syscall] execute_on: PID 4 -> PID 6, task=Проанализировать потребительские предпочтения и тренды в российском массмаркете, включая демографические данные и покупательское поведение.
+18:09:39.234328 [syscall] PID 6 call_id=56d188d6-efbc-45f7-87cd-eb8042cae2bf
+18:09:39.234328 [agent:6] [info] Worker PID 6 starting: Проанализировать потребительские предпочтения и тренды в российском массмаркете,
+18:09:39.237531 [executor] task 84b4f5c8-4b11-4d2a-9d05-25f7ab998f0f progress: 10% Working...
+18:09:39.711916 [runtime] PID 5 (worker-1) process exited on its own (code 0)
+18:09:39.711916 [runtime] PID 5 exited (code 0), transitioning to zombie
+18:09:39.711916 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:09:49.183470 [syscall] PID 6 call_id=71946b5a-b0d7-40de-8568-a6721bb0e1b9
+18:09:49.183470 [agent:6] [info] Worker PID 6 done, 1431 tokens
+18:09:49.183996 [executor] task 84b4f5c8-4b11-4d2a-9d05-25f7ab998f0f progress: 100% Done
+18:09:49.184533 [executor] task 84b4f5c8-4b11-4d2a-9d05-25f7ab998f0f completed
+18:09:49.185653 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 80% Synthesizing results...
+18:09:49.713993 [runtime] PID 6 (worker-2) process exited on its own (code 0)
+18:09:49.713993 [runtime] PID 6 exited (code 0), transitioning to zombie
+18:09:49.713993 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:09:56.211046 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-3, vis=global)
+18:09:56.211046 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:09:56.211576 [king] received message msg-1 from PID 3, type=escalation, priority=1
+18:09:56.211576 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:09:56.564025 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c progress: 90% Storing results...
+18:09:56.564559 [syscall] PID 4 call_id=4e86025f-9ef5-428b-b852-6fdfffff2d7e
+18:09:56.564559 [syscall] store: PID 4 stored "result-разбери-русский-массмаркет" (id=art-4)
+18:09:56.564559 [syscall] PID 4 call_id=746f23b4-ec66-4b32-a0c9-55999eccc7a4
+18:09:56.564559 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:09:56.564559 [syscall] kill: PID 4 killed [5]
+18:09:56.565095 [syscall] PID 4 call_id=8880fcd3-c20e-417f-a3fe-cfe96223673d
+18:09:56.565095 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:09:56.565095 [syscall] kill: PID 4 killed [6]
+18:09:56.565630 [syscall] PID 4 call_id=969a800b-2fc0-42f4-bc9b-3fadc278bdfa
+18:09:56.565630 [agent:4] [info] Orchestrator done. 2 subtasks, 4911 tokens total
+18:09:56.565630 [executor] task 781edcbe-40fc-43f3-a0a9-29b0b677721c completed
+18:09:56.566701 [executor] task ext-2-разбери русский масс progress: 95% Storing result...
+18:09:56.567211 [syscall] PID 2 call_id=b1bbb7bd-55a9-4b9e-80c3-f9d02d5caf76
+18:09:56.567211 [syscall] store: PID 2 stored "queen-result-разбери-русский-массмаркет" (id=art-5)
+18:09:56.567239 [syscall] PID 2 call_id=774f0cef-d271-4c0c-9c35-542d2a0c132f
+18:09:56.567239 [agent:2] [info] Queen task done (exit=0)
+18:09:56.567782 [executor] task ext-2-разбери русский масс completed
+18:10:56.283619 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-6, vis=global)
+18:10:56.283619 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:10:56.283619 [king] received message msg-2 from PID 3, type=escalation, priority=1
+18:10:56.283619 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:11:56.356618 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-7, vis=global)
+18:11:56.356618 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:11:56.356618 [king] received message msg-3 from PID 3, type=escalation, priority=1
+18:11:56.356618 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:12:56.417953 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-8, vis=global)
+18:12:56.418483 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:12:56.418483 [king] received message msg-4 from PID 3, type=escalation, priority=1
+18:12:56.418483 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:13:56.492485 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-9, vis=global)
+18:13:56.493006 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:13:56.493006 [king] received message msg-5 from PID 3, type=escalation, priority=1
+18:13:56.493006 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:14:56.566450 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-10, vis=global)
+18:14:56.566450 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:14:56.566450 [king] received message msg-6 from PID 3, type=escalation, priority=1
+18:14:56.566450 [king] escalation from PID 3: Maid health alert: 2 zombie(s): PID 5 (worker-1), PID 6 (worker-2)
+18:15:45.858642 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:15:45.858642 [signal] SIGCHLD -> PID 4 (queen-lead)
+18:15:45.858642 [runtime] stopping runtime for PID 4 (queen-lead)
+18:15:45.914624 [signal] SIGCHLD -> PID 2 (queen@vps1)
+18:15:45.914624 [grpc] KillChild: PID 2 killed [5 6 4]
+18:15:56.632646 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-11, vis=global)
+18:15:56.633645 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:15:56.633645 [king] received message msg-7 from PID 3, type=escalation, priority=1
+18:15:56.633645 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:16:56.696429 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-12, vis=global)
+18:16:56.696429 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:16:56.696429 [king] received message msg-8 from PID 3, type=escalation, priority=1
+18:16:56.696429 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:17:56.765511 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-13, vis=global)
+18:17:56.766317 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:17:56.766317 [king] received message msg-9 from PID 3, type=escalation, priority=1
+18:17:56.766317 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:18:56.835079 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-14, vis=global)
+18:18:56.835079 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:18:56.835612 [king] received message msg-10 from PID 3, type=escalation, priority=1
+18:18:56.835612 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:19:56.901819 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-15, vis=global)
+18:19:56.902342 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:19:56.902342 [king] received message msg-11 from PID 3, type=escalation, priority=1
+18:19:56.902342 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:20:56.967063 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-16, vis=global)
+18:20:56.967063 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:20:56.967063 [king] received message msg-12 from PID 3, type=escalation, priority=1
+18:20:56.967063 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:21:57.041932 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-17, vis=global)
+18:21:57.041932 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:21:57.041932 [king] received message msg-13 from PID 3, type=escalation, priority=1
+18:21:57.041932 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:22:57.117953 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-18, vis=global)
+18:22:57.118486 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:22:57.118486 [king] received message msg-14 from PID 3, type=escalation, priority=1
+18:22:57.118486 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:23:57.189440 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-19, vis=global)
+18:23:57.189972 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:23:57.189972 [king] received message msg-15 from PID 3, type=escalation, priority=1
+18:23:57.189972 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:24:57.258012 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-20, vis=global)
+18:24:57.259014 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:24:57.259014 [king] received message msg-16 from PID 3, type=escalation, priority=1
+18:24:57.259014 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:25:57.320133 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-21, vis=global)
+18:25:57.320663 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:25:57.320663 [king] received message msg-17 from PID 3, type=escalation, priority=1
+18:25:57.320663 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:26:57.386404 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-22, vis=global)
+18:26:57.387181 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:26:57.387181 [king] received message msg-18 from PID 3, type=escalation, priority=1
+18:26:57.387181 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:27:57.457398 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-23, vis=global)
+18:27:57.457924 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:27:57.457924 [king] received message msg-19 from PID 3, type=escalation, priority=1
+18:27:57.457924 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:28:57.530013 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-24, vis=global)
+18:28:57.530013 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:28:57.530013 [king] received message msg-20 from PID 3, type=escalation, priority=1
+18:28:57.530013 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:29:57.596340 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-25, vis=global)
+18:29:57.596872 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:29:57.596872 [king] received message msg-21 from PID 3, type=escalation, priority=1
+18:29:57.596872 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:30:57.663912 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-26, vis=global)
+18:30:57.664718 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:30:57.664718 [king] received message msg-22 from PID 3, type=escalation, priority=1
+18:30:57.664718 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:31:57.739096 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-27, vis=global)
+18:31:57.739624 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:31:57.739624 [king] received message msg-23 from PID 3, type=escalation, priority=1
+18:31:57.739624 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:32:57.803835 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-28, vis=global)
+18:32:57.803835 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:32:57.803835 [king] received message msg-24 from PID 3, type=escalation, priority=1
+18:32:57.804344 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:33:57.867896 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-29, vis=global)
+18:33:57.867896 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:33:57.867896 [king] received message msg-25 from PID 3, type=escalation, priority=1
+18:33:57.867896 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:34:57.935480 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-30, vis=global)
+18:34:57.936012 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:34:57.936012 [king] received message msg-26 from PID 3, type=escalation, priority=1
+18:34:57.936012 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:35:57.999059 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-31, vis=global)
+18:35:57.999059 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:35:57.999059 [king] received message msg-27 from PID 3, type=escalation, priority=1
+18:35:57.999059 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:36:58.059691 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-32, vis=global)
+18:36:58.060218 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:36:58.060218 [king] received message msg-28 from PID 3, type=escalation, priority=1
+18:36:58.060218 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:37:58.122771 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-33, vis=global)
+18:37:58.123577 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:37:58.123577 [king] received message msg-29 from PID 3, type=escalation, priority=1
+18:37:58.123577 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:38:58.198401 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-34, vis=global)
+18:38:58.198401 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:38:58.198401 [king] received message msg-30 from PID 3, type=escalation, priority=1
+18:38:58.198401 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:39:58.272966 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-35, vis=global)
+18:39:58.272966 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:39:58.272966 [king] received message msg-31 from PID 3, type=escalation, priority=1
+18:39:58.272966 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:40:58.337746 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-36, vis=global)
+18:40:58.337746 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:40:58.337746 [king] received message msg-32 from PID 3, type=escalation, priority=1
+18:40:58.337746 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:41:58.408063 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-37, vis=global)
+18:41:58.408069 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:41:58.408069 [king] received message msg-33 from PID 3, type=escalation, priority=1
+18:41:58.408069 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:42:58.492259 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-38, vis=global)
+18:42:58.492785 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:42:58.492785 [king] received message msg-34 from PID 3, type=escalation, priority=1
+18:42:58.492785 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:43:58.567344 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-39, vis=global)
+18:43:58.567879 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:43:58.567879 [king] received message msg-35 from PID 3, type=escalation, priority=1
+18:43:58.567879 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:44:58.639278 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-40, vis=global)
+18:44:58.639278 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:44:58.639278 [king] received message msg-36 from PID 3, type=escalation, priority=1
+18:44:58.639278 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:45:58.706270 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-41, vis=global)
+18:45:58.706270 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:45:58.706270 [king] received message msg-37 from PID 3, type=escalation, priority=1
+18:45:58.706270 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:46:58.770069 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-42, vis=global)
+18:46:58.770599 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:46:58.770599 [king] received message msg-38 from PID 3, type=escalation, priority=1
+18:46:58.770599 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:47:58.833641 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-43, vis=global)
+18:47:58.833641 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:47:58.834149 [king] received message msg-39 from PID 3, type=escalation, priority=1
+18:47:58.834159 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:48:58.898966 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-44, vis=global)
+18:48:58.899486 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:48:58.899500 [king] received message msg-40 from PID 3, type=escalation, priority=1
+18:48:58.899500 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:49:58.969713 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-45, vis=global)
+18:49:58.970315 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:49:58.970315 [king] received message msg-41 from PID 3, type=escalation, priority=1
+18:49:58.970315 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:50:59.057164 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-46, vis=global)
+18:50:59.057707 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:50:59.057707 [king] received message msg-42 from PID 3, type=escalation, priority=1
+18:50:59.057707 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:51:59.142495 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-47, vis=global)
+18:51:59.143025 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:51:59.143025 [king] received message msg-43 from PID 3, type=escalation, priority=1
+18:51:59.143025 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:52:59.207140 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-48, vis=global)
+18:52:59.207674 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:52:59.207674 [king] received message msg-44 from PID 3, type=escalation, priority=1
+18:52:59.207674 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:53:59.281880 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-49, vis=global)
+18:53:59.282407 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:53:59.282407 [king] received message msg-45 from PID 3, type=escalation, priority=1
+18:53:59.282407 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:54:59.360455 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-50, vis=global)
+18:54:59.360990 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:54:59.360990 [king] received message msg-46 from PID 3, type=escalation, priority=1
+18:54:59.360990 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:55:59.441017 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-51, vis=global)
+18:55:59.441551 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:55:59.441551 [king] received message msg-47 from PID 3, type=escalation, priority=1
+18:55:59.441551 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:56:59.510701 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-52, vis=global)
+18:56:59.510701 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:56:59.511213 [king] received message msg-48 from PID 3, type=escalation, priority=1
+18:56:59.511227 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:57:59.580553 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-53, vis=global)
+18:57:59.581075 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:57:59.581075 [king] received message msg-49 from PID 3, type=escalation, priority=1
+18:57:59.581075 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:58:59.653010 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-54, vis=global)
+18:58:59.653010 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:58:59.653010 [king] received message msg-50 from PID 3, type=escalation, priority=1
+18:58:59.653010 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:59:59.721564 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-55, vis=global)
+18:59:59.722087 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+18:59:59.722087 [king] received message msg-51 from PID 3, type=escalation, priority=1
+18:59:59.722087 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:00:59.796757 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-56, vis=global)
+19:00:59.796757 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:00:59.796757 [king] received message msg-52 from PID 3, type=escalation, priority=1
+19:00:59.796757 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:01:59.906733 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-57, vis=global)
+19:01:59.907274 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:01:59.907274 [king] received message msg-53 from PID 3, type=escalation, priority=1
+19:01:59.907274 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:02:59.987840 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-58, vis=global)
+19:02:59.988381 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:02:59.988381 [king] received message msg-54 from PID 3, type=escalation, priority=1
+19:02:59.988381 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:04:00.071088 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-59, vis=global)
+19:04:00.071672 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:04:00.071672 [king] received message msg-55 from PID 3, type=escalation, priority=1
+19:04:00.071672 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:05:00.161851 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-60, vis=global)
+19:05:00.161851 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:05:00.161851 [king] received message msg-56 from PID 3, type=escalation, priority=1
+19:05:00.161851 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:06:00.259831 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-61, vis=global)
+19:06:00.259831 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:06:00.259831 [king] received message msg-57 from PID 3, type=escalation, priority=1
+19:06:00.259831 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:07:00.379305 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-62, vis=global)
+19:07:00.379873 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:07:00.379873 [king] received message msg-58 from PID 3, type=escalation, priority=1
+19:07:00.379873 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:08:00.483585 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-63, vis=global)
+19:08:00.484130 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:08:00.484130 [king] received message msg-59 from PID 3, type=escalation, priority=1
+19:08:00.484130 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:09:00.581314 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-64, vis=global)
+19:09:00.581314 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:09:00.581314 [king] received message msg-60 from PID 3, type=escalation, priority=1
+19:09:00.581314 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:10:00.662897 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-65, vis=global)
+19:10:00.663435 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:10:00.663435 [king] received message msg-61 from PID 3, type=escalation, priority=1
+19:10:00.663435 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:11:00.739874 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-66, vis=global)
+19:11:00.739874 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:11:00.739874 [king] received message msg-62 from PID 3, type=escalation, priority=1
+19:11:00.740380 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:12:00.818896 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-67, vis=global)
+19:12:00.819747 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:12:00.819747 [king] received message msg-63 from PID 3, type=escalation, priority=1
+19:12:00.819747 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:13:00.889443 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-68, vis=global)
+19:13:00.889970 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:13:00.889970 [king] received message msg-64 from PID 3, type=escalation, priority=1
+19:13:00.889970 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:14:00.967644 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-69, vis=global)
+19:14:00.968184 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:14:00.968184 [king] received message msg-65 from PID 3, type=escalation, priority=1
+19:14:00.968184 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:15:01.050958 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-70, vis=global)
+19:15:01.051511 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:15:01.051511 [king] received message msg-66 from PID 3, type=escalation, priority=1
+19:15:01.051511 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:16:01.140039 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-71, vis=global)
+19:16:01.140566 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:16:01.140566 [king] received message msg-67 from PID 3, type=escalation, priority=1
+19:16:01.141088 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:17:01.270359 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-72, vis=global)
+19:17:01.270359 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:17:01.270900 [king] received message msg-68 from PID 3, type=escalation, priority=1
+19:17:01.270900 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:18:01.365301 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-73, vis=global)
+19:18:01.365844 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:18:01.365844 [king] received message msg-69 from PID 3, type=escalation, priority=1
+19:18:01.365844 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:19:01.449135 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-74, vis=global)
+19:19:01.449671 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:19:01.449671 [king] received message msg-70 from PID 3, type=escalation, priority=1
+19:19:01.449671 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:20:01.532614 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-75, vis=global)
+19:20:01.532614 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:20:01.532614 [king] received message msg-71 from PID 3, type=escalation, priority=1
+19:20:01.532614 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:21:01.620513 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-76, vis=global)
+19:21:01.620513 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:21:01.620513 [king] received message msg-72 from PID 3, type=escalation, priority=1
+19:21:01.620513 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:22:01.717311 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-77, vis=global)
+19:22:01.717865 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:22:01.717865 [king] received message msg-73 from PID 3, type=escalation, priority=1
+19:22:01.717865 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:23:01.803677 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-78, vis=global)
+19:23:01.804203 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:23:01.804203 [king] received message msg-74 from PID 3, type=escalation, priority=1
+19:23:01.804203 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:24:01.879510 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-79, vis=global)
+19:24:01.880045 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:24:01.880045 [king] received message msg-75 from PID 3, type=escalation, priority=1
+19:24:01.880045 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:25:01.994079 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-80, vis=global)
+19:25:01.995079 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:25:01.995079 [king] received message msg-76 from PID 3, type=escalation, priority=1
+19:25:01.995079 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:26:02.109147 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-81, vis=global)
+19:26:02.109958 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:26:02.109958 [king] received message msg-77 from PID 3, type=escalation, priority=1
+19:26:02.109958 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:27:02.185964 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-82, vis=global)
+19:27:02.186494 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:27:02.186494 [king] received message msg-78 from PID 3, type=escalation, priority=1
+19:27:02.186494 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:28:02.310828 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-83, vis=global)
+19:28:02.311416 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:28:02.311416 [king] received message msg-79 from PID 3, type=escalation, priority=1
+19:28:02.311416 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:29:02.383864 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-84, vis=global)
+19:29:02.384395 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:29:02.384395 [king] received message msg-80 from PID 3, type=escalation, priority=1
+19:29:02.384395 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:30:02.461266 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-85, vis=global)
+19:30:02.461266 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:30:02.461266 [king] received message msg-81 from PID 3, type=escalation, priority=1
+19:30:02.461266 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:31:02.538609 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-86, vis=global)
+19:31:02.538609 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:31:02.538609 [king] received message msg-82 from PID 3, type=escalation, priority=1
+19:31:02.539117 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:32:02.621221 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-87, vis=global)
+19:32:02.621754 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:32:02.621754 [king] received message msg-83 from PID 3, type=escalation, priority=1
+19:32:02.621754 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:33:02.701799 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-88, vis=global)
+19:33:02.701799 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:33:02.701799 [king] received message msg-84 from PID 3, type=escalation, priority=1
+19:33:02.701799 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:34:02.782079 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-89, vis=global)
+19:34:02.782079 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:34:02.782079 [king] received message msg-85 from PID 3, type=escalation, priority=1
+19:34:02.782079 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:35:02.856550 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-90, vis=global)
+19:35:02.857088 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:35:02.857088 [king] received message msg-86 from PID 3, type=escalation, priority=1
+19:35:02.857088 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:36:02.934481 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-91, vis=global)
+19:36:02.935016 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:36:02.935016 [king] received message msg-87 from PID 3, type=escalation, priority=1
+19:36:02.935016 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:37:03.008460 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-92, vis=global)
+19:37:03.008987 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:37:03.008987 [king] received message msg-88 from PID 3, type=escalation, priority=1
+19:37:03.008987 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:38:03.076851 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-93, vis=global)
+19:38:03.077393 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:38:03.077923 [king] received message msg-89 from PID 3, type=escalation, priority=1
+19:38:03.077923 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:39:03.171102 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-94, vis=global)
+19:39:03.171641 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:39:03.171641 [king] received message msg-90 from PID 3, type=escalation, priority=1
+19:39:03.171641 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:40:03.251065 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-95, vis=global)
+19:40:03.251065 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:40:03.251065 [king] received message msg-91 from PID 3, type=escalation, priority=1
+19:40:03.251573 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:41:03.331481 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-96, vis=global)
+19:41:03.331991 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:41:03.332019 [king] received message msg-92 from PID 3, type=escalation, priority=1
+19:41:03.332019 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:42:03.421513 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-97, vis=global)
+19:42:03.422048 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:42:03.422048 [king] received message msg-93 from PID 3, type=escalation, priority=1
+19:42:03.422048 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:43:03.500029 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-98, vis=global)
+19:43:03.500568 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:43:03.500568 [king] received message msg-94 from PID 3, type=escalation, priority=1
+19:43:03.500568 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:44:03.592318 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-99, vis=global)
+19:44:03.592852 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:44:03.592852 [king] received message msg-95 from PID 3, type=escalation, priority=1
+19:44:03.592852 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:45:03.675333 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-100, vis=global)
+19:45:03.675333 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:45:03.675333 [king] received message msg-96 from PID 3, type=escalation, priority=1
+19:45:03.675333 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:46:03.750240 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-101, vis=global)
+19:46:03.750769 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:46:03.750769 [king] received message msg-97 from PID 3, type=escalation, priority=1
+19:46:03.750769 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:47:03.839117 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-102, vis=global)
+19:47:03.839640 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:47:03.839640 [king] received message msg-98 from PID 3, type=escalation, priority=1
+19:47:03.839640 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:48:03.929136 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-103, vis=global)
+19:48:03.930136 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:48:03.930136 [king] received message msg-99 from PID 3, type=escalation, priority=1
+19:48:03.930136 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:49:04.023702 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-104, vis=global)
+19:49:04.023702 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:49:04.024209 [king] received message msg-100 from PID 3, type=escalation, priority=1
+19:49:04.024220 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:50:04.112706 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-105, vis=global)
+19:50:04.113705 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:50:04.113705 [king] received message msg-101 from PID 3, type=escalation, priority=1
+19:50:04.113705 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:51:04.197266 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-106, vis=global)
+19:51:04.197846 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:51:04.197846 [king] received message msg-102 from PID 3, type=escalation, priority=1
+19:51:04.197846 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:52:04.296225 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-107, vis=global)
+19:52:04.296225 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:52:04.296225 [king] received message msg-103 from PID 3, type=escalation, priority=1
+19:52:04.296225 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:53:04.387288 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-108, vis=global)
+19:53:04.388290 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:53:04.388290 [king] received message msg-104 from PID 3, type=escalation, priority=1
+19:53:04.388290 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:54:04.483672 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-109, vis=global)
+19:54:04.483672 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:54:04.483672 [king] received message msg-105 from PID 3, type=escalation, priority=1
+19:54:04.483672 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:55:04.585083 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-110, vis=global)
+19:55:04.586082 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:55:04.586082 [king] received message msg-106 from PID 3, type=escalation, priority=1
+19:55:04.586082 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:56:04.669215 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-111, vis=global)
+19:56:04.669799 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:56:04.669799 [king] received message msg-107 from PID 3, type=escalation, priority=1
+19:56:04.669799 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:57:04.759037 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-112, vis=global)
+19:57:04.759561 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:57:04.759561 [king] received message msg-108 from PID 3, type=escalation, priority=1
+19:57:04.759561 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:58:04.847577 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-113, vis=global)
+19:58:04.855575 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:58:04.855575 [king] received message msg-109 from PID 3, type=escalation, priority=1
+19:58:04.855575 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:59:04.930473 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-114, vis=global)
+19:59:04.930473 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+19:59:04.931004 [king] received message msg-110 from PID 3, type=escalation, priority=1
+19:59:04.931004 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:00:05.034687 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-115, vis=global)
+20:00:05.035342 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:00:05.035342 [king] received message msg-111 from PID 3, type=escalation, priority=1
+20:00:05.035342 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:01:05.122963 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-116, vis=global)
+20:01:05.123497 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:01:05.123497 [king] received message msg-112 from PID 3, type=escalation, priority=1
+20:01:05.123497 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:02:05.206961 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-117, vis=global)
+20:02:05.207961 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:02:05.207961 [king] received message msg-113 from PID 3, type=escalation, priority=1
+20:02:05.207961 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:03:05.321311 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-118, vis=global)
+20:03:05.321311 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:03:05.321311 [king] received message msg-114 from PID 3, type=escalation, priority=1
+20:03:05.321311 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:04:05.400764 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-119, vis=global)
+20:04:05.401765 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:04:05.401765 [king] received message msg-115 from PID 3, type=escalation, priority=1
+20:04:05.401765 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:05:05.494558 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-120, vis=global)
+20:05:05.495558 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:05:05.495558 [king] received message msg-116 from PID 3, type=escalation, priority=1
+20:05:05.495558 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:06:05.583703 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-121, vis=global)
+20:06:05.584253 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:06:05.584253 [king] received message msg-117 from PID 3, type=escalation, priority=1
+20:06:05.584253 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:07:05.675514 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-122, vis=global)
+20:07:05.676514 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:07:05.676514 [king] received message msg-118 from PID 3, type=escalation, priority=1
+20:07:05.676514 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:08:05.766227 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-123, vis=global)
+20:08:05.766227 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:08:05.766227 [king] received message msg-119 from PID 3, type=escalation, priority=1
+20:08:05.766227 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:09:05.843694 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-124, vis=global)
+20:09:05.843694 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:09:05.843694 [king] received message msg-120 from PID 3, type=escalation, priority=1
+20:09:05.843694 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:10:05.913882 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-125, vis=global)
+20:10:05.914422 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:10:05.914422 [king] received message msg-121 from PID 3, type=escalation, priority=1
+20:10:05.914422 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:11:05.987469 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-126, vis=global)
+20:11:05.988003 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:11:05.988003 [king] received message msg-122 from PID 3, type=escalation, priority=1
+20:11:05.988003 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:12:06.083738 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-127, vis=global)
+20:12:06.083738 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:12:06.083738 [king] received message msg-123 from PID 3, type=escalation, priority=1
+20:12:06.083738 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:13:06.168095 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-128, vis=global)
+20:13:06.168636 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:13:06.168650 [king] received message msg-124 from PID 3, type=escalation, priority=1
+20:13:06.168650 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:14:06.307032 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-129, vis=global)
+20:14:06.307576 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:14:06.307576 [king] received message msg-125 from PID 3, type=escalation, priority=1
+20:14:06.307576 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:15:06.385662 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-130, vis=global)
+20:15:06.386565 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:15:06.386565 [king] received message msg-126 from PID 3, type=escalation, priority=1
+20:15:06.386565 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:16:06.484741 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-131, vis=global)
+20:16:06.485281 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:16:06.485301 [king] received message msg-127 from PID 3, type=escalation, priority=1
+20:16:06.485301 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:17:06.585036 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-132, vis=global)
+20:17:06.586037 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:17:06.586037 [king] received message msg-128 from PID 3, type=escalation, priority=1
+20:17:06.586037 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:18:06.691859 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-133, vis=global)
+20:18:06.692493 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:18:06.692493 [king] received message msg-129 from PID 3, type=escalation, priority=1
+20:18:06.692493 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:19:06.785952 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-134, vis=global)
+20:19:06.785952 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:19:06.786463 [king] received message msg-130 from PID 3, type=escalation, priority=1
+20:19:06.786478 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:20:06.868710 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-135, vis=global)
+20:20:06.868710 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:20:06.868710 [king] received message msg-131 from PID 3, type=escalation, priority=1
+20:20:06.868710 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:21:06.947858 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-136, vis=global)
+20:21:06.947858 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:21:06.947858 [king] received message msg-132 from PID 3, type=escalation, priority=1
+20:21:06.947858 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:22:07.054056 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-137, vis=global)
+20:22:07.054594 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:22:07.054594 [king] received message msg-133 from PID 3, type=escalation, priority=1
+20:22:07.054594 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:23:07.148295 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-138, vis=global)
+20:23:07.149294 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:23:07.149294 [king] received message msg-134 from PID 3, type=escalation, priority=1
+20:23:07.149294 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:24:07.232756 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-139, vis=global)
+20:24:07.232756 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:24:07.232756 [king] received message msg-135 from PID 3, type=escalation, priority=1
+20:24:07.232756 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:25:07.301941 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-140, vis=global)
+20:25:07.301941 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:25:07.302449 [king] received message msg-136 from PID 3, type=escalation, priority=1
+20:25:07.302460 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:26:07.369962 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-141, vis=global)
+20:26:07.369962 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:26:07.369962 [king] received message msg-137 from PID 3, type=escalation, priority=1
+20:26:07.369962 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:27:07.443472 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-142, vis=global)
+20:27:07.443472 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:27:07.443472 [king] received message msg-138 from PID 3, type=escalation, priority=1
+20:27:07.443472 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:28:07.506607 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-143, vis=global)
+20:28:07.506607 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:28:07.506607 [king] received message msg-139 from PID 3, type=escalation, priority=1
+20:28:07.506607 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:29:07.574806 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-144, vis=global)
+20:29:07.575340 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:29:07.575340 [king] received message msg-140 from PID 3, type=escalation, priority=1
+20:29:07.575340 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:30:07.652628 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-145, vis=global)
+20:30:07.653156 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:30:07.653156 [king] received message msg-141 from PID 3, type=escalation, priority=1
+20:30:07.653156 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:31:07.718201 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-146, vis=global)
+20:31:07.718729 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:31:07.718729 [king] received message msg-142 from PID 3, type=escalation, priority=1
+20:31:07.718729 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:32:07.782520 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-147, vis=global)
+20:32:07.782520 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:32:07.782520 [king] received message msg-143 from PID 3, type=escalation, priority=1
+20:32:07.782520 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:33:07.848533 [grpc] StoreArtifact: PID 3 stored "maid/health-report" (id=art-148, vis=global)
+20:33:07.849057 [grpc] Escalate from PID 3: severity=ESC_WARNING issue=Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)
+20:33:07.849057 [king] received message msg-144 from PID 3, type=escalation, priority=1
+20:33:07.849057 [king] escalation from PID 3: Maid health alert: 3 zombie(s): PID 4 (queen-lead), PID 5 (worker-1), PID 6 (worker-2)

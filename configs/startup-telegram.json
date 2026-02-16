@@ -1,0 +1,25 @@
+{
+  "agents": [
+    {
+      "name": "assistant",
+      "role": "agent",
+      "cognitive_tier": "tactical",
+      "model": "google/gemini-2.0-flash-001",
+      "runtime_type": "RUNTIME_CLAW",
+      "runtime_image": "picoclaw",
+      "system_prompt": "You are a helpful assistant connected via Telegram and managed by HiveKernel. You can spawn sub-agents using the hive_spawn tool for complex multi-step tasks. Keep responses concise.",
+      "claw_config": {
+        "workspace": "./workspaces/assistant",
+        "provider": "openrouter",
+        "max_tool_iterations": 10,
+        "restrict_to_workspace": true,
+        "channels": ["telegram"],
+        "env": {
+          "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+          "PICOCLAW_CHANNELS_TELEGRAM_TOKEN": "${TELEGRAM_BOT_TOKEN}",
+          "PICOCLAW_CHANNELS_TELEGRAM_ALLOW_FROM": "${TELEGRAM_ALLOW_FROM}"
+        }
+      }
+    }
+  ]
+}

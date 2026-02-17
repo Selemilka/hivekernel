@@ -1162,11 +1162,9 @@ button.btn-primary:hover {
 /* ─── Traces Panel ─── */
 #traces-panel {
     padding: 16px;
-    background: #1a2040;
+    background: #0f3460;
     border-top: 1px solid #0f3460;
     flex-shrink: 0;
-    max-height: 350px;
-    overflow-y: auto;
 }
 
 #traces-panel h2 {
@@ -1178,6 +1176,12 @@ button.btn-primary:hover {
     font-size: 18px;
     color: #888;
     user-select: none;
+}
+
+#traces-content {
+    margin-top: 10px;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .trace-entry {
@@ -1212,10 +1216,29 @@ button.btn-primary:hover {
     margin-top: 8px;
 }
 
-#trace-detail h3 {
-    font-size: 14px;
+.trace-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    margin-bottom: 4px;
+}
+
+.trace-detail-header h3 {
+    font-size: 13px;
     color: #f0932b;
     margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.trace-detail-close {
+    color: #888;
+    font-size: 14px;
+    padding: 2px 6px;
+}
+
+.trace-detail-close:hover {
+    color: #e94560;
 }
 
 #trace-detail-events {

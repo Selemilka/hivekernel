@@ -224,12 +224,14 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 			toName = receiver.Name
 		}
 		el.Emit(process.ProcessEvent{
-			Type:    process.EventMessageSent,
-			PID:     fromPID,
-			PPID:    req.ToPid,
-			Name:    sender.Name,
-			Role:    toName,
-			Message: req.Type,
+			Type:           process.EventMessageSent,
+			PID:            fromPID,
+			PPID:           req.ToPid,
+			Name:           sender.Name,
+			Role:           toName,
+			Message:        req.Type,
+			ReplyTo:        req.ReplyTo,
+			PayloadPreview: truncatePayload(string(req.Payload), 2000),
 		})
 	}
 
@@ -591,20 +593,22 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				return nil // channel closed (EventLog shutting down)
 			}
 			pbEvt := &pb.ProcessEvent{
-				Seq:         evt.Seq,
-				TimestampMs: evt.Timestamp.UnixMilli(),
-				Type:        string(evt.Type),
-				Pid:         evt.PID,
-				Ppid:        evt.PPID,
-				Name:        evt.Name,
-				Role:        evt.Role,
-				Tier:        evt.Tier,
-				Model:       evt.Model,
-				State:       evt.State,
-				OldState:    evt.OldState,
-				NewState:    evt.NewState,
-				Level:       evt.Level,
-				Message:     evt.Message,
+				Seq:            evt.Seq,
+				TimestampMs:    evt.Timestamp.UnixMilli(),
+				Type:           string(evt.Type),
+				Pid:            evt.PID,
+				Ppid:           evt.PPID,
+				Name:           evt.Name,
+				Role:           evt.Role,
+				Tier:           evt.Tier,
+				Model:          evt.Model,
+				State:          evt.State,
+				OldState:       evt.OldState,
+				NewState:       evt.NewState,
+				Level:          evt.Level,
+				Message:        evt.Message,
+				ReplyTo:        evt.ReplyTo,
+				PayloadPreview: evt.PayloadPreview,
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err

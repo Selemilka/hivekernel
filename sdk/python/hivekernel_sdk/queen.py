@@ -193,6 +193,11 @@ class QueenAgent(LLMAgent):
                 params={"subtask": description},
                 timeout_seconds=120,
             )
+            # Kill worker after success -- IPC workers can't be reused.
+            try:
+                await self.core.kill_child(worker_pid)
+            except Exception:
+                pass
             return {**result, "metadata": {**result.get("metadata", {}), "strategy": "simple"}}
         except Exception as e:
             logger.error("IPC simple task failed: %s", e)
@@ -224,8 +229,12 @@ class QueenAgent(LLMAgent):
                 params={"task": description, "max_workers": self._max_workers},
                 timeout_seconds=300,
             )
-            # Return lead to idle pool for reuse.
-            self._idle_leads.append((lead_pid, time.time()))
+            # Kill lead after success -- IPC-spawned leads can't be reused
+            # (no SyscallContext), so adding to idle pool just creates zombies.
+            try:
+                await self.core.kill_child(lead_pid)
+            except Exception:
+                pass
             return {**result, "metadata": {**result.get("metadata", {}), "strategy": "complex"}}
         except Exception as e:
             logger.error("IPC complex task failed: %s", e)

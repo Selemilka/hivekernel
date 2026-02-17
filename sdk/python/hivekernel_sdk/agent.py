@@ -38,6 +38,7 @@ class HiveAgent:
         self._core: CoreClient | None = None
         self._server = None  # Set by runner for auto-exit support
         self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_results: list[Message] = []  # async mailbox
         self._last_ctx: SyscallContext | None = None
 
     # --- Properties (read-only) ---
@@ -81,13 +82,18 @@ class HiveAgent:
         """Handle incoming message from another agent.
 
         If message.reply_to matches a pending request, resolves the future.
+        If it's an unmatched task_response, stash in async mailbox.
         Otherwise delegates to handle_message() for application logic.
         """
-        # Check if this is a reply to a pending request.
+        # Check if this is a reply to a pending request (sync path).
         if message.reply_to and message.reply_to in self._pending_requests:
             fut = self._pending_requests.pop(message.reply_to)
             if not fut.done():
                 fut.set_result(message)
+            return MessageAck(status=MessageAck.ACK_ACCEPTED)
+        # Unmatched task_response -> stash in async mailbox.
+        if message.type == "task_response" and message.reply_to:
+            self._pending_results.append(message)
             return MessageAck(status=MessageAck.ACK_ACCEPTED)
         # Delegate to application handler.
         return await self.handle_message(message)
@@ -127,6 +133,29 @@ class HiveAgent:
             raise TimeoutError(
                 f"No reply from PID {to_pid} within {timeout}s (request_id={request_id})"
             )
+
+    def drain_pending_results(self) -> list[Message]:
+        """Drain all pending async results from the mailbox."""
+        results = self._pending_results[:]
+        self._pending_results.clear()
+        return results
+
+    async def send_fire_and_forget(
+        self,
+        ctx: SyscallContext,
+        to_pid: int,
+        type: str,
+        payload: bytes,
+    ) -> str:
+        """Send a message without waiting for reply. Returns the request_id."""
+        request_id = str(uuid.uuid4())
+        await ctx.send(
+            to_pid=to_pid,
+            type=type,
+            payload=payload,
+            reply_to=request_id,
+        )
+        return request_id
 
     async def on_shutdown(self, reason: str) -> bytes | None:
         """Save state before shutdown. Override if needed."""

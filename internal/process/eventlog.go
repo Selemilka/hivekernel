@@ -35,8 +35,10 @@ type ProcessEvent struct {
 	State     string    `json:"state,omitempty"`
 	OldState  string    `json:"old_state,omitempty"`
 	NewState  string    `json:"new_state,omitempty"`
-	Level     string    `json:"level,omitempty"`
-	Message   string    `json:"message,omitempty"`
+	Level          string    `json:"level,omitempty"`
+	Message        string    `json:"message,omitempty"`
+	ReplyTo        string    `json:"reply_to,omitempty"`
+	PayloadPreview string    `json:"payload_preview,omitempty"`
 }
 
 // EventLog is a sequenced, append-only log of process events.

@@ -4,6 +4,7 @@ Handles user messages via execute_on. Capabilities:
 - Answer questions using LLM
 - Schedule cron tasks (via CoreClient.add_cron)
 - Delegate coding tasks to Coder agent (via ctx.execute_on)
+- Async delegation to sibling agents (fire-and-forget, results via mailbox)
 
 Dashboard passes sibling PIDs in task params so Assistant can delegate.
 
@@ -12,12 +13,15 @@ Runtime image: hivekernel_sdk.assistant:AssistantAgent
 
 import json
 import logging
+import time
 
 from .llm_agent import LLMAgent
 from .syscall import SyscallContext
-from .types import TaskResult
+from .types import Message, MessageAck, TaskResult
 
 logger = logging.getLogger("hivekernel.assistant")
+
+DELEGATION_TIMEOUT = 600  # seconds before a delegation is considered stale
 
 SYSTEM_PROMPT = (
     "You are HiveKernel Assistant, a helpful AI running inside a process tree OS.\n"
@@ -26,6 +30,8 @@ SYSTEM_PROMPT = (
     "- Schedule recurring tasks using cron expressions\n"
     "- Delegate tasks to sibling agents (Queen, Coder, etc.) via IPC messaging\n"
     "- Check GitHub repos via the GitMonitor agent\n\n"
+    "Delegation is ASYNC: when you delegate to another agent, the task is sent and you "
+    "respond immediately. Results arrive with the user's next message.\n\n"
     "Respond concisely and helpfully.\n"
     "If the user asks to schedule something, include this JSON block in your response:\n"
     'SCHEDULE: {"name": "task-name", "cron": "*/30 * * * *", "target": "github-monitor", '
@@ -62,6 +68,53 @@ def _extract_json_block(text: str, marker: str) -> dict | None:
 class AssistantAgent(LLMAgent):
     """24/7 chat assistant daemon. Receives tasks via execute_on."""
 
+    def __init__(self):
+        super().__init__()
+        # request_id -> {target, task, ts}
+        self._active_delegations: dict[str, dict] = {}
+
+    async def on_message(self, message: Message) -> MessageAck:
+        """Override to log and store delegation results when they arrive."""
+        # Check if this is a delegation result BEFORE super() processes it.
+        is_delegation = (
+            message.type == "task_response"
+            and message.reply_to
+            and message.reply_to in self._active_delegations
+        )
+
+        # Let base class handle (stashes in _pending_results or resolves future).
+        ack = await super().on_message(message)
+
+        # If it was a delegation result, make it visible immediately.
+        if is_delegation and self.core:
+            delegation = self._active_delegations.get(message.reply_to)
+            if delegation:
+                target = delegation["target"]
+                try:
+                    result_text = message.payload.decode("utf-8", errors="replace")
+                    # Parse to get just the output field.
+                    try:
+                        data = json.loads(result_text)
+                        output = data.get("output", result_text)
+                    except (json.JSONDecodeError, ValueError):
+                        output = result_text
+                    # Store full result as artifact.
+                    safe_key = delegation["task"].lower().replace(" ", "-")[:40]
+                    await self.core.store_artifact(
+                        key=f"assistant/delegation-result/{safe_key}",
+                        content=message.payload,
+                        content_type="application/json",
+                    )
+                    # Log so it appears in event stream.
+                    await self.core.log(
+                        "info",
+                        f"Delegation result from {target}: {output[:500]}",
+                    )
+                except Exception as e:
+                    logger.warning("Failed to record delegation result: %s", e)
+
+        return ack
+
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
         message = task.params.get("message", task.description)
         history_raw = task.params.get("history", "[]")
@@ -77,8 +130,40 @@ class AssistantAgent(LLMAgent):
         except (json.JSONDecodeError, TypeError):
             sibling_pids = {}
 
+        # --- Drain async mailbox: collect completed delegation results ---
+        prefix_parts = []
+        completed_results = self.drain_pending_results()
+        for msg in completed_results:
+            req_id = msg.reply_to
+            delegation = self._active_delegations.pop(req_id, None)
+            target_name = delegation["target"] if delegation else "unknown"
+            try:
+                result_data = json.loads(msg.payload.decode("utf-8"))
+                output = result_data.get("output", result_data.get("error", "No output"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                output = msg.payload.decode("utf-8", errors="replace")
+            prefix_parts.append(f"[Completed result from {target_name}:]\n{output}")
+
+        # Check for stale delegations (timed out).
+        now = time.time()
+        stale_ids = [
+            rid for rid, d in self._active_delegations.items()
+            if now - d["ts"] > DELEGATION_TIMEOUT
+        ]
+        for rid in stale_ids:
+            d = self._active_delegations.pop(rid)
+            prefix_parts.append(
+                f"[Delegation to {d['target']} timed out after {DELEGATION_TIMEOUT}s "
+                f"(task: {d['task'][:80]})]"
+            )
+
+        result_prefix = ""
+        if prefix_parts:
+            result_prefix = "\n\n".join(prefix_parts) + "\n\n---\n\n"
+
         if not message.strip():
-            return TaskResult(exit_code=0, output="Hello! I'm the HiveKernel Assistant. How can I help?")
+            output = result_prefix + "Hello! I'm the HiveKernel Assistant. How can I help?"
+            return TaskResult(exit_code=0, output=output)
 
         await ctx.log("info", f"Assistant received: {message[:80]}")
 
@@ -159,7 +244,16 @@ class AssistantAgent(LLMAgent):
                                 clean_response = clean_response[:idx] + clean_response[i + 1:]
                                 break
 
-        final = clean_response.strip() + extra
+        # Build suffix showing in-flight delegations.
+        suffix = ""
+        if self._active_delegations:
+            lines = ["\n\n[In-flight delegations:]"]
+            for rid, d in self._active_delegations.items():
+                elapsed = int(now - d["ts"])
+                lines.append(f"  - {d['target']}: {d['task'][:60]} ({elapsed}s ago)")
+            suffix = "\n".join(lines)
+
+        final = result_prefix + clean_response.strip() + extra + suffix
         await ctx.log("info", f"Assistant responded ({len(final)} chars)")
         return TaskResult(exit_code=0, output=final)
 
@@ -226,7 +320,7 @@ class AssistantAgent(LLMAgent):
     async def _handle_delegation(
         self, response: str, ctx: SyscallContext, sibling_pids: dict
     ) -> str | None:
-        """Extract DELEGATE: JSON and send task via IPC messaging."""
+        """Extract DELEGATE: JSON and send task via async fire-and-forget IPC."""
         info = _extract_json_block(response, "DELEGATE:")
         if not info:
             return None
@@ -247,27 +341,23 @@ class AssistantAgent(LLMAgent):
         if not target_pid:
             return f"[Could not find agent '{target_name}' for delegation]"
 
-        await ctx.log("info", f"Delegating to {target_name} (PID {target_pid}): {task_desc[:80]}")
+        await ctx.log("info", f"Delegating (async) to {target_name} (PID {target_pid}): {task_desc[:80]}")
 
         try:
             payload = json.dumps({"task": task_desc}, ensure_ascii=False).encode("utf-8")
-            reply = await self.send_and_wait(
+            request_id = await self.send_fire_and_forget(
                 ctx=ctx,
                 to_pid=int(target_pid),
                 type="task_request",
                 payload=payload,
-                timeout=300.0,
             )
-            # Parse the reply payload.
-            try:
-                result_data = json.loads(reply.payload.decode("utf-8"))
-                output = result_data.get("output", result_data.get("error", "No output"))
-                return f"[Response from {target_name}:]\n{output}"
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                return f"[Response from {target_name}:]\n{reply.payload.decode('utf-8', errors='replace')}"
-        except TimeoutError:
-            logger.warning("Delegation to %s timed out", target_name)
-            return f"[Delegation to {target_name} timed out after 300s]"
+            # Track the delegation for mailbox correlation.
+            self._active_delegations[request_id] = {
+                "target": target_name,
+                "task": task_desc,
+                "ts": time.time(),
+            }
+            return f"[Delegated to {target_name} -- results will appear in next message]"
         except Exception as e:
             logger.warning("Delegation to %s failed: %s", target_name, e)
             return f"[Delegation to {target_name} failed: {e}]"

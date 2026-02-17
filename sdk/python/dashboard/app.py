@@ -87,7 +87,7 @@ def record_message(from_pid: int, to_pid: int, from_name: str, to_name: str,
         "to_name": to_name,
         "type": msg_type,
         "reply_to": reply_to,
-        "payload_preview": payload_preview[:200],
+        "payload_preview": payload_preview[:2000],
         "timestamp": int(_time.time() * 1000),
     }
     message_log.append(entry)
@@ -223,10 +223,39 @@ def apply_event(event) -> dict | None:
         from_name = event.name
         to_name = event.role
         msg_type = event.message
+        reply_to = getattr(event, "reply_to", "") or ""
+        payload_preview = getattr(event, "payload_preview", "") or ""
 
         # Record in message log.
         entry = record_message(from_pid, to_pid, from_name, to_name,
-                               msg_type, "", "")
+                               msg_type, reply_to, payload_preview)
+
+        # Record task_response as a delegation result in task_history.
+        if msg_type == "task_response" and payload_preview:
+            result_text = payload_preview
+            try:
+                data = json.loads(payload_preview)
+                result_text = data.get("output", data.get("error", payload_preview))
+            except (json.JSONDecodeError, ValueError):
+                pass
+            success = True
+            error_text = ""
+            try:
+                data = json.loads(payload_preview)
+                if data.get("error"):
+                    success = False
+                    error_text = data["error"]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            record_task(
+                pid=to_pid,
+                name=to_name or f"PID {to_pid}",
+                description=f"Async result from {from_name or f'PID {from_pid}'}",
+                result=result_text[:4000],
+                success=success,
+                error=error_text,
+                duration_ms=0,
+            )
 
         return {
             "action": "message",
@@ -235,6 +264,8 @@ def apply_event(event) -> dict | None:
             "from_name": from_name,
             "to_name": to_name,
             "type": msg_type,
+            "reply_to": reply_to,
+            "payload_preview": payload_preview,
             "ts": event.timestamp_ms,
         }
 
@@ -576,10 +607,10 @@ async def api_chat(body: dict):
                     "history": json.dumps(history, ensure_ascii=False),
                     "sibling_pids": json.dumps(sibling_pids),
                 },
-                timeout_seconds=360,
+                timeout_seconds=60,
             ),
             metadata=md(1),
-            timeout=370,
+            timeout=70,
         )
         duration_ms = int((_time.monotonic() - start) * 1000)
         if resp.success:

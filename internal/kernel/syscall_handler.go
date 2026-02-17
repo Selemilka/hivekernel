@@ -205,12 +205,14 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 			toName = receiver.Name
 		}
 		el.Emit(process.ProcessEvent{
-			Type:    process.EventMessageSent,
-			PID:     callerPID,
-			PPID:    req.ToPid,
-			Name:    sender.Name,
-			Role:    toName,
-			Message: req.Type,
+			Type:           process.EventMessageSent,
+			PID:            callerPID,
+			PPID:           req.ToPid,
+			Name:           sender.Name,
+			Role:           toName,
+			Message:        req.Type,
+			ReplyTo:        req.ReplyTo,
+			PayloadPreview: truncatePayload(string(req.Payload), 2000),
 		})
 	}
 
@@ -220,6 +222,15 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 			Send: &pb.SendMessageResponse{Delivered: true, MessageId: msg.ID},
 		},
 	}
+}
+
+// truncatePayload returns s truncated to maxLen runes, appending "..." if truncated.
+func truncatePayload(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
 }
 
 func (h *KernelSyscallHandler) handleStore(callID string, callerPID process.PID, req *pb.StoreArtifactRequest) *pb.SyscallResult {

@@ -1724,6 +1724,7 @@ type AgentMessage struct {
 	Payload       []byte                 `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
 	Timestamp     uint64                 `protobuf:"varint,8,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	RequiresAck   bool                   `protobuf:"varint,9,opt,name=requires_ack,json=requiresAck,proto3" json:"requires_ack,omitempty"`
+	ReplyTo       string                 `protobuf:"bytes,10,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1821,6 +1822,13 @@ func (x *AgentMessage) GetRequiresAck() bool {
 	return false
 }
 
+func (x *AgentMessage) GetReplyTo() string {
+	if x != nil {
+		return x.ReplyTo
+	}
+	return ""
+}
+
 type MessageAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
@@ -1895,6 +1903,7 @@ type SystemCall struct {
 	//	*SystemCall_Log
 	//	*SystemCall_ExecuteOn
 	//	*SystemCall_WaitChild
+	//	*SystemCall_ListSiblings
 	Call          isSystemCall_Call `protobuf_oneof:"call"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2025,6 +2034,15 @@ func (x *SystemCall) GetWaitChild() *WaitChildRequest {
 	return nil
 }
 
+func (x *SystemCall) GetListSiblings() *ListSiblingsRequest {
+	if x != nil {
+		if x, ok := x.Call.(*SystemCall_ListSiblings); ok {
+			return x.ListSiblings
+		}
+	}
+	return nil
+}
+
 type isSystemCall_Call interface {
 	isSystemCall_Call()
 }
@@ -2065,6 +2083,10 @@ type SystemCall_WaitChild struct {
 	WaitChild *WaitChildRequest `protobuf:"bytes,10,opt,name=wait_child,json=waitChild,proto3,oneof"`
 }
 
+type SystemCall_ListSiblings struct {
+	ListSiblings *ListSiblingsRequest `protobuf:"bytes,11,opt,name=list_siblings,json=listSiblings,proto3,oneof"`
+}
+
 func (*SystemCall_Spawn) isSystemCall_Call() {}
 
 func (*SystemCall_Kill) isSystemCall_Call() {}
@@ -2083,6 +2105,8 @@ func (*SystemCall_ExecuteOn) isSystemCall_Call() {}
 
 func (*SystemCall_WaitChild) isSystemCall_Call() {}
 
+func (*SystemCall_ListSiblings) isSystemCall_Call() {}
+
 type SyscallResult struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
@@ -2097,6 +2121,7 @@ type SyscallResult struct {
 	//	*SyscallResult_Log
 	//	*SyscallResult_ExecuteOn
 	//	*SyscallResult_WaitChild
+	//	*SyscallResult_ListSiblings
 	Result        isSyscallResult_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2227,6 +2252,15 @@ func (x *SyscallResult) GetWaitChild() *WaitChildResponse {
 	return nil
 }
 
+func (x *SyscallResult) GetListSiblings() *ListSiblingsResponse {
+	if x != nil {
+		if x, ok := x.Result.(*SyscallResult_ListSiblings); ok {
+			return x.ListSiblings
+		}
+	}
+	return nil
+}
+
 type isSyscallResult_Result interface {
 	isSyscallResult_Result()
 }
@@ -2267,6 +2301,10 @@ type SyscallResult_WaitChild struct {
 	WaitChild *WaitChildResponse `protobuf:"bytes,10,opt,name=wait_child,json=waitChild,proto3,oneof"`
 }
 
+type SyscallResult_ListSiblings struct {
+	ListSiblings *ListSiblingsResponse `protobuf:"bytes,11,opt,name=list_siblings,json=listSiblings,proto3,oneof"`
+}
+
 func (*SyscallResult_Spawn) isSyscallResult_Result() {}
 
 func (*SyscallResult_Kill) isSyscallResult_Result() {}
@@ -2284,6 +2322,8 @@ func (*SyscallResult_Log) isSyscallResult_Result() {}
 func (*SyscallResult_ExecuteOn) isSyscallResult_Result() {}
 
 func (*SyscallResult_WaitChild) isSyscallResult_Result() {}
+
+func (*SyscallResult_ListSiblings) isSyscallResult_Result() {}
 
 type ExecuteOnRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2778,6 +2818,7 @@ type SendMessageRequest struct {
 	Payload       []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 	RequiresAck   bool                   `protobuf:"varint,6,opt,name=requires_ack,json=requiresAck,proto3" json:"requires_ack,omitempty"`
 	TtlSeconds    uint32                 `protobuf:"varint,7,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	ReplyTo       string                 `protobuf:"bytes,8,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2859,6 +2900,13 @@ func (x *SendMessageRequest) GetTtlSeconds() uint32 {
 		return x.TtlSeconds
 	}
 	return 0
+}
+
+func (x *SendMessageRequest) GetReplyTo() string {
+	if x != nil {
+		return x.ReplyTo
+	}
+	return ""
 }
 
 type SendMessageResponse struct {
@@ -3409,6 +3457,154 @@ func (*LogResponse) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{35}
 }
 
+type ListSiblingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSiblingsRequest) Reset() {
+	*x = ListSiblingsRequest{}
+	mi := &file_agent_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSiblingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSiblingsRequest) ProtoMessage() {}
+
+func (x *ListSiblingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSiblingsRequest.ProtoReflect.Descriptor instead.
+func (*ListSiblingsRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{36}
+}
+
+type ListSiblingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Siblings      []*SiblingInfo         `protobuf:"bytes,1,rep,name=siblings,proto3" json:"siblings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSiblingsResponse) Reset() {
+	*x = ListSiblingsResponse{}
+	mi := &file_agent_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSiblingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSiblingsResponse) ProtoMessage() {}
+
+func (x *ListSiblingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSiblingsResponse.ProtoReflect.Descriptor instead.
+func (*ListSiblingsResponse) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ListSiblingsResponse) GetSiblings() []*SiblingInfo {
+	if x != nil {
+		return x.Siblings
+	}
+	return nil
+}
+
+type SiblingInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           uint64                 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	State         string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SiblingInfo) Reset() {
+	*x = SiblingInfo{}
+	mi := &file_agent_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SiblingInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SiblingInfo) ProtoMessage() {}
+
+func (x *SiblingInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SiblingInfo.ProtoReflect.Descriptor instead.
+func (*SiblingInfo) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SiblingInfo) GetPid() uint64 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *SiblingInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SiblingInfo) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *SiblingInfo) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
 type WaitChildRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	TargetPid      uint64                 `protobuf:"varint,1,opt,name=target_pid,json=targetPid,proto3" json:"target_pid,omitempty"`
@@ -3419,7 +3615,7 @@ type WaitChildRequest struct {
 
 func (x *WaitChildRequest) Reset() {
 	*x = WaitChildRequest{}
-	mi := &file_agent_proto_msgTypes[36]
+	mi := &file_agent_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3431,7 +3627,7 @@ func (x *WaitChildRequest) String() string {
 func (*WaitChildRequest) ProtoMessage() {}
 
 func (x *WaitChildRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[36]
+	mi := &file_agent_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3444,7 +3640,7 @@ func (x *WaitChildRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitChildRequest.ProtoReflect.Descriptor instead.
 func (*WaitChildRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{36}
+	return file_agent_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *WaitChildRequest) GetTargetPid() uint64 {
@@ -3474,7 +3670,7 @@ type WaitChildResponse struct {
 
 func (x *WaitChildResponse) Reset() {
 	*x = WaitChildResponse{}
-	mi := &file_agent_proto_msgTypes[37]
+	mi := &file_agent_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3486,7 +3682,7 @@ func (x *WaitChildResponse) String() string {
 func (*WaitChildResponse) ProtoMessage() {}
 
 func (x *WaitChildResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[37]
+	mi := &file_agent_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3499,7 +3695,7 @@ func (x *WaitChildResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitChildResponse.ProtoReflect.Descriptor instead.
 func (*WaitChildResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{37}
+	return file_agent_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *WaitChildResponse) GetSuccess() bool {
@@ -3637,7 +3833,7 @@ const file_agent_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"|\n" +
 	"\x11InterruptResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\x12C\n" +
-	"\x0epartial_result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\rpartialResult\"\xcb\x02\n" +
+	"\x0epartial_result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\rpartialResult\"\xe6\x02\n" +
 	"\fAgentMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x19\n" +
@@ -3648,13 +3844,15 @@ const file_agent_proto_rawDesc = "" +
 	"\bpriority\x18\x06 \x01(\x0e2\x1a.hivekernel.agent.PriorityR\bpriority\x12\x18\n" +
 	"\apayload\x18\a \x01(\fR\apayload\x12\x1c\n" +
 	"\ttimestamp\x18\b \x01(\x04R\ttimestamp\x12!\n" +
-	"\frequires_ack\x18\t \x01(\bR\vrequiresAck\"v\n" +
+	"\frequires_ack\x18\t \x01(\bR\vrequiresAck\x12\x19\n" +
+	"\breply_to\x18\n" +
+	" \x01(\tR\areplyTo\"v\n" +
 	"\n" +
 	"MessageAck\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x123\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1b.hivekernel.agent.AckStatusR\x06status\x12\x14\n" +
-	"\x05reply\x18\x03 \x01(\tR\x05reply\"\xde\x04\n" +
+	"\x05reply\x18\x03 \x01(\tR\x05reply\"\xac\x05\n" +
 	"\n" +
 	"SystemCall\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x126\n" +
@@ -3669,8 +3867,9 @@ const file_agent_proto_rawDesc = "" +
 	"execute_on\x18\t \x01(\v2\".hivekernel.agent.ExecuteOnRequestH\x00R\texecuteOn\x12C\n" +
 	"\n" +
 	"wait_child\x18\n" +
-	" \x01(\v2\".hivekernel.agent.WaitChildRequestH\x00R\twaitChildB\x06\n" +
-	"\x04call\"\xec\x04\n" +
+	" \x01(\v2\".hivekernel.agent.WaitChildRequestH\x00R\twaitChild\x12L\n" +
+	"\rlist_siblings\x18\v \x01(\v2%.hivekernel.agent.ListSiblingsRequestH\x00R\flistSiblingsB\x06\n" +
+	"\x04call\"\xbb\x05\n" +
 	"\rSyscallResult\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x127\n" +
 	"\x05spawn\x18\x02 \x01(\v2\x1f.hivekernel.agent.SpawnResponseH\x00R\x05spawn\x124\n" +
@@ -3684,7 +3883,8 @@ const file_agent_proto_rawDesc = "" +
 	"execute_on\x18\t \x01(\v2#.hivekernel.agent.ExecuteOnResponseH\x00R\texecuteOn\x12D\n" +
 	"\n" +
 	"wait_child\x18\n" +
-	" \x01(\v2#.hivekernel.agent.WaitChildResponseH\x00R\twaitChildB\b\n" +
+	" \x01(\v2#.hivekernel.agent.WaitChildResponseH\x00R\twaitChild\x12M\n" +
+	"\rlist_siblings\x18\v \x01(\v2&.hivekernel.agent.ListSiblingsResponseH\x00R\flistSiblingsB\b\n" +
 	"\x06result\"d\n" +
 	"\x10ExecuteOnRequest\x12\x1d\n" +
 	"\n" +
@@ -3729,7 +3929,7 @@ const file_agent_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vkilled_pids\x18\x02 \x03(\x04R\n" +
 	"killedPids\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xf0\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\x8b\x02\n" +
 	"\x12SendMessageRequest\x12\x15\n" +
 	"\x06to_pid\x18\x01 \x01(\x04R\x05toPid\x12\x19\n" +
 	"\bto_queue\x18\x02 \x01(\tR\atoQueue\x12\x12\n" +
@@ -3738,7 +3938,8 @@ const file_agent_proto_rawDesc = "" +
 	"\apayload\x18\x05 \x01(\fR\apayload\x12!\n" +
 	"\frequires_ack\x18\x06 \x01(\bR\vrequiresAck\x12\x1f\n" +
 	"\vttl_seconds\x18\a \x01(\rR\n" +
-	"ttlSeconds\"h\n" +
+	"ttlSeconds\x12\x19\n" +
+	"\breply_to\x18\b \x01(\tR\areplyTo\"h\n" +
 	"\x13SendMessageResponse\x12\x1c\n" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1d\n" +
 	"\n" +
@@ -3787,7 +3988,15 @@ const file_agent_proto_rawDesc = "" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\r\n" +
-	"\vLogResponse\"Z\n" +
+	"\vLogResponse\"\x15\n" +
+	"\x13ListSiblingsRequest\"Q\n" +
+	"\x14ListSiblingsResponse\x129\n" +
+	"\bsiblings\x18\x01 \x03(\v2\x1d.hivekernel.agent.SiblingInfoR\bsiblings\"]\n" +
+	"\vSiblingInfo\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x04R\x03pid\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\"Z\n" +
 	"\x10WaitChildRequest\x12\x1d\n" +
 	"\n" +
 	"target_pid\x18\x01 \x01(\x04R\ttargetPid\x12'\n" +
@@ -3893,7 +4102,7 @@ func file_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_agent_proto_goTypes = []any{
 	(AgentRole)(0),                // 0: hivekernel.agent.AgentRole
 	(CognitiveTier)(0),            // 1: hivekernel.agent.CognitiveTier
@@ -3943,17 +4152,20 @@ var file_agent_proto_goTypes = []any{
 	(*EscalateResponse)(nil),      // 45: hivekernel.agent.EscalateResponse
 	(*LogRequest)(nil),            // 46: hivekernel.agent.LogRequest
 	(*LogResponse)(nil),           // 47: hivekernel.agent.LogResponse
-	(*WaitChildRequest)(nil),      // 48: hivekernel.agent.WaitChildRequest
-	(*WaitChildResponse)(nil),     // 49: hivekernel.agent.WaitChildResponse
-	nil,                           // 50: hivekernel.agent.InitRequest.EnvEntry
-	nil,                           // 51: hivekernel.agent.AgentConfig.MetadataEntry
-	nil,                           // 52: hivekernel.agent.Tool.ConfigEntry
-	nil,                           // 53: hivekernel.agent.TaskRequest.ParamsEntry
-	nil,                           // 54: hivekernel.agent.TaskResult.ArtifactsEntry
-	nil,                           // 55: hivekernel.agent.TaskResult.MetadataEntry
-	nil,                           // 56: hivekernel.agent.SpawnRequest.EnvEntry
-	nil,                           // 57: hivekernel.agent.EscalateRequest.ContextEntry
-	nil,                           // 58: hivekernel.agent.LogRequest.FieldsEntry
+	(*ListSiblingsRequest)(nil),   // 48: hivekernel.agent.ListSiblingsRequest
+	(*ListSiblingsResponse)(nil),  // 49: hivekernel.agent.ListSiblingsResponse
+	(*SiblingInfo)(nil),           // 50: hivekernel.agent.SiblingInfo
+	(*WaitChildRequest)(nil),      // 51: hivekernel.agent.WaitChildRequest
+	(*WaitChildResponse)(nil),     // 52: hivekernel.agent.WaitChildResponse
+	nil,                           // 53: hivekernel.agent.InitRequest.EnvEntry
+	nil,                           // 54: hivekernel.agent.AgentConfig.MetadataEntry
+	nil,                           // 55: hivekernel.agent.Tool.ConfigEntry
+	nil,                           // 56: hivekernel.agent.TaskRequest.ParamsEntry
+	nil,                           // 57: hivekernel.agent.TaskResult.ArtifactsEntry
+	nil,                           // 58: hivekernel.agent.TaskResult.MetadataEntry
+	nil,                           // 59: hivekernel.agent.SpawnRequest.EnvEntry
+	nil,                           // 60: hivekernel.agent.EscalateRequest.ContextEntry
+	nil,                           // 61: hivekernel.agent.LogRequest.FieldsEntry
 }
 var file_agent_proto_depIdxs = []int32{
 	0,  // 0: hivekernel.agent.InitRequest.role:type_name -> hivekernel.agent.AgentRole
@@ -3961,21 +4173,21 @@ var file_agent_proto_depIdxs = []int32{
 	13, // 2: hivekernel.agent.InitRequest.config:type_name -> hivekernel.agent.AgentConfig
 	14, // 3: hivekernel.agent.InitRequest.limits:type_name -> hivekernel.agent.ResourceLimits
 	15, // 4: hivekernel.agent.InitRequest.tools:type_name -> hivekernel.agent.Tool
-	50, // 5: hivekernel.agent.InitRequest.env:type_name -> hivekernel.agent.InitRequest.EnvEntry
-	51, // 6: hivekernel.agent.AgentConfig.metadata:type_name -> hivekernel.agent.AgentConfig.MetadataEntry
-	52, // 7: hivekernel.agent.Tool.config:type_name -> hivekernel.agent.Tool.ConfigEntry
+	53, // 5: hivekernel.agent.InitRequest.env:type_name -> hivekernel.agent.InitRequest.EnvEntry
+	54, // 6: hivekernel.agent.AgentConfig.metadata:type_name -> hivekernel.agent.AgentConfig.MetadataEntry
+	55, // 7: hivekernel.agent.Tool.config:type_name -> hivekernel.agent.Tool.ConfigEntry
 	5,  // 8: hivekernel.agent.ShutdownRequest.reason:type_name -> hivekernel.agent.ShutdownReason
 	24, // 9: hivekernel.agent.ShutdownResponse.partial_result:type_name -> hivekernel.agent.TaskResult
 	2,  // 10: hivekernel.agent.HeartbeatResponse.state:type_name -> hivekernel.agent.AgentState
 	22, // 11: hivekernel.agent.ExecuteInput.task:type_name -> hivekernel.agent.TaskRequest
 	30, // 12: hivekernel.agent.ExecuteInput.syscall_result:type_name -> hivekernel.agent.SyscallResult
-	53, // 13: hivekernel.agent.TaskRequest.params:type_name -> hivekernel.agent.TaskRequest.ParamsEntry
+	56, // 13: hivekernel.agent.TaskRequest.params:type_name -> hivekernel.agent.TaskRequest.ParamsEntry
 	3,  // 14: hivekernel.agent.TaskRequest.priority:type_name -> hivekernel.agent.Priority
 	7,  // 15: hivekernel.agent.TaskProgress.type:type_name -> hivekernel.agent.ProgressType
 	24, // 16: hivekernel.agent.TaskProgress.result:type_name -> hivekernel.agent.TaskResult
 	29, // 17: hivekernel.agent.TaskProgress.syscalls:type_name -> hivekernel.agent.SystemCall
-	54, // 18: hivekernel.agent.TaskResult.artifacts:type_name -> hivekernel.agent.TaskResult.ArtifactsEntry
-	55, // 19: hivekernel.agent.TaskResult.metadata:type_name -> hivekernel.agent.TaskResult.MetadataEntry
+	57, // 18: hivekernel.agent.TaskResult.artifacts:type_name -> hivekernel.agent.TaskResult.ArtifactsEntry
+	58, // 19: hivekernel.agent.TaskResult.metadata:type_name -> hivekernel.agent.TaskResult.MetadataEntry
 	24, // 20: hivekernel.agent.InterruptResponse.partial_result:type_name -> hivekernel.agent.TaskResult
 	4,  // 21: hivekernel.agent.AgentMessage.relation:type_name -> hivekernel.agent.MessageRelation
 	3,  // 22: hivekernel.agent.AgentMessage.priority:type_name -> hivekernel.agent.Priority
@@ -3988,48 +4200,51 @@ var file_agent_proto_depIdxs = []int32{
 	44, // 29: hivekernel.agent.SystemCall.escalate:type_name -> hivekernel.agent.EscalateRequest
 	46, // 30: hivekernel.agent.SystemCall.log:type_name -> hivekernel.agent.LogRequest
 	31, // 31: hivekernel.agent.SystemCall.execute_on:type_name -> hivekernel.agent.ExecuteOnRequest
-	48, // 32: hivekernel.agent.SystemCall.wait_child:type_name -> hivekernel.agent.WaitChildRequest
-	35, // 33: hivekernel.agent.SyscallResult.spawn:type_name -> hivekernel.agent.SpawnResponse
-	37, // 34: hivekernel.agent.SyscallResult.kill:type_name -> hivekernel.agent.KillResponse
-	39, // 35: hivekernel.agent.SyscallResult.send:type_name -> hivekernel.agent.SendMessageResponse
-	41, // 36: hivekernel.agent.SyscallResult.store:type_name -> hivekernel.agent.StoreArtifactResponse
-	43, // 37: hivekernel.agent.SyscallResult.get_artifact:type_name -> hivekernel.agent.GetArtifactResponse
-	45, // 38: hivekernel.agent.SyscallResult.escalate:type_name -> hivekernel.agent.EscalateResponse
-	47, // 39: hivekernel.agent.SyscallResult.log:type_name -> hivekernel.agent.LogResponse
-	32, // 40: hivekernel.agent.SyscallResult.execute_on:type_name -> hivekernel.agent.ExecuteOnResponse
-	49, // 41: hivekernel.agent.SyscallResult.wait_child:type_name -> hivekernel.agent.WaitChildResponse
-	22, // 42: hivekernel.agent.ExecuteOnRequest.task:type_name -> hivekernel.agent.TaskRequest
-	24, // 43: hivekernel.agent.ExecuteOnResponse.result:type_name -> hivekernel.agent.TaskResult
-	0,  // 44: hivekernel.agent.SpawnRequest.role:type_name -> hivekernel.agent.AgentRole
-	1,  // 45: hivekernel.agent.SpawnRequest.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
-	14, // 46: hivekernel.agent.SpawnRequest.limits:type_name -> hivekernel.agent.ResourceLimits
-	56, // 47: hivekernel.agent.SpawnRequest.env:type_name -> hivekernel.agent.SpawnRequest.EnvEntry
-	8,  // 48: hivekernel.agent.SpawnRequest.runtime_type:type_name -> hivekernel.agent.RuntimeType
-	34, // 49: hivekernel.agent.SpawnRequest.schedule:type_name -> hivekernel.agent.Schedule
-	5,  // 50: hivekernel.agent.KillRequest.reason:type_name -> hivekernel.agent.ShutdownReason
-	3,  // 51: hivekernel.agent.SendMessageRequest.priority:type_name -> hivekernel.agent.Priority
-	9,  // 52: hivekernel.agent.StoreArtifactRequest.visibility:type_name -> hivekernel.agent.ArtifactVisibility
-	10, // 53: hivekernel.agent.EscalateRequest.severity:type_name -> hivekernel.agent.EscalationSeverity
-	57, // 54: hivekernel.agent.EscalateRequest.context:type_name -> hivekernel.agent.EscalateRequest.ContextEntry
-	11, // 55: hivekernel.agent.LogRequest.level:type_name -> hivekernel.agent.LogLevel
-	58, // 56: hivekernel.agent.LogRequest.fields:type_name -> hivekernel.agent.LogRequest.FieldsEntry
-	12, // 57: hivekernel.agent.AgentService.Init:input_type -> hivekernel.agent.InitRequest
-	17, // 58: hivekernel.agent.AgentService.Shutdown:input_type -> hivekernel.agent.ShutdownRequest
-	19, // 59: hivekernel.agent.AgentService.Heartbeat:input_type -> hivekernel.agent.HeartbeatRequest
-	21, // 60: hivekernel.agent.AgentService.Execute:input_type -> hivekernel.agent.ExecuteInput
-	25, // 61: hivekernel.agent.AgentService.Interrupt:input_type -> hivekernel.agent.InterruptRequest
-	27, // 62: hivekernel.agent.AgentService.DeliverMessage:input_type -> hivekernel.agent.AgentMessage
-	16, // 63: hivekernel.agent.AgentService.Init:output_type -> hivekernel.agent.InitResponse
-	18, // 64: hivekernel.agent.AgentService.Shutdown:output_type -> hivekernel.agent.ShutdownResponse
-	20, // 65: hivekernel.agent.AgentService.Heartbeat:output_type -> hivekernel.agent.HeartbeatResponse
-	23, // 66: hivekernel.agent.AgentService.Execute:output_type -> hivekernel.agent.TaskProgress
-	26, // 67: hivekernel.agent.AgentService.Interrupt:output_type -> hivekernel.agent.InterruptResponse
-	28, // 68: hivekernel.agent.AgentService.DeliverMessage:output_type -> hivekernel.agent.MessageAck
-	63, // [63:69] is the sub-list for method output_type
-	57, // [57:63] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	51, // 32: hivekernel.agent.SystemCall.wait_child:type_name -> hivekernel.agent.WaitChildRequest
+	48, // 33: hivekernel.agent.SystemCall.list_siblings:type_name -> hivekernel.agent.ListSiblingsRequest
+	35, // 34: hivekernel.agent.SyscallResult.spawn:type_name -> hivekernel.agent.SpawnResponse
+	37, // 35: hivekernel.agent.SyscallResult.kill:type_name -> hivekernel.agent.KillResponse
+	39, // 36: hivekernel.agent.SyscallResult.send:type_name -> hivekernel.agent.SendMessageResponse
+	41, // 37: hivekernel.agent.SyscallResult.store:type_name -> hivekernel.agent.StoreArtifactResponse
+	43, // 38: hivekernel.agent.SyscallResult.get_artifact:type_name -> hivekernel.agent.GetArtifactResponse
+	45, // 39: hivekernel.agent.SyscallResult.escalate:type_name -> hivekernel.agent.EscalateResponse
+	47, // 40: hivekernel.agent.SyscallResult.log:type_name -> hivekernel.agent.LogResponse
+	32, // 41: hivekernel.agent.SyscallResult.execute_on:type_name -> hivekernel.agent.ExecuteOnResponse
+	52, // 42: hivekernel.agent.SyscallResult.wait_child:type_name -> hivekernel.agent.WaitChildResponse
+	49, // 43: hivekernel.agent.SyscallResult.list_siblings:type_name -> hivekernel.agent.ListSiblingsResponse
+	22, // 44: hivekernel.agent.ExecuteOnRequest.task:type_name -> hivekernel.agent.TaskRequest
+	24, // 45: hivekernel.agent.ExecuteOnResponse.result:type_name -> hivekernel.agent.TaskResult
+	0,  // 46: hivekernel.agent.SpawnRequest.role:type_name -> hivekernel.agent.AgentRole
+	1,  // 47: hivekernel.agent.SpawnRequest.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
+	14, // 48: hivekernel.agent.SpawnRequest.limits:type_name -> hivekernel.agent.ResourceLimits
+	59, // 49: hivekernel.agent.SpawnRequest.env:type_name -> hivekernel.agent.SpawnRequest.EnvEntry
+	8,  // 50: hivekernel.agent.SpawnRequest.runtime_type:type_name -> hivekernel.agent.RuntimeType
+	34, // 51: hivekernel.agent.SpawnRequest.schedule:type_name -> hivekernel.agent.Schedule
+	5,  // 52: hivekernel.agent.KillRequest.reason:type_name -> hivekernel.agent.ShutdownReason
+	3,  // 53: hivekernel.agent.SendMessageRequest.priority:type_name -> hivekernel.agent.Priority
+	9,  // 54: hivekernel.agent.StoreArtifactRequest.visibility:type_name -> hivekernel.agent.ArtifactVisibility
+	10, // 55: hivekernel.agent.EscalateRequest.severity:type_name -> hivekernel.agent.EscalationSeverity
+	60, // 56: hivekernel.agent.EscalateRequest.context:type_name -> hivekernel.agent.EscalateRequest.ContextEntry
+	11, // 57: hivekernel.agent.LogRequest.level:type_name -> hivekernel.agent.LogLevel
+	61, // 58: hivekernel.agent.LogRequest.fields:type_name -> hivekernel.agent.LogRequest.FieldsEntry
+	50, // 59: hivekernel.agent.ListSiblingsResponse.siblings:type_name -> hivekernel.agent.SiblingInfo
+	12, // 60: hivekernel.agent.AgentService.Init:input_type -> hivekernel.agent.InitRequest
+	17, // 61: hivekernel.agent.AgentService.Shutdown:input_type -> hivekernel.agent.ShutdownRequest
+	19, // 62: hivekernel.agent.AgentService.Heartbeat:input_type -> hivekernel.agent.HeartbeatRequest
+	21, // 63: hivekernel.agent.AgentService.Execute:input_type -> hivekernel.agent.ExecuteInput
+	25, // 64: hivekernel.agent.AgentService.Interrupt:input_type -> hivekernel.agent.InterruptRequest
+	27, // 65: hivekernel.agent.AgentService.DeliverMessage:input_type -> hivekernel.agent.AgentMessage
+	16, // 66: hivekernel.agent.AgentService.Init:output_type -> hivekernel.agent.InitResponse
+	18, // 67: hivekernel.agent.AgentService.Shutdown:output_type -> hivekernel.agent.ShutdownResponse
+	20, // 68: hivekernel.agent.AgentService.Heartbeat:output_type -> hivekernel.agent.HeartbeatResponse
+	23, // 69: hivekernel.agent.AgentService.Execute:output_type -> hivekernel.agent.TaskProgress
+	26, // 70: hivekernel.agent.AgentService.Interrupt:output_type -> hivekernel.agent.InterruptResponse
+	28, // 71: hivekernel.agent.AgentService.DeliverMessage:output_type -> hivekernel.agent.MessageAck
+	66, // [66:72] is the sub-list for method output_type
+	60, // [60:66] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -4052,6 +4267,7 @@ func file_agent_proto_init() {
 		(*SystemCall_Log)(nil),
 		(*SystemCall_ExecuteOn)(nil),
 		(*SystemCall_WaitChild)(nil),
+		(*SystemCall_ListSiblings)(nil),
 	}
 	file_agent_proto_msgTypes[18].OneofWrappers = []any{
 		(*SyscallResult_Spawn)(nil),
@@ -4063,6 +4279,7 @@ func file_agent_proto_init() {
 		(*SyscallResult_Log)(nil),
 		(*SyscallResult_ExecuteOn)(nil),
 		(*SyscallResult_WaitChild)(nil),
+		(*SyscallResult_ListSiblings)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -4070,7 +4287,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   47,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

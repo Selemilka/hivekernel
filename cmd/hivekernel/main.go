@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
+	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/kernel"
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/runtime"
@@ -81,6 +83,31 @@ func main() {
 		log.Printf("[startup] PicoClaw binary: %s", *clawBin)
 	}
 	king.SetRuntimeManager(rtManager)
+
+	// Wire push delivery: when a message arrives in a process's inbox,
+	// immediately deliver it to the agent's gRPC DeliverMessage RPC.
+	king.Broker().OnMessage = func(pid process.PID, msg *ipc.Message) {
+		client := rtManager.GetClient(pid)
+		if client == nil {
+			return // no runtime connected (or process is kernel-internal)
+		}
+		pbMsg := &pb.AgentMessage{
+			MessageId:   msg.ID,
+			FromPid:     msg.FromPID,
+			FromName:    msg.FromName,
+			Type:        msg.Type,
+			Priority:    pb.Priority(msg.Priority),
+			Payload:     msg.Payload,
+			RequiresAck: msg.RequiresAck,
+			ReplyTo:     msg.ReplyTo,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := client.DeliverMessage(ctx, pbMsg); err != nil {
+			log.Printf("[broker] push delivery to PID %d failed: %v", pid, err)
+		}
+	}
+
 	syscallHandler := kernel.NewKernelSyscallHandler(king, rtManager)
 	executor := runtime.NewExecutor(syscallHandler)
 	syscallHandler.SetExecutor(executor)

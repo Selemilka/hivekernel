@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import uuid
 
 import grpc
 import grpc.aio
@@ -36,6 +37,8 @@ class HiveAgent:
         self._config: AgentConfig = AgentConfig()
         self._core: CoreClient | None = None
         self._server = None  # Set by runner for auto-exit support
+        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._last_ctx: SyscallContext | None = None
 
     # --- Properties (read-only) ---
 
@@ -75,8 +78,55 @@ class HiveAgent:
         raise NotImplementedError("Subclass must implement handle_task")
 
     async def on_message(self, message: Message) -> MessageAck:
-        """Handle incoming message from another agent. Override if needed."""
+        """Handle incoming message from another agent.
+
+        If message.reply_to matches a pending request, resolves the future.
+        Otherwise delegates to handle_message() for application logic.
+        """
+        # Check if this is a reply to a pending request.
+        if message.reply_to and message.reply_to in self._pending_requests:
+            fut = self._pending_requests.pop(message.reply_to)
+            if not fut.done():
+                fut.set_result(message)
+            return MessageAck(status=MessageAck.ACK_ACCEPTED)
+        # Delegate to application handler.
+        return await self.handle_message(message)
+
+    async def handle_message(self, message: Message) -> MessageAck:
+        """Handle incoming message (application logic). Override in subclass."""
         return MessageAck(status=MessageAck.ACK_ACCEPTED)
+
+    async def send_and_wait(
+        self,
+        ctx: SyscallContext,
+        to_pid: int,
+        type: str,
+        payload: bytes,
+        timeout: float = 60.0,
+    ) -> Message:
+        """Send a message and wait for a correlated reply.
+
+        The message gets a unique ID. The receiver should include this ID
+        in their reply's reply_to field for correlation.
+        """
+        request_id = str(uuid.uuid4())
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        self._pending_requests[request_id] = fut
+
+        try:
+            await ctx.send(
+                to_pid=to_pid,
+                type=type,
+                payload=payload,
+                reply_to=request_id,
+            )
+            return await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending_requests.pop(request_id, None)
+            raise TimeoutError(
+                f"No reply from PID {to_pid} within {timeout}s (request_id={request_id})"
+            )
 
     async def on_shutdown(self, reason: str) -> bytes | None:
         """Save state before shutdown. Override if needed."""
@@ -147,6 +197,7 @@ class HiveAgent:
                     payload=request.payload,
                     timestamp=request.timestamp,
                     requires_ack=request.requires_ack,
+                    reply_to=request.reply_to,
                 )
                 ack = await agent.on_message(msg)
                 return agent_pb2.MessageAck(
@@ -183,6 +234,7 @@ class HiveAgent:
                                 parent_task_id=req.parent_task_id,
                             )
                             current_ctx = SyscallContext(task_obj.task_id, out_queue)
+                            agent._last_ctx = current_ctx
                             task_received.set()
 
                         elif execute_input.HasField("syscall_result"):

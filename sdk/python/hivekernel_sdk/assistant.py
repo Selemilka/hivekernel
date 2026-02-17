@@ -24,7 +24,7 @@ SYSTEM_PROMPT = (
     "You can:\n"
     "- Answer questions on any topic\n"
     "- Schedule recurring tasks using cron expressions\n"
-    "- Delegate coding tasks to the Coder agent\n"
+    "- Delegate tasks to sibling agents (Queen, Coder, etc.) via IPC messaging\n"
     "- Check GitHub repos via the GitMonitor agent\n\n"
     "Respond concisely and helpfully.\n"
     "If the user asks to schedule something, include this JSON block in your response:\n"
@@ -32,6 +32,9 @@ SYSTEM_PROMPT = (
     '"description": "What to do", "params": {}}\n'
     "If the user asks to write/generate code, include this block:\n"
     'DELEGATE_CODE: {"request": "what to code", "language": "python"}\n'
+    "If the user asks you to delegate a task to another agent (like Queen for research, "
+    "analysis, or complex tasks), include this block:\n"
+    'DELEGATE: {"to": "<agent-name>", "task": "description of what to do"}\n'
     "Otherwise just answer the question directly."
 )
 
@@ -79,8 +82,37 @@ class AssistantAgent(LLMAgent):
 
         await ctx.log("info", f"Assistant received: {message[:80]}")
 
+        # Discover siblings via list_siblings syscall.
+        siblings = []
+        sibling_map = {}  # name -> pid
+        try:
+            siblings = await ctx.list_siblings()
+            for s in siblings:
+                sibling_map[s["name"]] = s["pid"]
+                # Also map short names (e.g. "queen" from "queen@vps1").
+                short = s["name"].split("@")[0]
+                if short not in sibling_map:
+                    sibling_map[short] = s["pid"]
+            await ctx.log("info", f"Discovered {len(siblings)} siblings: {[s['name'] for s in siblings]}")
+        except Exception as e:
+            logger.warning("list_siblings failed: %s", e)
+
+        # Merge discovered siblings with dashboard-provided sibling_pids.
+        merged_pids = {**sibling_pids, **sibling_map}
+
+        # Build sibling context for LLM.
+        sibling_context = ""
+        if siblings:
+            lines = ["Available sibling agents:"]
+            for s in siblings:
+                lines.append(f"  - {s['name']} (PID {s['pid']}, role={s['role']}, state={s['state']})")
+            sibling_context = "\n".join(lines) + "\n\n"
+
         # Build messages for LLM.
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        system_content = SYSTEM_PROMPT
+        if sibling_context:
+            system_content += "\n\n" + sibling_context
+        messages = [{"role": "system", "content": system_content}]
         for h in history[-10:]:
             if isinstance(h, dict) and "role" in h and "content" in h:
                 messages.append({"role": h["role"], "content": h["content"]})
@@ -93,19 +125,23 @@ class AssistantAgent(LLMAgent):
             logger.warning("LLM call failed: %s", e)
             return TaskResult(exit_code=1, output=f"LLM error: {e}")
 
-        # Post-process: handle scheduling and code delegation.
+        # Post-process: handle scheduling, code delegation, and general delegation.
         extra = ""
-        schedule_result = await self._handle_schedule(response, ctx, sibling_pids)
+        schedule_result = await self._handle_schedule(response, ctx, merged_pids)
         if schedule_result:
             extra += "\n\n" + schedule_result
 
-        code_result = await self._handle_code_delegation(response, ctx, sibling_pids)
+        code_result = await self._handle_code_delegation(response, ctx, merged_pids)
         if code_result:
             extra += "\n\n" + code_result
 
+        delegate_result = await self._handle_delegation(response, ctx, merged_pids)
+        if delegate_result:
+            extra += "\n\n" + delegate_result
+
         # Strip the raw JSON markers from the user-facing response.
         clean_response = response
-        for marker in ("SCHEDULE:", "DELEGATE_CODE:"):
+        for marker in ("SCHEDULE:", "DELEGATE_CODE:", "DELEGATE:"):
             if marker in clean_response:
                 # Remove the marker and JSON block.
                 idx = clean_response.index(marker)
@@ -186,3 +222,52 @@ class AssistantAgent(LLMAgent):
         except Exception as e:
             logger.warning("Code delegation failed: %s", e)
             return f"[Code delegation failed: {e}]"
+
+    async def _handle_delegation(
+        self, response: str, ctx: SyscallContext, sibling_pids: dict
+    ) -> str | None:
+        """Extract DELEGATE: JSON and send task via IPC messaging."""
+        info = _extract_json_block(response, "DELEGATE:")
+        if not info:
+            return None
+
+        target_name = info.get("to", "")
+        task_desc = info.get("task", "")
+        if not target_name or not task_desc:
+            return None
+
+        # Resolve agent name -> PID.
+        target_pid = sibling_pids.get(target_name)
+        if not target_pid:
+            # Try partial match (e.g. "queen" matches "queen@vps1").
+            for name, pid in sibling_pids.items():
+                if target_name.lower() in name.lower():
+                    target_pid = pid
+                    break
+        if not target_pid:
+            return f"[Could not find agent '{target_name}' for delegation]"
+
+        await ctx.log("info", f"Delegating to {target_name} (PID {target_pid}): {task_desc[:80]}")
+
+        try:
+            payload = json.dumps({"task": task_desc}, ensure_ascii=False).encode("utf-8")
+            reply = await self.send_and_wait(
+                ctx=ctx,
+                to_pid=int(target_pid),
+                type="task_request",
+                payload=payload,
+                timeout=300.0,
+            )
+            # Parse the reply payload.
+            try:
+                result_data = json.loads(reply.payload.decode("utf-8"))
+                output = result_data.get("output", result_data.get("error", "No output"))
+                return f"[Response from {target_name}:]\n{output}"
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return f"[Response from {target_name}:]\n{reply.payload.decode('utf-8', errors='replace')}"
+        except TimeoutError:
+            logger.warning("Delegation to %s timed out", target_name)
+            return f"[Delegation to {target_name} timed out after 300s]"
+        except Exception as e:
+            logger.warning("Delegation to %s failed: %s", target_name, e)
+            return f"[Delegation to {target_name} failed: {e}]"

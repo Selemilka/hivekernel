@@ -27,7 +27,7 @@ from collections import deque
 
 from .llm_agent import LLMAgent
 from .syscall import SyscallContext
-from .types import TaskResult
+from .types import Message, MessageAck, TaskResult
 
 logger = logging.getLogger("hivekernel.queen")
 
@@ -114,6 +114,127 @@ class QueenAgent(LLMAgent):
                 else:
                     still_idle.append((pid, idle_since))
             self._idle_leads = still_idle
+
+    # --- Message Handling (async IPC from siblings) ---
+
+    async def handle_message(self, message: Message) -> MessageAck:
+        """Handle incoming IPC messages from sibling agents."""
+        if message.type == "task_request":
+            # Queue the task for async processing.
+            asyncio.create_task(self._process_message_task(message))
+            return MessageAck(status=MessageAck.ACK_QUEUED)
+        return MessageAck(status=MessageAck.ACK_ACCEPTED)
+
+    async def _process_message_task(self, message: Message):
+        """Process a task_request received via IPC and send result back.
+
+        Uses CoreClient direct RPCs (not SyscallContext) since we're outside
+        an Execute bidi stream. This allows full spawn/execute capabilities.
+        """
+        try:
+            payload = json.loads(message.payload.decode("utf-8"))
+            description = payload.get("task", "")
+            if not description:
+                result_payload = json.dumps({"error": "empty task"}).encode("utf-8")
+            else:
+                logger.info("Queen processing IPC task from PID %d: %s",
+                            message.from_pid, description[:80])
+                complexity = await self._assess_complexity(description)
+                logger.info("IPC task complexity: %s", complexity)
+
+                if complexity == "simple":
+                    result = await self._ipc_handle_simple(description)
+                else:
+                    result = await self._ipc_handle_complex(description)
+
+                result_payload = json.dumps({
+                    "output": result["output"],
+                    "exit_code": result["exit_code"],
+                    "metadata": result.get("metadata", {}),
+                }, ensure_ascii=False).encode("utf-8")
+        except Exception as e:
+            logger.error("Queen IPC task failed: %s", e)
+            result_payload = json.dumps({
+                "error": str(e),
+                "exit_code": 1,
+            }).encode("utf-8")
+
+        # Send reply back to the sender.
+        if self.core and message.from_pid:
+            try:
+                await self.core.send_message(
+                    to_pid=message.from_pid,
+                    type="task_response",
+                    payload=result_payload,
+                    reply_to=message.reply_to,
+                )
+            except Exception as e:
+                logger.error("Queen failed to send reply to PID %d: %s",
+                             message.from_pid, e)
+
+    async def _ipc_handle_simple(self, description: str) -> dict:
+        """Simple IPC task: spawn worker via CoreClient, execute, collect."""
+        worker_pid = None
+        try:
+            await self.core.log("info", f"IPC simple: spawning task worker")
+            worker_pid = await self.core.spawn_child(
+                name="queen-ipc-task",
+                role="task",
+                cognitive_tier="operational",
+                model="mini",
+                system_prompt="You are a skilled assistant. Complete the given task thoroughly and concisely.",
+                runtime_image="hivekernel_sdk.worker:WorkerAgent",
+                runtime_type="python",
+            )
+            logger.info("IPC spawned worker PID %d for simple task", worker_pid)
+            result = await self.core.execute_task(
+                target_pid=worker_pid,
+                description=description,
+                params={"subtask": description},
+                timeout_seconds=120,
+            )
+            return {**result, "metadata": {**result.get("metadata", {}), "strategy": "simple"}}
+        except Exception as e:
+            logger.error("IPC simple task failed: %s", e)
+            if worker_pid:
+                try:
+                    await self.core.kill_child(worker_pid)
+                except Exception:
+                    pass
+            return {"output": f"Task failed: {e}", "exit_code": 1}
+
+    async def _ipc_handle_complex(self, description: str) -> dict:
+        """Complex IPC task: spawn lead via CoreClient, execute, collect."""
+        lead_pid = None
+        try:
+            await self.core.log("info", f"IPC complex: spawning orchestrator lead")
+            lead_pid = await self.core.spawn_child(
+                name="queen-ipc-lead",
+                role="lead",
+                cognitive_tier="tactical",
+                model="sonnet",
+                system_prompt="You are a task orchestrator. You decompose tasks, delegate to workers, and synthesize results.",
+                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
+                runtime_type="python",
+            )
+            logger.info("IPC spawned lead PID %d for complex task", lead_pid)
+            result = await self.core.execute_task(
+                target_pid=lead_pid,
+                description=description,
+                params={"task": description, "max_workers": self._max_workers},
+                timeout_seconds=300,
+            )
+            # Return lead to idle pool for reuse.
+            self._idle_leads.append((lead_pid, time.time()))
+            return {**result, "metadata": {**result.get("metadata", {}), "strategy": "complex"}}
+        except Exception as e:
+            logger.error("IPC complex task failed: %s", e)
+            if lead_pid:
+                try:
+                    await self.core.kill_child(lead_pid)
+                except Exception:
+                    pass
+            return {"output": f"Task failed: {e}", "exit_code": 1}
 
     # --- Task Handling ---
 

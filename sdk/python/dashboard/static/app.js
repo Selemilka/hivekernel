@@ -91,6 +91,16 @@ function applyDelta(delta) {
         }
         return;
     }
+    if (delta.action === 'message') {
+        recordMessageEvent(delta);
+        // Flash the link in the D3 tree.
+        flashMessageLink(delta.from_pid, delta.to_pid);
+        // Live-update messages panel if sender or receiver is selected.
+        if (selectedNode && (selectedNode.pid === delta.from_pid || selectedNode.pid === delta.to_pid)) {
+            renderMessagesPanel(selectedNode.pid);
+        }
+        return;
+    }
     if (!treeData) return;
     if (delta.action === 'add' && delta.node) {
         treeData.push(delta.node);
@@ -276,6 +286,8 @@ function selectNode(node) {
     fillDetail(node);
     loadTaskHistory(node.pid);
     renderActivityPanel(node.pid);
+    renderMessagesPanel(node.pid);
+    loadMessages(node.pid);
 
     // Re-render to update selection highlight
     renderTree();
@@ -810,6 +822,176 @@ function toggleActivityPanel() {
     } else {
         content.style.display = 'none';
         toggle.textContent = '+';
+    }
+}
+
+// ─── Messages Panel ───
+
+const nodeMessages = {};  // pid -> [{ts, from_pid, to_pid, from_name, to_name, type, direction}, ...]
+const NODE_MESSAGES_MAX = 50;
+
+function recordMessageEvent(data) {
+    // Store for both sender and receiver.
+    [data.from_pid, data.to_pid].forEach(pid => {
+        if (!pid) return;
+        if (!nodeMessages[pid]) nodeMessages[pid] = [];
+        nodeMessages[pid].push({
+            ts: data.ts,
+            from_pid: data.from_pid,
+            to_pid: data.to_pid,
+            from_name: data.from_name || '',
+            to_name: data.to_name || '',
+            type: data.type || '',
+            direction: pid === data.from_pid ? 'outgoing' : 'incoming',
+        });
+        while (nodeMessages[pid].length > NODE_MESSAGES_MAX) {
+            nodeMessages[pid].shift();
+        }
+    });
+}
+
+function renderMessagesPanel(pid) {
+    const panel = document.getElementById('messages-panel');
+    const container = document.getElementById('messages-entries');
+    const entries = nodeMessages[pid] || [];
+
+    if (entries.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+    document.getElementById('messages-count').textContent = entries.length;
+    container.innerHTML = '';
+
+    const reversed = [...entries].reverse();
+    reversed.forEach(entry => {
+        const div = document.createElement('div');
+        const isReply = entry.type === 'task_response';
+        let cls = 'msg-' + entry.direction;
+        if (isReply) cls = 'msg-reply';
+        div.className = `msg-line ${cls}`;
+
+        const ts = entry.ts ? new Date(entry.ts).toLocaleTimeString() : '';
+        const arrow = entry.direction === 'outgoing' ? '->' : '<-';
+        const peer = entry.direction === 'outgoing'
+            ? `${entry.to_name || 'PID ' + entry.to_pid}`
+            : `${entry.from_name || 'PID ' + entry.from_pid}`;
+
+        div.innerHTML =
+            `<span class="msg-ts">${ts}</span>`
+            + `<span class="msg-arrow">${arrow}</span>`
+            + `<span class="msg-peer">${escapeHtml(peer)}</span>`
+            + `<span class="msg-type">[${escapeHtml(entry.type)}]</span>`;
+        container.appendChild(div);
+    });
+
+    container.scrollTop = 0;
+}
+
+async function loadMessages(pid) {
+    try {
+        const resp = await fetch(`/api/messages?pid=${pid}&limit=50`);
+        const data = await resp.json();
+        if (!data.ok) return;
+
+        // Merge into nodeMessages from server data.
+        if (!nodeMessages[pid]) nodeMessages[pid] = [];
+        data.entries.forEach(entry => {
+            nodeMessages[pid].push({
+                ts: entry.timestamp,
+                from_pid: entry.from_pid,
+                to_pid: entry.to_pid,
+                from_name: entry.from_name || '',
+                to_name: entry.to_name || '',
+                type: entry.type || '',
+                direction: pid === entry.from_pid ? 'outgoing' : 'incoming',
+            });
+        });
+        // Deduplicate by timestamp (rough).
+        const seen = new Set();
+        nodeMessages[pid] = nodeMessages[pid].filter(e => {
+            const key = `${e.ts}-${e.from_pid}-${e.to_pid}-${e.type}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        while (nodeMessages[pid].length > NODE_MESSAGES_MAX) {
+            nodeMessages[pid].shift();
+        }
+        renderMessagesPanel(pid);
+    } catch (e) {
+        // Ignore
+    }
+}
+
+function toggleMessagesPanel() {
+    const content = document.getElementById('messages-content');
+    const toggle = document.getElementById('messages-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'flex';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
+// ─── Message Flow Animation (D3) ───
+
+function flashMessageLink(fromPid, toPid) {
+    if (!treeData) return;
+
+    // Find the link between these two PIDs in the tree.
+    const root = buildHierarchy(treeData);
+    if (!root) return;
+    const hierarchy = d3.hierarchy(root, d => d.children);
+
+    // Find nodes by PID.
+    const allNodes = hierarchy.descendants();
+    const fromNode = allNodes.find(n => n.data.pid === fromPid);
+    const toNode = allNodes.find(n => n.data.pid === toPid);
+    if (!fromNode || !toNode) return;
+
+    // Draw a temporary animated path between the two nodes.
+    const path = g.append('path')
+        .attr('class', 'message-flash')
+        .attr('d', `M${fromNode.y},${fromNode.x} L${toNode.y},${toNode.x}`)
+        .attr('stroke', '#54a0ff')
+        .attr('stroke-width', 3)
+        .attr('fill', 'none')
+        .attr('stroke-dasharray', '8 4')
+        .attr('opacity', 0.9);
+
+    // Animate dash offset for "flowing" effect.
+    let offset = 0;
+    const interval = setInterval(() => {
+        offset -= 2;
+        path.attr('stroke-dashoffset', offset);
+    }, 50);
+
+    // Fade out after 1.5s.
+    setTimeout(() => {
+        clearInterval(interval);
+        path.transition()
+            .duration(500)
+            .attr('opacity', 0)
+            .remove();
+    }, 1500);
+
+    // Flash the target node circle.
+    const targetCircle = g.selectAll('.node')
+        .filter(d => d.data.pid === toPid)
+        .select('circle');
+    if (!targetCircle.empty()) {
+        const origFill = targetCircle.attr('fill');
+        targetCircle
+            .transition().duration(200)
+            .attr('fill', '#54a0ff')
+            .attr('r', 12)
+            .transition().duration(600)
+            .attr('fill', origFill)
+            .attr('r', 7);
     }
 }
 

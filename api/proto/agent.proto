@@ -208,6 +208,7 @@ message AgentMessage {
   bytes payload = 7;
   uint64 timestamp = 8;
   bool requires_ack = 9;
+  string reply_to = 10;
 }
 
 message MessageAck {
@@ -230,6 +231,7 @@ message SystemCall {
     LogRequest log = 8;
     ExecuteOnRequest execute_on = 9;
     WaitChildRequest wait_child = 10;
+    ListSiblingsRequest list_siblings = 11;
   }
 }
 
@@ -245,6 +247,7 @@ message SyscallResult {
     LogResponse log = 8;
     ExecuteOnResponse execute_on = 9;
     WaitChildResponse wait_child = 10;
+    ListSiblingsResponse list_siblings = 11;
   }
 }
 
@@ -316,6 +319,7 @@ message SendMessageRequest {
   bytes payload = 5;
   bool requires_ack = 6;
   uint32 ttl_seconds = 7;
+  string reply_to = 8;
 }
 
 message SendMessageResponse {
@@ -392,6 +396,21 @@ enum LogLevel {
 }
 
 message LogResponse {}
+
+// ─── List siblings ───
+
+message ListSiblingsRequest {}
+
+message ListSiblingsResponse {
+  repeated SiblingInfo siblings = 1;
+}
+
+message SiblingInfo {
+  uint64 pid = 1;
+  string name = 2;
+  string role = 3;
+  string state = 4;
+}
 
 // ─── Wait child (like waitpid) ───
 

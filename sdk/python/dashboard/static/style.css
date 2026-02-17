@@ -642,6 +642,89 @@ button.btn-primary:hover {
     color: #ccc;
 }
 
+/* ─── Messages Panel ─── */
+#messages-panel {
+    padding: 16px;
+    background: #1a2040;
+    border-top: 1px solid #0f3460;
+    flex-shrink: 0;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+#messages-panel h2 {
+    font-size: 15px;
+    color: #54a0ff;
+}
+
+#messages-toggle {
+    font-size: 18px;
+    color: #888;
+    user-select: none;
+}
+
+#messages-content {
+    display: flex;
+    flex-direction: column;
+}
+
+#messages-entries {
+    margin-top: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.msg-line {
+    padding: 4px 8px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    border-radius: 4px;
+    border-left: 3px solid #576574;
+}
+
+.msg-line.msg-outgoing {
+    border-left-color: #54a0ff;
+    background: rgba(84, 160, 255, 0.08);
+}
+
+.msg-line.msg-incoming {
+    border-left-color: #10ac84;
+    background: rgba(16, 172, 132, 0.08);
+}
+
+.msg-line.msg-reply {
+    border-left-color: #888;
+    background: rgba(136, 136, 136, 0.08);
+}
+
+.msg-ts {
+    color: #666;
+    margin-right: 8px;
+    font-size: 11px;
+}
+
+.msg-arrow {
+    color: #888;
+    margin-right: 4px;
+    font-weight: bold;
+}
+
+.msg-peer {
+    color: #e0e0e0;
+    margin-right: 6px;
+}
+
+.msg-type {
+    color: #888;
+    font-size: 11px;
+}
+
+/* ─── Message flow animation ─── */
+.message-flash {
+    pointer-events: none;
+}
+
 /* ─── Task History Panel ─── */
 #history-panel {
     padding: 16px;

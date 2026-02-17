@@ -51,6 +51,10 @@ last_seq: int = 0
 task_history: list[dict] = []
 TASK_HISTORY_MAX = 500
 
+# Message log (in-memory, max 500 entries).
+message_log: list[dict] = []
+MESSAGE_LOG_MAX = 500
+
 
 def record_task(pid: int, name: str, description: str, result: str,
                 success: bool, error: str, duration_ms: int):
@@ -70,6 +74,26 @@ def record_task(pid: int, name: str, description: str, result: str,
     # Trim oldest entries.
     while len(task_history) > TASK_HISTORY_MAX:
         task_history.pop(0)
+
+
+def record_message(from_pid: int, to_pid: int, from_name: str, to_name: str,
+                    msg_type: str, reply_to: str, payload_preview: str):
+    """Record an IPC message event."""
+    import time as _time
+    entry = {
+        "from_pid": from_pid,
+        "to_pid": to_pid,
+        "from_name": from_name,
+        "to_name": to_name,
+        "type": msg_type,
+        "reply_to": reply_to,
+        "payload_preview": payload_preview[:200],
+        "timestamp": int(_time.time() * 1000),
+    }
+    message_log.append(entry)
+    while len(message_log) > MESSAGE_LOG_MAX:
+        message_log.pop(0)
+    return entry
 
 
 def md(pid: int):
@@ -188,6 +212,29 @@ def apply_event(event) -> dict | None:
             "name": name,
             "level": event.level,
             "message": event.message,
+            "ts": event.timestamp_ms,
+        }
+
+    elif event.type == "message_sent":
+        # event.pid = from_pid, event.ppid = to_pid,
+        # event.name = from_name, event.role = to_name, event.message = msg_type
+        from_pid = event.pid
+        to_pid = event.ppid
+        from_name = event.name
+        to_name = event.role
+        msg_type = event.message
+
+        # Record in message log.
+        entry = record_message(from_pid, to_pid, from_name, to_name,
+                               msg_type, "", "")
+
+        return {
+            "action": "message",
+            "from_pid": from_pid,
+            "to_pid": to_pid,
+            "from_name": from_name,
+            "to_name": to_name,
+            "type": msg_type,
             "ts": event.timestamp_ms,
         }
 
@@ -529,10 +576,10 @@ async def api_chat(body: dict):
                     "history": json.dumps(history, ensure_ascii=False),
                     "sibling_pids": json.dumps(sibling_pids),
                 },
-                timeout_seconds=120,
+                timeout_seconds=360,
             ),
             metadata=md(1),
-            timeout=130,
+            timeout=370,
         )
         duration_ms = int((_time.monotonic() - start) * 1000)
         if resp.success:
@@ -620,6 +667,15 @@ async def api_task_history(limit: int = 50, pid: int = 0):
     if pid > 0:
         filtered = [t for t in task_history if t["pid"] == pid]
     # Return most recent first, capped at limit.
+    return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
+
+
+@app.get("/api/messages")
+async def api_messages(pid: int = 0, limit: int = 50):
+    """Return recent IPC messages, optionally filtered by PID (from or to)."""
+    filtered = message_log
+    if pid > 0:
+        filtered = [m for m in message_log if m["from_pid"] == pid or m["to_pid"] == pid]
     return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
 
 

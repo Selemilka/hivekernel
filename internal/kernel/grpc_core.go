@@ -207,6 +207,7 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 		Priority:    int(req.Priority),
 		Payload:     req.Payload,
 		RequiresAck: req.RequiresAck,
+		ReplyTo:     req.ReplyTo,
 	}
 
 	// Route through broker (validates routing rules, computes priority).
@@ -215,6 +216,23 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 	}
 
 	log.Printf("[grpc] SendMessage: PID %d -> PID %d, type=%s", fromPID, req.ToPid, req.Type)
+
+	// Emit message_sent event for dashboard visualization.
+	if el := s.king.EventLog(); el != nil {
+		toName := ""
+		if receiver, err := s.king.Registry().Get(req.ToPid); err == nil {
+			toName = receiver.Name
+		}
+		el.Emit(process.ProcessEvent{
+			Type:    process.EventMessageSent,
+			PID:     fromPID,
+			PPID:    req.ToPid,
+			Name:    sender.Name,
+			Role:    toName,
+			Message: req.Type,
+		})
+	}
+
 	return &pb.SendMessageResponse{Delivered: true, MessageId: msg.ID}, nil
 }
 
@@ -250,13 +268,14 @@ func (s *CoreServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStrea
 		}
 
 		pbMsg := &pb.AgentMessage{
-			MessageId: msg.ID,
-			FromPid:   msg.FromPID,
-			FromName:  msg.FromName,
-			Type:      msg.Type,
-			Priority:  pb.Priority(msg.Priority),
-			Payload:   msg.Payload,
+			MessageId:   msg.ID,
+			FromPid:     msg.FromPID,
+			FromName:    msg.FromName,
+			Type:        msg.Type,
+			Priority:    pb.Priority(msg.Priority),
+			Payload:     msg.Payload,
 			RequiresAck: msg.RequiresAck,
+			ReplyTo:     msg.ReplyTo,
 		}
 
 		if err := stream.Send(pbMsg); err != nil {

@@ -18,6 +18,7 @@ const (
 	EventStateChanged EventType = "state_changed"
 	EventRemoved      EventType = "removed"
 	EventLogged       EventType = "log"
+	EventMessageSent  EventType = "message_sent"
 )
 
 // ProcessEvent represents a single mutation in the process registry.

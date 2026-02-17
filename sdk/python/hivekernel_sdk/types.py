@@ -45,6 +45,7 @@ class Message:
     payload: bytes = b""
     timestamp: int = 0
     requires_ack: bool = False
+    reply_to: str = ""
 
 
 @dataclass

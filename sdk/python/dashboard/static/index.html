@@ -87,6 +87,17 @@
             </div>
         </div>
 
+        <!-- Messages panel -->
+        <div id="messages-panel" style="display:none">
+            <div class="panel-header" onclick="toggleMessagesPanel()">
+                <h2>Messages <span id="messages-count" class="panel-badge"></span></h2>
+                <span id="messages-toggle">-</span>
+            </div>
+            <div id="messages-content">
+                <div id="messages-entries"></div>
+            </div>
+        </div>
+
         <!-- Task History panel -->
         <div id="history-panel" style="display:none">
             <div class="panel-header" onclick="toggleHistoryPanel()">

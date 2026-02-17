@@ -32,6 +32,7 @@ type Message struct {
 	Priority   int
 	Payload    []byte
 	RequiresAck bool
+	ReplyTo    string // correlation ID for request-response patterns
 	TTL        time.Duration // 0 = no expiry
 	EnqueuedAt time.Time
 	ExpiresAt  time.Time // zero value = no expiry

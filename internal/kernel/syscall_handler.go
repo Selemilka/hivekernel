@@ -59,6 +59,8 @@ func (h *KernelSyscallHandler) HandleSyscall(
 		return h.handleExecuteOn(ctx, callID, callerPID, c.ExecuteOn)
 	case *pb.SystemCall_WaitChild:
 		return h.handleWaitChild(ctx, callID, callerPID, c.WaitChild)
+	case *pb.SystemCall_ListSiblings:
+		return h.handleListSiblings(callID, callerPID)
 	default:
 		log.Printf("[syscall] unknown syscall type for call_id=%s", callID)
 		return &pb.SyscallResult{CallId: callID}
@@ -182,6 +184,7 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 		Priority:    int(req.Priority),
 		Payload:     req.Payload,
 		RequiresAck: req.RequiresAck,
+		ReplyTo:     req.ReplyTo,
 	}
 
 	if err := h.king.Broker().Route(msg); err != nil {
@@ -194,6 +197,23 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 	}
 
 	log.Printf("[syscall] send: PID %d -> PID %d, type=%s", callerPID, req.ToPid, req.Type)
+
+	// Emit message_sent event for dashboard visualization.
+	if el := h.king.EventLog(); el != nil {
+		toName := ""
+		if receiver, err := h.king.Registry().Get(req.ToPid); err == nil {
+			toName = receiver.Name
+		}
+		el.Emit(process.ProcessEvent{
+			Type:    process.EventMessageSent,
+			PID:     callerPID,
+			PPID:    req.ToPid,
+			Name:    sender.Name,
+			Role:    toName,
+			Message: req.Type,
+		})
+	}
+
 	return &pb.SyscallResult{
 		CallId: callID,
 		Result: &pb.SyscallResult_Send{
@@ -362,6 +382,41 @@ func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID strin
 				Success: true,
 				Result:  taskResult,
 			},
+		},
+	}
+}
+
+func (h *KernelSyscallHandler) handleListSiblings(callID string, callerPID process.PID) *pb.SyscallResult {
+	caller, err := h.king.Registry().Get(callerPID)
+	if err != nil {
+		return &pb.SyscallResult{
+			CallId: callID,
+			Result: &pb.SyscallResult_ListSiblings{
+				ListSiblings: &pb.ListSiblingsResponse{},
+			},
+		}
+	}
+
+	// Get parent's children (caller's siblings).
+	children := h.king.Registry().GetChildren(caller.PPID)
+	var siblings []*pb.SiblingInfo
+	for _, child := range children {
+		if child.PID == callerPID {
+			continue // exclude self
+		}
+		siblings = append(siblings, &pb.SiblingInfo{
+			Pid:   child.PID,
+			Name:  child.Name,
+			Role:  child.Role.String(),
+			State: child.State.String(),
+		})
+	}
+
+	log.Printf("[syscall] list_siblings: PID %d found %d siblings", callerPID, len(siblings))
+	return &pb.SyscallResult{
+		CallId: callID,
+		Result: &pb.SyscallResult_ListSiblings{
+			ListSiblings: &pb.ListSiblingsResponse{Siblings: siblings},
 		},
 	}
 }

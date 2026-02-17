@@ -11,11 +11,12 @@ import (
 // Broker is the central message router. It validates routing rules,
 // computes priorities, and delivers messages to per-process inboxes.
 type Broker struct {
-	mu       sync.RWMutex
-	registry *process.Registry
-	inboxes  map[process.PID]*PriorityQueue // per-process inbox
-	queues   map[string]*PriorityQueue      // named queues (for Subscribe)
-	aging    float64
+	mu        sync.RWMutex
+	registry  *process.Registry
+	inboxes   map[process.PID]*PriorityQueue // per-process inbox
+	queues    map[string]*PriorityQueue      // named queues (for Subscribe)
+	aging     float64
+	OnMessage func(pid process.PID, msg *Message) // push delivery callback
 }
 
 // NewBroker creates a message broker backed by the given registry.
@@ -91,6 +92,11 @@ func (b *Broker) Route(msg *Message) error {
 		q.Push(msg)
 		log.Printf("[broker] PID %d -> PID %d (route=%s, type=%s, priority=%d)",
 			msg.FromPID, msg.ToPID, route, msg.Type, msg.Priority)
+
+		// Push delivery: notify agent runtime immediately.
+		if b.OnMessage != nil {
+			go b.OnMessage(msg.ToPID, msg)
+		}
 		return nil
 	}
 
@@ -184,6 +190,7 @@ func (b *Broker) deliverToParentCopy(msg *Message) {
 		Priority:    PriorityLow, // parent gets a low-priority copy
 		Payload:     msg.Payload,
 		RequiresAck: false,
+		ReplyTo:     msg.ReplyTo,
 	}
 
 	parentQ := b.GetInbox(sender.PPID)

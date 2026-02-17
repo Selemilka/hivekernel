@@ -102,6 +102,33 @@ class CoreClient:
         )
         return list(resp.children)
 
+    async def execute_task(
+        self,
+        target_pid: int,
+        description: str,
+        params: dict[str, str] | None = None,
+        timeout_seconds: int = 120,
+    ) -> dict:
+        """Execute a task on a target agent. Returns dict with output, exit_code, etc."""
+        resp = await self._stub.ExecuteTask(
+            core_pb2.ExecuteTaskRequest(
+                target_pid=target_pid,
+                description=description,
+                params=params or {},
+                timeout_seconds=timeout_seconds,
+            ),
+            metadata=self._metadata,
+            timeout=timeout_seconds + 10,
+        )
+        if not resp.success:
+            raise RuntimeError(f"execute_task failed: {resp.error}")
+        return {
+            "exit_code": resp.result.exit_code,
+            "output": resp.result.output,
+            "artifacts": dict(resp.result.artifacts),
+            "metadata": dict(resp.result.metadata),
+        }
+
     # --- IPC ---
 
     async def send_message(
@@ -113,6 +140,7 @@ class CoreClient:
         priority: str = "normal",
         requires_ack: bool = False,
         ttl: int = 0,
+        reply_to: str = "",
     ) -> str:
         """Send a message. Returns message_id."""
         resp = await self._stub.SendMessage(
@@ -124,6 +152,7 @@ class CoreClient:
                 payload=payload,
                 requires_ack=requires_ack,
                 ttl_seconds=ttl,
+                reply_to=reply_to,
             ),
             metadata=self._metadata,
         )

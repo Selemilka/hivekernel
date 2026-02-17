@@ -122,6 +122,7 @@ class SyscallContext:
         priority: str = "normal",
         requires_ack: bool = False,
         ttl: int = 0,
+        reply_to: str = "",
     ) -> str:
         """Send a message. Returns message_id."""
         call = agent_pb2.SystemCall(
@@ -134,6 +135,7 @@ class SyscallContext:
                 payload=payload,
                 requires_ack=requires_ack,
                 ttl_seconds=ttl,
+                reply_to=reply_to,
             ),
         )
         result = await self._do_syscall(call)
@@ -141,6 +143,22 @@ class SyscallContext:
         if not resp.delivered:
             raise RuntimeError(f"send failed: {resp.error}")
         return resp.message_id
+
+    async def list_siblings(self) -> list[dict]:
+        """List sibling processes (same parent, excluding self).
+
+        Returns list of dicts with keys: pid, name, role, state.
+        """
+        call = agent_pb2.SystemCall(
+            call_id=str(uuid.uuid4()),
+            list_siblings=agent_pb2.ListSiblingsRequest(),
+        )
+        result = await self._do_syscall(call)
+        resp = result.list_siblings
+        return [
+            {"pid": s.pid, "name": s.name, "role": s.role, "state": s.state}
+            for s in resp.siblings
+        ]
 
     async def store_artifact(
         self,

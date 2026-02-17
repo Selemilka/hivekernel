@@ -184,7 +184,14 @@ class AssistantAgent(LLMAgent):
             logger.warning("list_siblings failed: %s", e)
 
         # Merge discovered siblings with dashboard-provided sibling_pids.
+        # Include self so assistant can schedule cron jobs targeting itself.
         merged_pids = {**sibling_pids, **sibling_map}
+        self_name = self.config.name
+        if self.pid and self_name:
+            merged_pids[self_name] = self.pid
+            short_self = self_name.split("@")[0]
+            if short_self not in merged_pids:
+                merged_pids[short_self] = self.pid
 
         # Build sibling context for LLM.
         sibling_context = ""

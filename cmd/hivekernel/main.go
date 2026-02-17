@@ -167,6 +167,15 @@ func main() {
 		}()
 	}
 
+	// Start supervisor (zombie reaping, restart policies).
+	supervisor := process.NewSupervisor(
+		king.Registry(),
+		king.Signals(),
+		process.NewTreeOps(king.Registry(), king.Signals()),
+		process.DefaultSupervisorConfig(),
+	)
+	go supervisor.Run(ctx)
+
 	// Start health monitor.
 	go healthMon.Run(ctx)
 

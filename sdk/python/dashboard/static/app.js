@@ -6,6 +6,10 @@ let treeData = null;       // raw nodes array from server
 let selectedNode = null;    // currently selected node dict
 let ctxNode = null;         // node for context menu
 
+// Per-PID activity log (from WebSocket events).
+const nodeActivity = {};     // pid -> [{ts, level, message}, ...]
+const NODE_ACTIVITY_MAX = 100;
+
 // Color maps
 const ROLE_COLORS = {
     kernel:    '#e94560',
@@ -67,6 +71,24 @@ function requestRefresh() {
 function applyDelta(delta) {
     if (delta.action === 'log') {
         appendLogEntry(delta);
+        // Store per-PID activity.
+        if (delta.pid) {
+            if (!nodeActivity[delta.pid]) nodeActivity[delta.pid] = [];
+            nodeActivity[delta.pid].push({
+                ts: delta.ts,
+                level: delta.level || 'info',
+                message: delta.message || '',
+                name: delta.name || '',
+            });
+            // Trim.
+            while (nodeActivity[delta.pid].length > NODE_ACTIVITY_MAX) {
+                nodeActivity[delta.pid].shift();
+            }
+            // Live-update activity panel if this PID is selected.
+            if (selectedNode && selectedNode.pid === delta.pid) {
+                renderActivityPanel(delta.pid);
+            }
+        }
         return;
     }
     if (!treeData) return;
@@ -252,6 +274,8 @@ function selectNode(node) {
     document.getElementById('detail-placeholder').style.display = 'none';
     document.getElementById('detail-content').style.display = 'block';
     fillDetail(node);
+    loadTaskHistory(node.pid);
+    renderActivityPanel(node.pid);
 
     // Re-render to update selection highlight
     renderTree();
@@ -348,18 +372,36 @@ async function killSelected() {
     }
 }
 
-// ─── Execute ───
+// ─── Execute (Send Task) ───
 
 function openExecuteModal() {
     if (!selectedNode) return;
     document.getElementById('exec-target-pid').textContent = selectedNode.pid;
+    document.getElementById('exec-target-name').textContent = selectedNode.name || '?';
+    document.getElementById('exec-description').value = '';
+    document.getElementById('exec-params').value = '{}';
+    document.getElementById('exec-progress').style.display = 'none';
+    document.getElementById('exec-result').style.display = 'none';
+    document.getElementById('exec-result').innerHTML = '';
+    document.getElementById('exec-params-section').style.display = 'none';
+    document.getElementById('exec-submit').disabled = false;
     document.getElementById('execute-modal').style.display = 'flex';
+    document.getElementById('exec-description').focus();
+}
+
+function toggleExecParams() {
+    const section = document.getElementById('exec-params-section');
+    section.style.display = section.style.display === 'none' ? 'block' : 'none';
 }
 
 async function doExecute() {
     if (!selectedNode) return;
     const pid = selectedNode.pid;
-    const description = document.getElementById('exec-description').value || 'Dashboard task';
+    const description = document.getElementById('exec-description').value.trim();
+    if (!description) {
+        toast('error', 'Please describe the task');
+        return;
+    }
     let params = {};
     try {
         params = JSON.parse(document.getElementById('exec-params').value || '{}');
@@ -367,10 +409,24 @@ async function doExecute() {
         toast('error', 'Invalid JSON in params');
         return;
     }
-    const timeout = parseInt(document.getElementById('exec-timeout').value) || 60;
+    const timeout = parseInt(document.getElementById('exec-timeout').value) || 120;
 
-    closeModal('execute-modal');
-    toast('success', `Executing task on PID ${pid}...`);
+    // Show progress.
+    document.getElementById('exec-submit').disabled = true;
+    document.getElementById('exec-progress').style.display = 'block';
+    document.getElementById('exec-progress-fill').style.width = '30%';
+    document.getElementById('exec-progress-text').textContent = 'Sending task...';
+    document.getElementById('exec-result').style.display = 'none';
+
+    let progressPct = 30;
+    const progressInterval = setInterval(() => {
+        if (progressPct < 90) {
+            progressPct += Math.random() * 5;
+            document.getElementById('exec-progress-fill').style.width = progressPct + '%';
+        }
+    }, 1500);
+
+    const startTime = Date.now();
 
     try {
         const resp = await fetch(`/api/execute/${pid}`, {
@@ -379,16 +435,37 @@ async function doExecute() {
             body: JSON.stringify({ description, params, timeout }),
         });
         const data = await resp.json();
+        clearInterval(progressInterval);
+        const durationMs = Date.now() - startTime;
+
+        document.getElementById('exec-progress-fill').style.width = '100%';
+
         if (data.ok) {
             const r = data.result;
-            toast('success', `Task done (exit ${r.exit_code}): ${r.output.slice(0, 80)}`);
+            document.getElementById('exec-progress-text').textContent = `Done in ${(durationMs / 1000).toFixed(1)}s`;
+            showTaskResult(r, description);
+            // Show inline result in modal.
+            const resultEl = document.getElementById('exec-result');
+            resultEl.style.display = 'block';
+            const exitClass = r.exit_code === 0 ? 'exec-result-ok' : 'exec-result-err';
+            resultEl.innerHTML = `<div class="${exitClass}">Exit code: ${r.exit_code}</div>`
+                + `<pre class="exec-result-output">${escapeHtml(r.output || '(no output)')}</pre>`;
+            toast('success', 'Task completed!');
             requestRefresh();
         } else {
-            toast('error', `Execute failed: ${data.error}`);
+            document.getElementById('exec-progress-text').textContent = 'Failed';
+            const resultEl = document.getElementById('exec-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `<div class="exec-result-err">${escapeHtml(data.error)}</div>`;
+            toast('error', `Task failed: ${data.error}`);
         }
     } catch (e) {
+        clearInterval(progressInterval);
+        document.getElementById('exec-progress-text').textContent = 'Error';
         toast('error', `Execute error: ${e.message}`);
     }
+
+    document.getElementById('exec-submit').disabled = false;
 }
 
 // ─── Logs ───
@@ -689,6 +766,140 @@ function toast(type, message) {
         el.style.transition = 'opacity 0.3s';
         setTimeout(() => el.remove(), 300);
     }, 3000);
+}
+
+// ─── Activity Log (per-node live events) ───
+
+function renderActivityPanel(pid) {
+    const panel = document.getElementById('activity-panel');
+    const container = document.getElementById('activity-entries');
+    const entries = nodeActivity[pid] || [];
+
+    if (entries.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+    document.getElementById('activity-count').textContent = entries.length;
+    container.innerHTML = '';
+
+    // Show most recent first.
+    const reversed = [...entries].reverse();
+    reversed.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = `activity-line activity-${entry.level}`;
+        const ts = entry.ts ? new Date(entry.ts).toLocaleTimeString() : '';
+        div.innerHTML =
+            `<span class="activity-ts">${ts}</span>`
+            + `<span class="activity-level">[${(entry.level || 'info').toUpperCase()}]</span> `
+            + `<span class="activity-msg">${escapeHtml(entry.message)}</span>`;
+        container.appendChild(div);
+    });
+
+    // Scroll to top (most recent).
+    container.scrollTop = 0;
+}
+
+function toggleActivityPanel() {
+    const content = document.getElementById('activity-content');
+    const toggle = document.getElementById('activity-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'flex';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
+// ─── Task History ───
+
+async function loadTaskHistory(pid) {
+    const panel = document.getElementById('history-panel');
+    const container = document.getElementById('history-entries');
+
+    try {
+        const resp = await fetch(`/api/task-history?pid=${pid}&limit=20`);
+        const data = await resp.json();
+        if (!data.ok || !data.entries.length) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+        container.innerHTML = '';
+        data.entries.forEach(entry => {
+            const div = document.createElement('div');
+            div.className = 'history-entry' + (entry.success ? '' : ' history-error');
+            const ago = timeAgo(entry.timestamp);
+            const duration = entry.duration_ms >= 1000
+                ? (entry.duration_ms / 1000).toFixed(1) + 's'
+                : entry.duration_ms + 'ms';
+            const desc = entry.description.length > 80
+                ? entry.description.slice(0, 80) + '...'
+                : entry.description;
+            const statusDot = entry.success
+                ? '<span class="history-dot history-dot-ok"></span>'
+                : '<span class="history-dot history-dot-err"></span>';
+
+            div.innerHTML =
+                `<div class="history-header">`
+                + `${statusDot}`
+                + `<span class="history-desc">${escapeHtml(desc)}</span>`
+                + `<span class="history-time">${ago}</span>`
+                + `</div>`
+                + `<div class="history-meta">${duration}`
+                + (entry.error ? ` | Error: ${escapeHtml(entry.error.slice(0, 60))}` : '')
+                + `</div>`;
+
+            // Expandable output.
+            if (entry.result) {
+                const toggle = document.createElement('div');
+                toggle.className = 'history-output-toggle';
+                toggle.textContent = 'Show output';
+                const output = document.createElement('pre');
+                output.className = 'history-output';
+                output.style.display = 'none';
+                output.textContent = entry.result.slice(0, 500);
+                toggle.onclick = () => {
+                    if (output.style.display === 'none') {
+                        output.style.display = 'block';
+                        toggle.textContent = 'Hide output';
+                    } else {
+                        output.style.display = 'none';
+                        toggle.textContent = 'Show output';
+                    }
+                };
+                div.appendChild(toggle);
+                div.appendChild(output);
+            }
+
+            container.appendChild(div);
+        });
+    } catch (e) {
+        panel.style.display = 'none';
+    }
+}
+
+function timeAgo(timestampMs) {
+    const diff = Date.now() - timestampMs;
+    if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    return Math.floor(diff / 86400000) + 'd ago';
+}
+
+function toggleHistoryPanel() {
+    const content = document.getElementById('history-content');
+    const toggle = document.getElementById('history-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
 }
 
 // ─── Resize ───

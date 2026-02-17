@@ -312,3 +312,17 @@ func (cs *CronScheduler) Count() int {
 	defer cs.mu.RUnlock()
 	return len(cs.entries)
 }
+
+// NextRunAfter finds the next time after 'after' when the schedule matches.
+// Scans up to 1440 minutes (24 hours) ahead. Returns zero time if not found.
+func NextRunAfter(sched CronSchedule, after time.Time) time.Time {
+	// Start from the next minute boundary.
+	t := after.Truncate(time.Minute).Add(time.Minute)
+	for i := 0; i < 1440; i++ {
+		if sched.Matches(t) {
+			return t
+		}
+		t = t.Add(time.Minute)
+	}
+	return time.Time{}
+}

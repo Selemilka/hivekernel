@@ -191,6 +191,8 @@ message CronEntryProto {
   string execute_description = 6;
   map<string, string> execute_params = 7;
   bool enabled = 8;
+  int64 last_run_ms = 9;
+  int64 next_run_ms = 10;
 }
 
 message AddCronRequest {

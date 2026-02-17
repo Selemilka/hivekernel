@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 	"unicode/utf8"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
@@ -12,6 +13,7 @@ import (
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/resources"
 	"github.com/selemilka/hivekernel/internal/runtime"
+	"github.com/selemilka/hivekernel/internal/scheduler"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -523,8 +525,18 @@ func (s *CoreServer) RemoveCron(ctx context.Context, req *pb.RemoveCronRequest) 
 
 func (s *CoreServer) ListCron(ctx context.Context, req *pb.ListCronRequest) (*pb.ListCronResponse, error) {
 	entries := s.king.Cron().List()
+	now := time.Now()
 	resp := &pb.ListCronResponse{}
 	for _, e := range entries {
+		var lastRunMs int64
+		if !e.LastRun.IsZero() {
+			lastRunMs = e.LastRun.UnixMilli()
+		}
+		nextRun := scheduler.NextRunAfter(e.Schedule, now)
+		var nextRunMs int64
+		if !nextRun.IsZero() {
+			nextRunMs = nextRun.UnixMilli()
+		}
 		resp.Entries = append(resp.Entries, &pb.CronEntryProto{
 			Id:                 e.ID,
 			Name:               e.Name,
@@ -534,6 +546,8 @@ func (s *CoreServer) ListCron(ctx context.Context, req *pb.ListCronRequest) (*pb
 			ExecuteDescription: e.ExecuteDesc,
 			ExecuteParams:      e.ExecuteParams,
 			Enabled:            e.Enabled,
+			LastRunMs:           lastRunMs,
+			NextRunMs:           nextRunMs,
 		})
 	}
 	return resp, nil

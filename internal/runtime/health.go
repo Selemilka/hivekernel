@@ -65,14 +65,22 @@ func (h *HealthMonitor) Run(ctx context.Context) {
 func (h *HealthMonitor) check(ctx context.Context) {
 	runtimes := h.manager.ListRuntimes()
 
+	// Skip virtual runtimes (no gRPC client to ping).
+	var real []*AgentRuntime
+	for _, rt := range runtimes {
+		if rt.Client != nil {
+			real = append(real, rt)
+		}
+	}
+
 	// Ping all agents concurrently.
 	type pingResult struct {
 		pid process.PID
 		ok  bool
 	}
 
-	results := make(chan pingResult, len(runtimes))
-	for _, rt := range runtimes {
+	results := make(chan pingResult, len(real))
+	for _, rt := range real {
 		go func(rt *AgentRuntime) {
 			ok := h.ping(ctx, rt)
 			results <- pingResult{pid: rt.PID, ok: ok}
@@ -80,7 +88,7 @@ func (h *HealthMonitor) check(ctx context.Context) {
 	}
 
 	// Collect results.
-	for range runtimes {
+	for range real {
 		r := <-results
 		h.mu.Lock()
 		if r.ok {

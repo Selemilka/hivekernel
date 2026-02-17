@@ -1223,6 +1223,8 @@ type CronEntryProto struct {
 	ExecuteDescription string                 `protobuf:"bytes,6,opt,name=execute_description,json=executeDescription,proto3" json:"execute_description,omitempty"`
 	ExecuteParams      map[string]string      `protobuf:"bytes,7,rep,name=execute_params,json=executeParams,proto3" json:"execute_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Enabled            bool                   `protobuf:"varint,8,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	LastRunMs          int64                  `protobuf:"varint,9,opt,name=last_run_ms,json=lastRunMs,proto3" json:"last_run_ms,omitempty"`
+	NextRunMs          int64                  `protobuf:"varint,10,opt,name=next_run_ms,json=nextRunMs,proto3" json:"next_run_ms,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1311,6 +1313,20 @@ func (x *CronEntryProto) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *CronEntryProto) GetLastRunMs() int64 {
+	if x != nil {
+		return x.LastRunMs
+	}
+	return 0
+}
+
+func (x *CronEntryProto) GetNextRunMs() int64 {
+	if x != nil {
+		return x.NextRunMs
+	}
+	return 0
 }
 
 type AddCronRequest struct {
@@ -1730,7 +1746,7 @@ const file_core_proto_rawDesc = "" +
 	"\x05level\x18\r \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x0e \x01(\tR\amessage\"5\n" +
 	"\x16SubscribeEventsRequest\x12\x1b\n" +
-	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq\"\xfc\x02\n" +
+	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq\"\xbc\x03\n" +
 	"\x0eCronEntryProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
@@ -1740,7 +1756,10 @@ const file_core_proto_rawDesc = "" +
 	"target_pid\x18\x05 \x01(\x04R\ttargetPid\x12/\n" +
 	"\x13execute_description\x18\x06 \x01(\tR\x12executeDescription\x12Y\n" +
 	"\x0eexecute_params\x18\a \x03(\v22.hivekernel.core.CronEntryProto.ExecuteParamsEntryR\rexecuteParams\x12\x18\n" +
-	"\aenabled\x18\b \x01(\bR\aenabled\x1a@\n" +
+	"\aenabled\x18\b \x01(\bR\aenabled\x12\x1e\n" +
+	"\vlast_run_ms\x18\t \x01(\x03R\tlastRunMs\x12\x1e\n" +
+	"\vnext_run_ms\x18\n" +
+	" \x01(\x03R\tnextRunMs\x1a@\n" +
 	"\x12ExecuteParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x02\n" +

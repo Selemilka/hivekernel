@@ -16,6 +16,7 @@
         <nav class="header-nav">
             <a href="/" class="nav-link active">Tree</a>
             <a href="/chat.html" class="nav-link">Chat</a>
+            <a href="/cron.html" class="nav-link">Cron</a>
         </nav>
     </div>
     <div class="header-right">
@@ -55,9 +56,9 @@
                     <tr><td class="label">Runtime</td><td id="d-runtime"></td></tr>
                 </table>
                 <div id="detail-actions">
-                    <button id="btn-run-task" class="btn-primary" onclick="openRunTaskModal()">Run Task</button>
+                    <button id="btn-execute" class="btn-primary" onclick="openExecuteModal()">Send Task</button>
+                    <button id="btn-run-task" onclick="openRunTaskModal()">Run Task (Queen)</button>
                     <button id="btn-spawn" onclick="openSpawnModal()">Spawn Child</button>
-                    <button id="btn-execute" onclick="openExecuteModal()">Execute</button>
                     <button id="btn-kill" class="btn-danger" onclick="killSelected()">Kill</button>
                 </div>
             </div>
@@ -72,6 +73,28 @@
             <div id="result-content">
                 <div id="result-status"></div>
                 <div id="result-output"></div>
+            </div>
+        </div>
+
+        <!-- Activity Log panel (per-node live events) -->
+        <div id="activity-panel" style="display:none">
+            <div class="panel-header" onclick="toggleActivityPanel()">
+                <h2>Activity Log <span id="activity-count" class="panel-badge"></span></h2>
+                <span id="activity-toggle">-</span>
+            </div>
+            <div id="activity-content">
+                <div id="activity-entries"></div>
+            </div>
+        </div>
+
+        <!-- Task History panel -->
+        <div id="history-panel" style="display:none">
+            <div class="panel-header" onclick="toggleHistoryPanel()">
+                <h2>Task History</h2>
+                <span id="history-toggle">-</span>
+            </div>
+            <div id="history-content">
+                <div id="history-entries"></div>
             </div>
         </div>
 
@@ -159,24 +182,39 @@
     </div>
 </div>
 
-<!-- Execute Modal -->
+<!-- Send Task Modal -->
 <div id="execute-modal" class="modal" style="display:none">
-    <div class="modal-content">
-        <h2>Execute Task on PID <span id="exec-target-pid"></span></h2>
+    <div class="modal-content modal-wide">
+        <h2>Send Task to <span id="exec-target-name"></span> <span style="color:#888;font-size:13px">(PID <span id="exec-target-pid"></span>)</span></h2>
         <div class="form-group">
-            <label>Description</label>
-            <input type="text" id="exec-description" placeholder="Task description">
+            <label>What do you want this agent to do?</label>
+            <textarea id="exec-description" rows="4" placeholder="Describe the task..."></textarea>
         </div>
-        <div class="form-group">
-            <label>Params (JSON)</label>
-            <textarea id="exec-params" rows="3" placeholder='{"key": "value"}'>{}</textarea>
+        <div class="form-row">
+            <div class="form-group" style="flex:1">
+                <label>Timeout (seconds)</label>
+                <input type="number" id="exec-timeout" value="120">
+            </div>
+            <div class="form-group" style="flex:1">
+                <label>&nbsp;</label>
+                <button class="btn-secondary" style="width:100%" onclick="toggleExecParams()">Advanced params...</button>
+            </div>
         </div>
-        <div class="form-group">
-            <label>Timeout (seconds)</label>
-            <input type="number" id="exec-timeout" value="60">
+        <div id="exec-params-section" style="display:none">
+            <div class="form-group">
+                <label>Params (JSON)</label>
+                <textarea id="exec-params" rows="3" placeholder='{"key": "value"}'>{}</textarea>
+            </div>
         </div>
+        <div id="exec-progress" style="display:none">
+            <div class="progress-bar">
+                <div id="exec-progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="exec-progress-text">Sending task...</div>
+        </div>
+        <div id="exec-result" style="display:none"></div>
         <div class="modal-actions">
-            <button onclick="doExecute()">Execute</button>
+            <button id="exec-submit" class="btn-primary" onclick="doExecute()">Send</button>
             <button class="btn-secondary" onclick="closeModal('execute-modal')">Cancel</button>
         </div>
     </div>
@@ -230,9 +268,9 @@
 <!-- Context menu -->
 <div id="context-menu" style="display:none">
     <div class="ctx-item" onclick="ctxViewDetails()">View Details</div>
-    <div class="ctx-item ctx-primary" onclick="ctxRunTask()">Run Task</div>
+    <div class="ctx-item ctx-primary" onclick="ctxExecuteTask()">Send Task</div>
+    <div class="ctx-item" onclick="ctxRunTask()">Run Task (Queen)</div>
     <div class="ctx-item" onclick="ctxSpawnChild()">Spawn Child</div>
-    <div class="ctx-item" onclick="ctxExecuteTask()">Execute Raw</div>
     <div class="ctx-separator"></div>
     <div class="ctx-item ctx-danger" onclick="ctxKill()">Kill Process</div>
 </div>

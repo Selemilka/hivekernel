@@ -47,6 +47,30 @@ ws_clients: set[WebSocket] = set()
 tree_cache: dict[int, dict] = {}   # pid -> node dict
 last_seq: int = 0
 
+# Task history (in-memory, max 500 entries).
+task_history: list[dict] = []
+TASK_HISTORY_MAX = 500
+
+
+def record_task(pid: int, name: str, description: str, result: str,
+                success: bool, error: str, duration_ms: int):
+    """Record a completed task in the history."""
+    import time as _time
+    entry = {
+        "pid": pid,
+        "name": name,
+        "description": description,
+        "result": result,
+        "success": success,
+        "error": error,
+        "duration_ms": duration_ms,
+        "timestamp": int(_time.time() * 1000),
+    }
+    task_history.append(entry)
+    # Trim oldest entries.
+    while len(task_history) > TASK_HISTORY_MAX:
+        task_history.pop(0)
+
 
 def md(pid: int):
     """Build gRPC metadata for the given caller PID."""
@@ -357,9 +381,12 @@ async def api_kill(pid: int):
 
 @app.post("/api/execute/{pid}")
 async def api_execute(pid: int, body: dict):
+    import time as _time
     description = body.get("description", "Dashboard task")
     params = body.get("params", {})
     timeout = body.get("timeout", 60)
+    node_name = tree_cache.get(pid, {}).get("name", "")
+    start = _time.monotonic()
 
     try:
         resp = await stub.ExecuteTask(
@@ -372,6 +399,7 @@ async def api_execute(pid: int, body: dict):
             metadata=md(1),
             timeout=timeout + 10,
         )
+        duration_ms = int((_time.monotonic() - start) * 1000)
         if resp.success:
             result = {
                 "exit_code": resp.result.exit_code,
@@ -379,15 +407,21 @@ async def api_execute(pid: int, body: dict):
                 "artifacts": dict(resp.result.artifacts),
                 "metadata": dict(resp.result.metadata),
             }
+            record_task(pid, node_name, description, resp.result.output,
+                        True, "", duration_ms)
             return {"ok": True, "result": result}
+        record_task(pid, node_name, description, "", False, resp.error, duration_ms)
         return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
     except grpc.aio.AioRpcError as e:
+        duration_ms = int((_time.monotonic() - start) * 1000)
+        record_task(pid, node_name, description, "", False, e.details(), duration_ms)
         return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
 
 
 @app.post("/api/run-task")
 async def api_run_task(body: dict):
     """Delegate a task to Queen (the local coordinator daemon)."""
+    import time as _time
     task_text = body.get("task", "")
     max_workers = str(body.get("max_workers", 3))
     timeout = body.get("timeout", 300)
@@ -400,7 +434,10 @@ async def api_run_task(body: dict):
     if queen_pid is None:
         return JSONResponse({"ok": False, "error": "Queen not found in process tree"}, status_code=503)
 
-    # Execute task on Queen — she decides the strategy (simple vs complex).
+    queen_name = tree_cache.get(queen_pid, {}).get("name", "queen")
+    start = _time.monotonic()
+
+    # Execute task on Queen -- she decides the strategy (simple vs complex).
     try:
         exec_resp = await stub.ExecuteTask(
             core_pb2.ExecuteTaskRequest(
@@ -412,6 +449,7 @@ async def api_run_task(body: dict):
             metadata=md(1),
             timeout=timeout + 30,
         )
+        duration_ms = int((_time.monotonic() - start) * 1000)
         if exec_resp.success:
             result = {
                 "exit_code": exec_resp.result.exit_code,
@@ -419,12 +457,19 @@ async def api_run_task(body: dict):
                 "artifacts": dict(exec_resp.result.artifacts),
                 "metadata": dict(exec_resp.result.metadata),
             }
+            record_task(queen_pid, queen_name, task_text,
+                        exec_resp.result.output, True, "", duration_ms)
             return {"ok": True, "queen_pid": queen_pid, "result": result}
+        record_task(queen_pid, queen_name, task_text, "",
+                    False, exec_resp.error, duration_ms)
         return JSONResponse(
             {"ok": False, "error": exec_resp.error, "queen_pid": queen_pid},
             status_code=400,
         )
     except grpc.aio.AioRpcError as e:
+        duration_ms = int((_time.monotonic() - start) * 1000)
+        record_task(queen_pid, queen_name, task_text, "",
+                    False, e.details(), duration_ms)
         return JSONResponse(
             {"ok": False, "error": f"Execute error: {e.details()}", "queen_pid": queen_pid},
             status_code=500,
@@ -460,6 +505,7 @@ def _get_sibling_pids() -> dict[str, int]:
 @app.post("/api/chat")
 async def api_chat(body: dict):
     """Send a message to the Assistant agent, return response."""
+    import time as _time
     message = body.get("message", "")
     history = body.get("history", [])
 
@@ -471,6 +517,7 @@ async def api_chat(body: dict):
         return JSONResponse({"ok": False, "error": "Assistant agent not found"}, status_code=503)
 
     sibling_pids = _get_sibling_pids()
+    start = _time.monotonic()
 
     try:
         resp = await stub.ExecuteTask(
@@ -487,14 +534,22 @@ async def api_chat(body: dict):
             metadata=md(1),
             timeout=130,
         )
+        duration_ms = int((_time.monotonic() - start) * 1000)
         if resp.success:
+            record_task(assistant_pid, "assistant", message,
+                        resp.result.output, True, "", duration_ms)
             return {
                 "ok": True,
                 "response": resp.result.output,
                 "exit_code": resp.result.exit_code,
             }
+        record_task(assistant_pid, "assistant", message, "",
+                    False, resp.error, duration_ms)
         return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
     except grpc.aio.AioRpcError as e:
+        duration_ms = int((_time.monotonic() - start) * 1000)
+        record_task(assistant_pid, "assistant", message, "",
+                    False, e.details(), duration_ms)
         return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
 
 
@@ -513,6 +568,8 @@ async def api_cron_list():
                 "target_pid": e.target_pid,
                 "execute_description": e.execute_description,
                 "enabled": e.enabled,
+                "last_run_ms": e.last_run_ms,
+                "next_run_ms": e.next_run_ms,
             })
         return {"ok": True, "entries": entries}
     except grpc.aio.AioRpcError as e:
@@ -554,6 +611,16 @@ async def api_cron_remove(cron_id: str):
         return {"ok": True}
     except grpc.aio.AioRpcError as e:
         return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
+@app.get("/api/task-history")
+async def api_task_history(limit: int = 50, pid: int = 0):
+    """Return recent task history, optionally filtered by PID."""
+    filtered = task_history
+    if pid > 0:
+        filtered = [t for t in task_history if t["pid"] == pid]
+    # Return most recent first, capped at limit.
+    return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
 
 
 @app.get("/api/artifacts")
@@ -617,6 +684,10 @@ async def redirect_chat():
 @app.get("/tree")
 async def redirect_tree():
     return RedirectResponse("/index.html")
+
+@app.get("/cron")
+async def redirect_cron():
+    return RedirectResponse("/cron.html")
 
 
 # ─── Static files (must be last) ───

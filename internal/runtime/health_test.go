@@ -121,7 +121,7 @@ func TestHealthMonitor_UnreachableAgent(t *testing.T) {
 }
 
 func TestHealthMonitor_NilClient(t *testing.T) {
-	// Runtime with nil Client (virtual process) — should fail ping.
+	// Runtime with nil Client (virtual process) — should be skipped, not marked unhealthy.
 	mgr := makeManager(map[process.PID]*AgentRuntime{
 		30: {PID: 30, Client: nil},
 	})
@@ -138,8 +138,8 @@ func TestHealthMonitor_NilClient(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	cancel()
 
-	if unhealthyCalled.Load() == 0 {
-		t.Error("expected unhealthy callback for nil-client runtime")
+	if unhealthyCalled.Load() != 0 {
+		t.Errorf("expected 0 unhealthy calls for virtual process, got %d", unhealthyCalled.Load())
 	}
 }
 

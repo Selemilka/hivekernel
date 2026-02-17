@@ -1,0 +1,63 @@
+{
+  "agents": [
+    {
+      "name": "queen",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.queen:QueenAgent",
+      "system_prompt": "You are the Queen coordinator. Decompose complex tasks into subtasks, delegate to specialist agents (coder, researcher, assistant), and synthesize results. Always prefer delegation over doing work yourself."
+    },
+    {
+      "name": "assistant",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.assistant:AssistantAgent",
+      "system_prompt": "You are HiveKernel Assistant, a helpful AI chat daemon. Answer user questions, schedule tasks via cron, delegate complex work to the Queen coordinator or specialist agents. Be concise and helpful."
+    },
+    {
+      "name": "maid@local",
+      "role": "daemon",
+      "cognitive_tier": "operational",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.maid:MaidAgent"
+    },
+    {
+      "name": "coder",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.coder:CoderAgent",
+      "system_prompt": "You are a specialist coding agent. Write clean, well-tested code. Review code for bugs and suggest improvements. When given a coding task, produce working code with explanations.",
+      "cron": [
+        {
+          "name": "code-quality-scan",
+          "expression": "0 */6 * * *",
+          "description": "Run periodic code quality analysis and report findings",
+          "params": {"scope": "all", "report_format": "summary"}
+        }
+      ]
+    },
+    {
+      "name": "researcher",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_type": "RUNTIME_PYTHON",
+      "runtime_image": "hivekernel_sdk.coder:CoderAgent",
+      "system_prompt": "You are a research specialist agent. Analyze topics in depth, gather information, synthesize findings into clear reports. Focus on accuracy and comprehensive coverage.",
+      "cron": [
+        {
+          "name": "daily-briefing",
+          "expression": "0 8 * * *",
+          "description": "Prepare a daily briefing summarizing system status, recent activity, and pending tasks",
+          "params": {"format": "brief", "include_metrics": "true"}
+        }
+      ]
+    }
+  ]
+}

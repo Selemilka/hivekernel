@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveKernel - Cron Jobs</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header id="header">
+    <div class="header-left">
+        <h1>HiveKernel</h1>
+        <nav class="header-nav">
+            <a href="/" class="nav-link">Tree</a>
+            <a href="/chat.html" class="nav-link">Chat</a>
+            <a href="/cron.html" class="nav-link active">Cron</a>
+        </nav>
+    </div>
+    <div class="header-right">
+        <button onclick="loadCronEntries()">Refresh</button>
+        <button class="btn-primary" onclick="openAddCronModal()">+ Add Cron Job</button>
+    </div>
+</header>
+
+<!-- Main content -->
+<div id="cron-main">
+    <div id="cron-content">
+        <div id="cron-header-bar">
+            <h2>Scheduled Jobs</h2>
+            <span id="cron-count"></span>
+        </div>
+
+        <table id="cron-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Schedule</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Last Run</th>
+                    <th>Next Run</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="cron-body">
+                <tr><td colspan="9" class="cron-empty">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Cron Modal -->
+<div id="add-cron-modal" class="modal" style="display:none">
+    <div class="modal-content modal-wide">
+        <h2>Add Cron Job</h2>
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="cron-name" placeholder="my-periodic-task">
+        </div>
+        <div class="form-group">
+            <label>Cron Expression <span style="color:#666;font-size:11px">(min hour dom mon dow)</span></label>
+            <input type="text" id="cron-expression" placeholder="*/30 * * * *">
+            <div id="cron-explain" style="font-size:11px;color:#888;margin-top:4px"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex:1">
+                <label>Action</label>
+                <select id="cron-action">
+                    <option value="execute" selected>Execute task</option>
+                    <option value="wake">Wake process</option>
+                    <option value="spawn">Spawn process</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex:1">
+                <label>Target PID</label>
+                <select id="cron-target"></select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Task Description</label>
+            <textarea id="cron-desc" rows="3" placeholder="What should this agent do when triggered?"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-primary" onclick="doAddCron()">Add</button>
+            <button class="btn-secondary" onclick="closeModal('add-cron-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="cron.js"></script>
+</body>
+</html>

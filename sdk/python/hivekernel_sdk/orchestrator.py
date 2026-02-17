@@ -31,6 +31,7 @@ class OrchestratorAgent(LLMAgent):
         description = task.params.get("task", task.description)
         max_workers = int(task.params.get("max_workers", "3"))
         max_workers = min(max_workers, MAX_WORKERS)
+        trace_id = task.params.get("trace_id", "")
 
         await ctx.log("info", f"Orchestrator starting: {description[:80]}")
         await ctx.report_progress("Analyzing task...", 5.0)
@@ -91,10 +92,13 @@ class OrchestratorAgent(LLMAgent):
             results = []
             for subtask in group["subtasks"]:
                 try:
+                    sub_params = {"subtask": subtask}
+                    if trace_id:
+                        sub_params["trace_id"] = trace_id
                     wr = await ctx.execute_on(
                         pid=wpid,
                         description=subtask,
-                        params={"subtask": subtask},
+                        params=sub_params,
                     )
                     results.append({
                         "subtask": subtask,

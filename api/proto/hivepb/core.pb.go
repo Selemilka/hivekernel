@@ -1039,6 +1039,8 @@ type ProcessEvent struct {
 	Message        string                 `protobuf:"bytes,14,opt,name=message,proto3" json:"message,omitempty"`
 	ReplyTo        string                 `protobuf:"bytes,15,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
 	PayloadPreview string                 `protobuf:"bytes,16,opt,name=payload_preview,json=payloadPreview,proto3" json:"payload_preview,omitempty"`
+	TraceId        string                 `protobuf:"bytes,17,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	TraceSpan      string                 `protobuf:"bytes,18,opt,name=trace_span,json=traceSpan,proto3" json:"trace_span,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1181,6 +1183,20 @@ func (x *ProcessEvent) GetReplyTo() string {
 func (x *ProcessEvent) GetPayloadPreview() string {
 	if x != nil {
 		return x.PayloadPreview
+	}
+	return ""
+}
+
+func (x *ProcessEvent) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *ProcessEvent) GetTraceSpan() string {
+	if x != nil {
+		return x.TraceSpan
 	}
 	return ""
 }
@@ -1744,7 +1760,7 @@ const file_core_proto_rawDesc = "" +
 	"\x13ExecuteTaskResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x124\n" +
 	"\x06result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\x06result\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x93\x03\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xcd\x03\n" +
 	"\fProcessEvent\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12\x12\n" +
@@ -1762,7 +1778,10 @@ const file_core_proto_rawDesc = "" +
 	"\x05level\x18\r \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x0e \x01(\tR\amessage\x12\x19\n" +
 	"\breply_to\x18\x0f \x01(\tR\areplyTo\x12'\n" +
-	"\x0fpayload_preview\x18\x10 \x01(\tR\x0epayloadPreview\"5\n" +
+	"\x0fpayload_preview\x18\x10 \x01(\tR\x0epayloadPreview\x12\x19\n" +
+	"\btrace_id\x18\x11 \x01(\tR\atraceId\x12\x1d\n" +
+	"\n" +
+	"trace_span\x18\x12 \x01(\tR\ttraceSpan\"5\n" +
 	"\x16SubscribeEventsRequest\x12\x1b\n" +
 	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq\"\xbc\x03\n" +
 	"\x0eCronEntryProto\x12\x0e\n" +

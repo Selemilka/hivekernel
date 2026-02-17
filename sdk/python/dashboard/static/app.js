@@ -1084,6 +1084,120 @@ function toggleHistoryPanel() {
     }
 }
 
+// ─── Traces Panel ───
+
+async function loadTraces() {
+    try {
+        const resp = await fetch('/api/traces');
+        const data = await resp.json();
+        if (!data.ok) return;
+        renderTracesList(data.traces);
+    } catch (e) {
+        console.error('loadTraces failed:', e);
+    }
+}
+
+function renderTracesList(traces) {
+    const container = document.getElementById('traces-list');
+    const badge = document.getElementById('traces-count');
+    badge.textContent = traces.length || '';
+    container.innerHTML = '';
+
+    if (traces.length === 0) {
+        container.innerHTML = '<div style="color:#666;font-size:12px">No traces yet</div>';
+        return;
+    }
+
+    traces.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'trace-entry';
+        div.onclick = () => loadTraceDetail(t.trace_id);
+        const ts = new Date(t.first_ts).toLocaleTimeString();
+        const pid = t.initiator_pid;
+        const name = (treeData || []).find(n => n.pid === pid);
+        const pidLabel = name ? `${name.name} (PID ${pid})` : `PID ${pid}`;
+        div.innerHTML =
+            `<span class="trace-id">${escapeHtml(t.trace_id)}</span>`
+            + `<span class="trace-meta">${t.event_count} events | ${escapeHtml(pidLabel)} | ${ts}</span>`;
+        container.appendChild(div);
+    });
+}
+
+async function loadTraceDetail(traceId) {
+    try {
+        const resp = await fetch(`/api/traces/${traceId}`);
+        const data = await resp.json();
+        if (!data.ok) return;
+
+        document.getElementById('traces-list').style.display = 'none';
+        const detail = document.getElementById('trace-detail');
+        detail.style.display = 'block';
+        document.getElementById('trace-detail-title').textContent = traceId;
+
+        const container = document.getElementById('trace-detail-events');
+        container.innerHTML = '';
+
+        const firstTs = data.events.length > 0 ? data.events[0].timestamp_ms : 0;
+
+        data.events.forEach(evt => {
+            const div = document.createElement('div');
+            const offsetMs = evt.timestamp_ms - firstTs;
+            const ts = new Date(evt.timestamp_ms).toLocaleTimeString();
+            const pidName = evt.name || `PID ${evt.pid}`;
+
+            let desc = '';
+            let cls = 'trace-evt-' + evt.type.replace('_', '-');
+            if (evt.type === 'message_sent') {
+                const toPid = evt.ppid;
+                const toName = (treeData || []).find(n => n.pid === toPid);
+                const toLabel = toName ? toName.name : `PID ${toPid}`;
+                desc = `${escapeHtml(pidName)} -> ${escapeHtml(toLabel)} [${escapeHtml(evt.message_type || '')}]`;
+            } else if (evt.type === 'spawned') {
+                desc = `Spawned ${escapeHtml(pidName)} (PID ${evt.pid})`;
+            } else if (evt.type === 'state_changed') {
+                desc = `PID ${evt.pid} ${escapeHtml(evt.old_state || '?')} -> ${escapeHtml(evt.new_state || '?')}`;
+            } else if (evt.type === 'log') {
+                desc = `[${escapeHtml(evt.level || 'info')}] ${escapeHtml(pidName)}: ${escapeHtml((evt.message || '').substring(0, 120))}`;
+            } else if (evt.type === 'removed') {
+                desc = `PID ${evt.pid} removed`;
+            } else {
+                desc = `${evt.type} PID ${evt.pid}`;
+            }
+
+            div.className = `trace-event ${cls}`;
+            div.innerHTML =
+                `<span class="trace-offset">+${offsetMs}ms</span>`
+                + `<span class="trace-ts">${ts}</span>`
+                + `<span class="trace-type">${escapeHtml(evt.type)}</span>`
+                + `<span class="trace-desc">${desc}</span>`;
+            if (evt.trace_span) {
+                div.innerHTML += `<span class="trace-span">${escapeHtml(evt.trace_span)}</span>`;
+            }
+            container.appendChild(div);
+        });
+    } catch (e) {
+        console.error('loadTraceDetail failed:', e);
+    }
+}
+
+function closeTraceDetail() {
+    document.getElementById('trace-detail').style.display = 'none';
+    document.getElementById('traces-list').style.display = 'block';
+}
+
+function toggleTracesPanel() {
+    const content = document.getElementById('traces-content');
+    const toggle = document.getElementById('traces-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '-';
+        loadTraces();
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
 // ─── Resize ───
 
 window.addEventListener('resize', () => {

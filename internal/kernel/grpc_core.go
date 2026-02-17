@@ -217,6 +217,12 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 
 	log.Printf("[grpc] SendMessage: PID %d -> PID %d, type=%s", fromPID, req.ToPid, req.Type)
 
+	// Extract trace context from payload and propagate to receiver.
+	traceID, traceSpan := extractTraceFromPayload(req.Payload)
+	if traceID != "" {
+		s.king.SetTrace(req.ToPid, traceID, traceSpan)
+	}
+
 	// Emit message_sent event for dashboard visualization.
 	if el := s.king.EventLog(); el != nil {
 		toName := ""
@@ -232,6 +238,8 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 			Message:        req.Type,
 			ReplyTo:        req.ReplyTo,
 			PayloadPreview: truncatePayload(string(req.Payload), 2000),
+			TraceID:        traceID,
+			TraceSpan:      traceSpan,
 		})
 	}
 
@@ -504,6 +512,13 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 		return &pb.ExecuteTaskResponse{Success: false, Error: fmt.Sprintf("no runtime for PID %d", req.TargetPid)}, nil
 	}
 
+	// Extract trace context from params and propagate to target.
+	if req.Params != nil {
+		if tID, tSpan := extractTraceFromParams(req.Params); tID != "" {
+			s.king.SetTrace(req.TargetPid, tID, tSpan)
+		}
+	}
+
 	// Safely truncate description for task ID (preserve valid UTF-8).
 	descForID := req.Description
 	if utf8.RuneCountInString(descForID) > 20 {
@@ -609,6 +624,8 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				Message:        evt.Message,
 				ReplyTo:        evt.ReplyTo,
 				PayloadPreview: evt.PayloadPreview,
+				TraceId:        evt.TraceID,
+				TraceSpan:      evt.TraceSpan,
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err

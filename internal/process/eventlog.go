@@ -39,7 +39,12 @@ type ProcessEvent struct {
 	Message        string    `json:"message,omitempty"`
 	ReplyTo        string    `json:"reply_to,omitempty"`
 	PayloadPreview string    `json:"payload_preview,omitempty"`
+	TraceID        string    `json:"trace_id,omitempty"`
+	TraceSpan      string    `json:"trace_span,omitempty"`
 }
+
+// TraceLookupFunc returns trace context for a given PID.
+type TraceLookupFunc func(pid PID) (traceID, traceSpan string)
 
 // EventLog is a sequenced, append-only log of process events.
 // It supports in-memory ring buffer, optional disk persistence (JSONL),
@@ -54,6 +59,8 @@ type EventLog struct {
 
 	logFile *os.File
 	writer  *bufio.Writer
+
+	traceLookup TraceLookupFunc
 }
 
 // NewEventLog creates an EventLog with the given ring buffer capacity.
@@ -76,12 +83,25 @@ func NewEventLog(maxSize int, logPath string) (*EventLog, error) {
 	return el, nil
 }
 
+// SetTraceLookup registers a function that auto-annotates events with
+// trace context. Called once during kernel init.
+func (el *EventLog) SetTraceLookup(fn TraceLookupFunc) {
+	el.mu.Lock()
+	defer el.mu.Unlock()
+	el.traceLookup = fn
+}
+
 // Emit assigns a sequence number and timestamp to the event, appends it
 // to the ring buffer, writes to disk (if configured), and fans out to
 // all live subscribers.
 func (el *EventLog) Emit(evt ProcessEvent) {
 	evt.Seq = el.seq.Add(1)
 	evt.Timestamp = time.Now()
+
+	// Auto-annotate with trace context if not already set.
+	if evt.TraceID == "" && el.traceLookup != nil {
+		evt.TraceID, evt.TraceSpan = el.traceLookup(evt.PID)
+	}
 
 	el.mu.Lock()
 

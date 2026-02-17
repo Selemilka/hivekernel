@@ -55,6 +55,10 @@ TASK_HISTORY_MAX = 500
 message_log: list[dict] = []
 MESSAGE_LOG_MAX = 500
 
+# Trace log (in-memory, trace_id -> list of events).
+trace_log: dict[str, list[dict]] = {}
+MAX_TRACES = 100
+
 
 def record_task(pid: int, name: str, description: str, result: str,
                 success: bool, error: str, duration_ms: int):
@@ -77,7 +81,8 @@ def record_task(pid: int, name: str, description: str, result: str,
 
 
 def record_message(from_pid: int, to_pid: int, from_name: str, to_name: str,
-                    msg_type: str, reply_to: str, payload_preview: str):
+                    msg_type: str, reply_to: str, payload_preview: str,
+                    trace_id: str = "", trace_span: str = ""):
     """Record an IPC message event."""
     import time as _time
     entry = {
@@ -89,6 +94,8 @@ def record_message(from_pid: int, to_pid: int, from_name: str, to_name: str,
         "reply_to": reply_to,
         "payload_preview": payload_preview[:2000],
         "timestamp": int(_time.time() * 1000),
+        "trace_id": trace_id,
+        "trace_span": trace_span,
     }
     message_log.append(entry)
     while len(message_log) > MESSAGE_LOG_MAX:
@@ -160,6 +167,38 @@ def apply_event(event) -> dict | None:
     global last_seq
     last_seq = event.seq
 
+    # Record event in trace_log if it has a trace_id.
+    evt_trace_id = getattr(event, "trace_id", "") or ""
+    evt_trace_span = getattr(event, "trace_span", "") or ""
+    if evt_trace_id:
+        import time as _time
+        trace_entry = {
+            "seq": event.seq,
+            "timestamp_ms": event.timestamp_ms,
+            "type": event.type,
+            "pid": event.pid,
+            "ppid": event.ppid,
+            "name": event.name,
+            "trace_id": evt_trace_id,
+            "trace_span": evt_trace_span,
+        }
+        if event.type == "message_sent":
+            trace_entry["message_type"] = event.message
+            trace_entry["reply_to"] = getattr(event, "reply_to", "")
+        elif event.type == "state_changed":
+            trace_entry["old_state"] = event.old_state
+            trace_entry["new_state"] = event.new_state
+        elif event.type == "log":
+            trace_entry["level"] = event.level
+            trace_entry["message"] = event.message
+        if evt_trace_id not in trace_log:
+            # Evict oldest trace if at capacity.
+            if len(trace_log) >= MAX_TRACES:
+                oldest_key = next(iter(trace_log))
+                del trace_log[oldest_key]
+            trace_log[evt_trace_id] = []
+        trace_log[evt_trace_id].append(trace_entry)
+
     if event.type == "spawned":
         node = {
             "pid": event.pid,
@@ -228,7 +267,8 @@ def apply_event(event) -> dict | None:
 
         # Record in message log.
         entry = record_message(from_pid, to_pid, from_name, to_name,
-                               msg_type, reply_to, payload_preview)
+                               msg_type, reply_to, payload_preview,
+                               trace_id=evt_trace_id, trace_span=evt_trace_span)
 
         # Record task_response as a delegation result in task_history.
         if msg_type == "task_response" and payload_preview:
@@ -267,6 +307,8 @@ def apply_event(event) -> dict | None:
             "reply_to": reply_to,
             "payload_preview": payload_preview,
             "ts": event.timestamp_ms,
+            "trace_id": evt_trace_id,
+            "trace_span": evt_trace_span,
         }
 
     return None
@@ -708,6 +750,38 @@ async def api_messages(pid: int = 0, limit: int = 50):
     if pid > 0:
         filtered = [m for m in message_log if m["from_pid"] == pid or m["to_pid"] == pid]
     return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
+
+
+@app.get("/api/traces")
+async def api_traces():
+    """List recent traces with summary info."""
+    summaries = []
+    for tid, events in trace_log.items():
+        if not events:
+            continue
+        first_ts = events[0].get("timestamp_ms", 0)
+        last_ts = events[-1].get("timestamp_ms", 0)
+        initiator_pid = events[0].get("pid", 0)
+        summaries.append({
+            "trace_id": tid,
+            "event_count": len(events),
+            "first_ts": first_ts,
+            "last_ts": last_ts,
+            "initiator_pid": initiator_pid,
+        })
+    # Most recent first.
+    summaries.sort(key=lambda s: s["last_ts"], reverse=True)
+    return {"ok": True, "traces": summaries}
+
+
+@app.get("/api/traces/{trace_id}")
+async def api_trace_detail(trace_id: str):
+    """Get all events for a specific trace, sorted by timestamp."""
+    events = trace_log.get(trace_id)
+    if events is None:
+        return JSONResponse({"ok": False, "error": "trace not found"}, status_code=404)
+    sorted_events = sorted(events, key=lambda e: e.get("timestamp_ms", 0))
+    return {"ok": True, "trace_id": trace_id, "events": sorted_events}
 
 
 @app.get("/api/artifacts")

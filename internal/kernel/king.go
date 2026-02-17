@@ -60,6 +60,10 @@ type King struct {
 	// Event sourcing
 	eventLog *process.EventLog
 
+	// Distributed tracing
+	traceMu    sync.RWMutex
+	traceStore map[process.PID]*traceCtx
+
 	// Task execution (set after creation via SetExecutor).
 	executor *runtime.Executor
 
@@ -67,6 +71,12 @@ type King struct {
 
 	mu     sync.RWMutex
 	cancel context.CancelFunc
+}
+
+// traceCtx holds trace context for a single process.
+type traceCtx struct {
+	TraceID   string
+	TraceSpan string
 }
 
 // New creates a new King instance and bootstraps PID 1.
@@ -123,7 +133,13 @@ func New(cfg Config) (*King, error) {
 		signals:     signals,
 		proc:        kernelProc,
 		eventLog:    eventLog,
+		traceStore:  make(map[process.PID]*traceCtx),
 	}
+
+	// Wire trace lookup to EventLog for auto-annotation.
+	eventLog.SetTraceLookup(func(pid process.PID) (string, string) {
+		return k.GetTrace(pid)
+	})
 
 	// Register this node in the cluster registry.
 	nodes.Register(&cluster.NodeInfo{
@@ -302,6 +318,30 @@ func (k *King) Stop() {
 	}
 }
 
+// SetTrace stores trace context for a process.
+func (k *King) SetTrace(pid process.PID, traceID, traceSpan string) {
+	k.traceMu.Lock()
+	defer k.traceMu.Unlock()
+	k.traceStore[pid] = &traceCtx{TraceID: traceID, TraceSpan: traceSpan}
+}
+
+// GetTrace returns trace context for a process.
+func (k *King) GetTrace(pid process.PID) (traceID, traceSpan string) {
+	k.traceMu.RLock()
+	defer k.traceMu.RUnlock()
+	if tc := k.traceStore[pid]; tc != nil {
+		return tc.TraceID, tc.TraceSpan
+	}
+	return "", ""
+}
+
+// ClearTrace removes trace context for a process.
+func (k *King) ClearTrace(pid process.PID) {
+	k.traceMu.Lock()
+	defer k.traceMu.Unlock()
+	delete(k.traceStore, pid)
+}
+
 // SpawnChild creates a child process under the given parent.
 // Phase 3: validates ACL, capabilities, auth, and budget before spawning.
 func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
@@ -372,6 +412,12 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 			k.registry.Remove(proc.PID)
 			return nil, fmt.Errorf("runtime start failed: %w", err)
 		}
+	}
+
+	// Propagate trace context from parent to child.
+	if tID, tSpan := k.GetTrace(req.ParentPID); tID != "" {
+		childSpan := tSpan + "/" + fmt.Sprint(proc.PID)
+		k.SetTrace(proc.PID, tID, childSpan)
 	}
 
 	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",

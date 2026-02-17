@@ -176,6 +176,8 @@ message ProcessEvent {
   string message = 14;
   string reply_to = 15;
   string payload_preview = 16;
+  string trace_id = 17;
+  string trace_span = 18;
 }
 
 message SubscribeEventsRequest {

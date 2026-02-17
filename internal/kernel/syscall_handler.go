@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -65,6 +66,22 @@ func (h *KernelSyscallHandler) HandleSyscall(
 		log.Printf("[syscall] unknown syscall type for call_id=%s", callID)
 		return &pb.SyscallResult{CallId: callID}
 	}
+}
+
+// extractTraceFromPayload extracts trace_id and trace_span from a JSON payload.
+func extractTraceFromPayload(payload []byte) (traceID, traceSpan string) {
+	var data map[string]interface{}
+	if json.Unmarshal(payload, &data) != nil {
+		return "", ""
+	}
+	traceID, _ = data["trace_id"].(string)
+	traceSpan, _ = data["trace_span"].(string)
+	return
+}
+
+// extractTraceFromParams extracts trace_id and trace_span from a string map.
+func extractTraceFromParams(params map[string]string) (traceID, traceSpan string) {
+	return params["trace_id"], params["trace_span"]
 }
 
 func (h *KernelSyscallHandler) handleSpawn(callID string, callerPID process.PID, req *pb.SpawnRequest) *pb.SyscallResult {
@@ -198,6 +215,12 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 
 	log.Printf("[syscall] send: PID %d -> PID %d, type=%s", callerPID, req.ToPid, req.Type)
 
+	// Extract trace context from payload and propagate to receiver.
+	traceID, traceSpan := extractTraceFromPayload(req.Payload)
+	if traceID != "" {
+		h.king.SetTrace(req.ToPid, traceID, traceSpan)
+	}
+
 	// Emit message_sent event for dashboard visualization.
 	if el := h.king.EventLog(); el != nil {
 		toName := ""
@@ -213,6 +236,8 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 			Message:        req.Type,
 			ReplyTo:        req.ReplyTo,
 			PayloadPreview: truncatePayload(string(req.Payload), 2000),
+			TraceID:        traceID,
+			TraceSpan:      traceSpan,
 		})
 	}
 
@@ -377,6 +402,13 @@ func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID strin
 
 	if h.executor == nil {
 		return errResult("executor not available")
+	}
+
+	// Extract trace context from task params and propagate to target.
+	if req.Task != nil && req.Task.Params != nil {
+		if tID, tSpan := extractTraceFromParams(req.Task.Params); tID != "" {
+			h.king.SetTrace(req.TargetPid, tID, tSpan)
+		}
 	}
 
 	// Execute the task on the target agent.

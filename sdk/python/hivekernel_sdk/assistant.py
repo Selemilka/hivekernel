@@ -14,6 +14,7 @@ Runtime image: hivekernel_sdk.assistant:AssistantAgent
 import json
 import logging
 import time
+import uuid
 
 from .llm_agent import LLMAgent
 from .syscall import SyscallContext
@@ -344,7 +345,11 @@ class AssistantAgent(LLMAgent):
         await ctx.log("info", f"Delegating (async) to {target_name} (PID {target_pid}): {task_desc[:80]}")
 
         try:
-            payload = json.dumps({"task": task_desc}, ensure_ascii=False).encode("utf-8")
+            trace_id = "t-" + uuid.uuid4().hex[:8]
+            payload = json.dumps({
+                "task": task_desc,
+                "trace_id": trace_id,
+            }, ensure_ascii=False).encode("utf-8")
             request_id = await self.send_fire_and_forget(
                 ctx=ctx,
                 to_pid=int(target_pid),
@@ -356,6 +361,7 @@ class AssistantAgent(LLMAgent):
                 "target": target_name,
                 "task": task_desc,
                 "ts": time.time(),
+                "trace_id": trace_id,
             }
             return f"[Delegated to {target_name} -- results will appear in next message]"
         except Exception as e:

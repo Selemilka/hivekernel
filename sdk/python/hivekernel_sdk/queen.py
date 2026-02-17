@@ -134,6 +134,7 @@ class QueenAgent(LLMAgent):
         try:
             payload = json.loads(message.payload.decode("utf-8"))
             description = payload.get("task", "")
+            trace_id = payload.get("trace_id", "")
             if not description:
                 result_payload = json.dumps({"error": "empty task"}).encode("utf-8")
             else:
@@ -143,9 +144,9 @@ class QueenAgent(LLMAgent):
                 logger.info("IPC task complexity: %s", complexity)
 
                 if complexity == "simple":
-                    result = await self._ipc_handle_simple(description)
+                    result = await self._ipc_handle_simple(description, trace_id=trace_id)
                 else:
-                    result = await self._ipc_handle_complex(description)
+                    result = await self._ipc_handle_complex(description, trace_id=trace_id)
 
                 result_payload = json.dumps({
                     "output": result["output"],
@@ -172,7 +173,7 @@ class QueenAgent(LLMAgent):
                 logger.error("Queen failed to send reply to PID %d: %s",
                              message.from_pid, e)
 
-    async def _ipc_handle_simple(self, description: str) -> dict:
+    async def _ipc_handle_simple(self, description: str, trace_id: str = "") -> dict:
         """Simple IPC task: spawn worker via CoreClient, execute, collect."""
         worker_pid = None
         try:
@@ -187,10 +188,13 @@ class QueenAgent(LLMAgent):
                 runtime_type="python",
             )
             logger.info("IPC spawned worker PID %d for simple task", worker_pid)
+            params = {"subtask": description}
+            if trace_id:
+                params["trace_id"] = trace_id
             result = await self.core.execute_task(
                 target_pid=worker_pid,
                 description=description,
-                params={"subtask": description},
+                params=params,
                 timeout_seconds=120,
             )
             # Kill worker after success -- IPC workers can't be reused.
@@ -208,7 +212,7 @@ class QueenAgent(LLMAgent):
                     pass
             return {"output": f"Task failed: {e}", "exit_code": 1}
 
-    async def _ipc_handle_complex(self, description: str) -> dict:
+    async def _ipc_handle_complex(self, description: str, trace_id: str = "") -> dict:
         """Complex IPC task: spawn lead via CoreClient, execute, collect."""
         lead_pid = None
         try:
@@ -223,10 +227,13 @@ class QueenAgent(LLMAgent):
                 runtime_type="python",
             )
             logger.info("IPC spawned lead PID %d for complex task", lead_pid)
+            params = {"task": description, "max_workers": self._max_workers}
+            if trace_id:
+                params["trace_id"] = trace_id
             result = await self.core.execute_task(
                 target_pid=lead_pid,
                 description=description,
-                params={"task": description, "max_workers": self._max_workers},
+                params=params,
                 timeout_seconds=300,
             )
             # Kill lead after success -- IPC-spawned leads can't be reused
@@ -250,6 +257,7 @@ class QueenAgent(LLMAgent):
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
         description = task.params.get("task", task.description)
         self._max_workers = task.params.get("max_workers", "3")
+        trace_id = task.params.get("trace_id", "")
         if not description.strip():
             return TaskResult(exit_code=1, output="Empty task description")
 
@@ -267,11 +275,11 @@ class QueenAgent(LLMAgent):
 
         # 3. Execute based on complexity.
         if complexity == "simple":
-            result = await self._handle_simple(description, ctx)
+            result = await self._handle_simple(description, ctx, trace_id=trace_id)
         elif complexity == "architect":
-            result = await self._handle_architect(description, ctx)
+            result = await self._handle_architect(description, ctx, trace_id=trace_id)
         else:
-            result = await self._handle_complex(description, ctx)
+            result = await self._handle_complex(description, ctx, trace_id=trace_id)
 
         # 4. Record in task history.
         self._task_history.append({
@@ -419,7 +427,7 @@ class QueenAgent(LLMAgent):
 
     # --- Task Execution ---
 
-    async def _handle_architect(self, description: str, ctx: SyscallContext) -> TaskResult:
+    async def _handle_architect(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
         """Architect path: strategic plan -> lead execution."""
         await ctx.report_progress("Spawning architect...", 15.0)
         await ctx.log("info", "Architect strategy: spawning strategic planner")
@@ -442,10 +450,13 @@ class QueenAgent(LLMAgent):
         # 2. Get plan from Architect.
         await ctx.report_progress("Architect designing plan...", 20.0)
         try:
+            arch_params = {"task": description, "max_workers": self._max_workers}
+            if trace_id:
+                arch_params["trace_id"] = trace_id
             plan_result = await ctx.execute_on(
                 pid=arch_pid,
                 description=description,
-                params={"task": description, "max_workers": self._max_workers},
+                params=arch_params,
                 timeout_seconds=120,
             )
         except Exception as e:
@@ -461,14 +472,17 @@ class QueenAgent(LLMAgent):
         await ctx.report_progress("Lead executing plan...", 35.0)
 
         try:
+            lead_params = {
+                "task": description,
+                "plan": plan_json,
+                "max_workers": self._max_workers,
+            }
+            if trace_id:
+                lead_params["trace_id"] = trace_id
             result = await ctx.execute_on(
                 pid=lead_pid,
                 description=description,
-                params={
-                    "task": description,
-                    "plan": plan_json,
-                    "max_workers": self._max_workers,
-                },
+                params=lead_params,
                 timeout_seconds=300,
             )
             await self._release_lead(lead_pid)
@@ -487,7 +501,7 @@ class QueenAgent(LLMAgent):
                 pass
             return TaskResult(exit_code=1, output=f"Architect execution failed: {e}")
 
-    async def _handle_simple(self, description: str, ctx: SyscallContext) -> TaskResult:
+    async def _handle_simple(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
         """Simple path: spawn a task-role worker, execute, collect result."""
         await ctx.report_progress("Spawning task worker...", 15.0)
         await ctx.log("info", "Simple strategy: spawning task worker")
@@ -508,10 +522,13 @@ class QueenAgent(LLMAgent):
         await ctx.report_progress("Executing task...", 30.0)
 
         try:
+            params = {"subtask": description}
+            if trace_id:
+                params["trace_id"] = trace_id
             result = await ctx.execute_on(
                 pid=worker_pid,
                 description=description,
-                params={"subtask": description},
+                params=params,
                 timeout_seconds=120,
             )
             return TaskResult(
@@ -528,7 +545,7 @@ class QueenAgent(LLMAgent):
                 pass
             return TaskResult(exit_code=1, output=f"Task execution failed: {e}")
 
-    async def _handle_complex(self, description: str, ctx: SyscallContext) -> TaskResult:
+    async def _handle_complex(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
         """Complex path: acquire lead (reuse or spawn), delegate, collect."""
         await ctx.report_progress("Acquiring orchestrator...", 15.0)
         await ctx.log("info", "Complex strategy: acquiring orchestrator lead")
@@ -537,10 +554,13 @@ class QueenAgent(LLMAgent):
         await ctx.report_progress("Lead working on task...", 25.0)
 
         try:
+            params = {"task": description, "max_workers": self._max_workers}
+            if trace_id:
+                params["trace_id"] = trace_id
             result = await ctx.execute_on(
                 pid=lead_pid,
                 description=description,
-                params={"task": description, "max_workers": self._max_workers},
+                params=params,
                 timeout_seconds=300,
             )
             # Success: return lead to idle pool for reuse.

@@ -1158,3 +1158,138 @@ button.btn-primary:hover {
     color: #555;
     font-size: 11px;
 }
+
+/* ─── Traces Panel ─── */
+#traces-panel {
+    padding: 16px;
+    background: #1a2040;
+    border-top: 1px solid #0f3460;
+    flex-shrink: 0;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+#traces-panel h2 {
+    font-size: 15px;
+    color: #f0932b;
+}
+
+#traces-toggle {
+    font-size: 18px;
+    color: #888;
+    user-select: none;
+}
+
+.trace-entry {
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: rgba(240, 147, 43, 0.08);
+    border-left: 3px solid #f0932b;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.trace-entry:hover {
+    background: rgba(240, 147, 43, 0.18);
+}
+
+.trace-id {
+    color: #f0932b;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: bold;
+}
+
+.trace-meta {
+    color: #888;
+    font-size: 11px;
+}
+
+#trace-detail {
+    margin-top: 8px;
+}
+
+#trace-detail h3 {
+    font-size: 14px;
+    color: #f0932b;
+    margin: 0;
+}
+
+#trace-detail-events {
+    margin-top: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.trace-event {
+    padding: 4px 8px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    border-radius: 4px;
+    border-left: 3px solid #576574;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+.trace-event.trace-evt-message-sent {
+    border-left-color: #54a0ff;
+    background: rgba(84, 160, 255, 0.06);
+}
+
+.trace-event.trace-evt-spawned {
+    border-left-color: #10ac84;
+    background: rgba(16, 172, 132, 0.06);
+}
+
+.trace-event.trace-evt-state-changed {
+    border-left-color: #a55eea;
+    background: rgba(165, 94, 234, 0.06);
+}
+
+.trace-event.trace-evt-log {
+    border-left-color: #888;
+    background: rgba(136, 136, 136, 0.04);
+}
+
+.trace-event.trace-evt-removed {
+    border-left-color: #e94560;
+    background: rgba(233, 69, 96, 0.06);
+}
+
+.trace-offset {
+    color: #f0932b;
+    font-size: 11px;
+    min-width: 60px;
+    flex-shrink: 0;
+}
+
+.trace-ts {
+    color: #666;
+    font-size: 11px;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.trace-type {
+    color: #999;
+    font-size: 10px;
+    min-width: 90px;
+    flex-shrink: 0;
+}
+
+.trace-desc {
+    color: #e0e0e0;
+    flex: 1;
+}
+
+.trace-span {
+    color: #f0932b;
+    font-size: 10px;
+    opacity: 0.7;
+    flex-shrink: 0;
+}

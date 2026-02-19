@@ -1,5 +1,26 @@
 # HiveKernel Changelog
 
+## Plan 013 -- AgentCore: Tool Calling, Agent Loop, Memory (completed)
+
+**Goal:** Build PicoClaw-lite natively in the Python SDK: tool calling via OpenRouter, iterative agent loop, persistent memory via artifact store.
+
+### Added
+- `sdk/python/hivekernel_sdk/tools.py` -- Tool protocol, ToolResult, ToolContext, ToolRegistry with OpenAI-compatible schema generation
+- `sdk/python/hivekernel_sdk/builtin_tools.py` -- 9 syscall tools (spawn_child, execute_task, send_message, store_artifact, get_artifact, list_children, list_siblings, memory_store, memory_recall) + `register_builtin_tools()`
+- `sdk/python/hivekernel_sdk/memory.py` -- AgentMemory: artifact-backed persistent memory with long-term knowledge, session history, and conversation summarization
+- `sdk/python/hivekernel_sdk/loop.py` -- AgentLoop: iterative LLM + tool execution engine with max_iterations guard and auto-summarization
+- `sdk/python/hivekernel_sdk/tool_agent.py` -- ToolAgent base class extending LLMAgent with built-in tool registry, memory, and agent loop. Override `get_tools()` to add custom tools
+- `LLMClient.chat_with_tools()` -- New method on LLMClient supporting tool calling (existing `chat()` unchanged)
+- 67 new tests across 5 test files
+
+### Architecture
+- ToolAgent extends LLMAgent (existing agents unchanged)
+- Agent loop: prompt -> LLM -> tool calls -> execute -> feed back -> repeat until text response
+- Memory persisted as artifacts: `agent:{pid}:memory`, `agent:{pid}:session`, `agent:{pid}:summary`
+- Tools implement `Tool` protocol (name, description, parameters JSON Schema, async execute)
+
+---
+
 ## Plan 004 — Architecture Cleanup (completed)
 
 **Goal:** Decouple kernel from Python agents. Kernel starts clean.

@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"log"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"sync"
 	"time"
 
@@ -97,7 +97,7 @@ func (h *HealthMonitor) check(ctx context.Context) {
 			h.failures[r.pid]++
 			count := h.failures[r.pid]
 			if count >= h.maxFailures {
-				log.Printf("[health] PID %d unreachable (%d consecutive failures)", r.pid, count)
+				hklog.For("health").Warn("agent unreachable", "pid", r.pid, "consecutive_failures", count)
 				if h.onUnhealthy != nil {
 					h.onUnhealthy(r.pid)
 				}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/process"
 
 	"google.golang.org/grpc"
@@ -84,7 +84,7 @@ func (e *Executor) ExecuteTask(
 			}
 
 		case pb.ProgressType_PROGRESS_COMPLETED:
-			log.Printf("[executor] task %s completed", progress.TaskId)
+			hklog.For("executor").Info("task completed", "task_id", progress.TaskId)
 			_ = stream.CloseSend()
 			return progress.Result, nil
 
@@ -93,16 +93,15 @@ func (e *Executor) ExecuteTask(
 			if errMsg == "" && progress.Result != nil {
 				errMsg = progress.Result.Output
 			}
-			log.Printf("[executor] task %s failed: %s", progress.TaskId, errMsg)
+			hklog.For("executor").Error("task failed", "task_id", progress.TaskId, "error", errMsg)
 			_ = stream.CloseSend()
 			return progress.Result, fmt.Errorf("task failed: %s", errMsg)
 
 		case pb.ProgressType_PROGRESS_UPDATE:
-			log.Printf("[executor] task %s progress: %.0f%% %s",
-				progress.TaskId, progress.ProgressPercent, progress.Message)
+			hklog.For("executor").Debug("task progress", "task_id", progress.TaskId, "percent", progress.ProgressPercent, "message", progress.Message)
 
 		case pb.ProgressType_PROGRESS_LOG:
-			log.Printf("[executor] task %s log: %s", progress.TaskId, progress.Message)
+			hklog.For("executor").Debug("task log", "task_id", progress.TaskId, "message", progress.Message)
 		}
 	}
 }

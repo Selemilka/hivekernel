@@ -131,7 +131,9 @@ type Process struct {
 	Metadata     map[string]string
 
 	// gRPC connection address (unix socket path or tcp addr)
-	RuntimeAddr string
+	RuntimeAddr  string
+	RuntimeType  string // "python", "claw", "custom" -- needed for supervisor restart
+	RuntimeImage string // original image spec (e.g. "queen", "assistant")
 }
 
 // DefaultModelForTier returns the default model string for a cognitive tier.

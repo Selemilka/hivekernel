@@ -285,6 +285,15 @@ class SyscallContext:
             "output": resp.output,
         }
 
+    async def log_event(self, event_type: str, message: str, **fields):
+        """Emit a typed event via the log syscall.
+
+        Sets fields["event_type"] so the kernel routes it as a typed
+        ProcessEvent (e.g. "llm_call", "tool_call").
+        """
+        fields["event_type"] = event_type
+        await self.log("info", message, **fields)
+
     async def report_progress(self, message: str, percent: float = 0.0):
         """Send a progress update through the stream (not a syscall)."""
         progress = agent_pb2.TaskProgress(

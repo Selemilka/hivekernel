@@ -434,8 +434,66 @@ button.btn-secondary:hover {
 
 #log-controls {
     margin-bottom: 6px;
+}
+
+.log-filter-row {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.log-level-filters {
+    display: flex;
+    gap: 2px;
+}
+
+.log-filter-btn {
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid #333;
+    background: #1a1a2e;
+    color: #888;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.log-filter-btn.active {
+    background: #333;
+    color: #fff;
+    border-color: #555;
+}
+
+.log-filter-btn.log-f-debug.active { color: #576574; border-color: #576574; }
+.log-filter-btn.log-f-info.active { color: #10ac84; border-color: #10ac84; }
+.log-filter-btn.log-f-warn.active { color: #f9ca24; border-color: #f9ca24; }
+.log-filter-btn.log-f-error.active { color: #e94560; border-color: #e94560; }
+
+.log-line.log-hidden { display: none; }
+
+/* ─── LLM Panel ─── */
+#llm-panel {
+    padding: 16px;
+    background: #141428;
+    border-top: 1px solid #0f3460;
+}
+
+#llm-panel h2 {
+    font-size: 15px;
+    color: #10ac84;
+}
+
+#llm-table th {
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid #333;
+    color: #888;
+}
+
+#llm-table td {
+    padding: 4px 8px;
+    color: #ccc;
 }
 
 #log-content {
@@ -1364,6 +1422,33 @@ button.btn-primary:hover {
     background: rgba(233, 69, 96, 0.06);
 }
 
+.trace-event.trace-evt-llm-call {
+    border-left-color: #10ac84;
+    background: rgba(16, 172, 132, 0.08);
+}
+
+.trace-event.trace-evt-tool-call {
+    border-left-color: #f0932b;
+    background: rgba(240, 147, 43, 0.08);
+}
+
+.trace-event.trace-evt-cron-executed {
+    border-left-color: #a55eea;
+    background: rgba(165, 94, 234, 0.08);
+}
+
+/* Log event type tags */
+.log-evt-tag {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    margin-right: 4px;
+    font-weight: 700;
+}
+.log-evt-llm { background: rgba(16, 172, 132, 0.3); color: #10ac84; }
+.log-evt-tool { background: rgba(240, 147, 43, 0.3); color: #f0932b; }
+.log-evt-cron { background: rgba(165, 94, 234, 0.3); color: #a55eea; }
+
 .trace-offset {
     color: #f0932b;
     font-size: 11px;
@@ -1395,4 +1480,47 @@ button.btn-primary:hover {
     font-size: 10px;
     opacity: 0.7;
     flex-shrink: 0;
+}
+
+/* ─── Trace Text Previews ─── */
+.trace-text-details {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: #54a0ff;
+}
+
+.trace-text-details:hover {
+    background: rgba(0,0,0,0.3);
+}
+
+.trace-text-block {
+    margin-top: 4px;
+}
+
+.trace-text-label {
+    color: #888;
+    font-size: 10px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+}
+
+.trace-text-content {
+    background: #0d0d1a;
+    border: 1px solid #1a1a3a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+    font-family: 'Consolas', 'Courier New', monospace;
 }

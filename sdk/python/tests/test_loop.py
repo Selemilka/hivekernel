@@ -23,6 +23,24 @@ class MockLLM:
         self._responses = list(responses)
         self._call_count = 0
         self._total_tokens = 0
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
+        self._llm_calls = 0
+        self._total_latency_ms = 0.0
+        self._last_call = {}
+
+    @property
+    def prompt_tokens(self): return self._prompt_tokens
+    @property
+    def completion_tokens(self): return self._completion_tokens
+    @property
+    def llm_calls(self): return self._llm_calls
+    @property
+    def total_latency_ms(self): return self._total_latency_ms
+    @property
+    def last_call(self): return self._last_call
+    @property
+    def total_tokens(self): return self._total_tokens
 
     async def chat_with_tools(self, messages, tools=None, system="",
                                model="", max_tokens=4096, temperature=0.7):

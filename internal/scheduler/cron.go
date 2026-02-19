@@ -58,6 +58,11 @@ type CronEntry struct {
 	LastRun  time.Time
 	NextRun  time.Time
 	Enabled  bool
+
+	// Execution history (updated after each run).
+	LastExitCode  int32
+	LastOutput    string
+	LastDurationMs int64
 }
 
 // CronSchedule represents a parsed cron expression.

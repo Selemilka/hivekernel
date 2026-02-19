@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 import urllib.request
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -25,11 +26,37 @@ class LLMClient:
         self._api_key = api_key
         self._default_model = default_model or MODEL_MAP["mini"]
         self._total_tokens = 0
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
+        self._llm_calls = 0
+        self._total_latency_ms: float = 0.0
+        self._last_call: dict = {}
 
     @property
     def total_tokens(self) -> int:
         """Cumulative token usage across all calls."""
         return self._total_tokens
+
+    @property
+    def prompt_tokens(self) -> int:
+        return self._prompt_tokens
+
+    @property
+    def completion_tokens(self) -> int:
+        return self._completion_tokens
+
+    @property
+    def llm_calls(self) -> int:
+        return self._llm_calls
+
+    @property
+    def total_latency_ms(self) -> float:
+        return self._total_latency_ms
+
+    @property
+    def last_call(self) -> dict:
+        """Metrics from the most recent LLM call."""
+        return self._last_call
 
     async def chat(
         self,
@@ -78,7 +105,10 @@ class LLMClient:
             method="POST",
         )
 
+        t0 = time.monotonic()
         resp_data = await asyncio.to_thread(self._do_request, req)
+        latency_ms = (time.monotonic() - t0) * 1000
+
         resp = json.loads(resp_data)
 
         if "error" in resp:
@@ -88,6 +118,17 @@ class LLMClient:
 
         usage = resp.get("usage", {})
         self._total_tokens += usage.get("total_tokens", 0)
+        self._prompt_tokens += usage.get("prompt_tokens", 0)
+        self._completion_tokens += usage.get("completion_tokens", 0)
+        self._llm_calls += 1
+        self._total_latency_ms += latency_ms
+        self._last_call = {
+            "model": resolved,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+            "latency_ms": round(latency_ms, 1),
+        }
 
         choices = resp.get("choices", [])
         if not choices:
@@ -136,7 +177,10 @@ class LLMClient:
             method="POST",
         )
 
+        t0 = time.monotonic()
         resp_data = await asyncio.to_thread(self._do_request, req)
+        latency_ms = (time.monotonic() - t0) * 1000
+
         resp = json.loads(resp_data)
 
         if "error" in resp:
@@ -146,6 +190,17 @@ class LLMClient:
 
         usage = resp.get("usage", {})
         self._total_tokens += usage.get("total_tokens", 0)
+        self._prompt_tokens += usage.get("prompt_tokens", 0)
+        self._completion_tokens += usage.get("completion_tokens", 0)
+        self._llm_calls += 1
+        self._total_latency_ms += latency_ms
+        self._last_call = {
+            "model": resolved,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+            "latency_ms": round(latency_ms, 1),
+        }
 
         choices = resp.get("choices", [])
         if not choices:

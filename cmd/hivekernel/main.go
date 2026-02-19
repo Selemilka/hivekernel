@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/kernel"
 	"github.com/selemilka/hivekernel/internal/process"
@@ -29,14 +30,19 @@ func main() {
 	sdkPath := flag.String("sdk-path", "", "path to Python SDK directory (auto-detected if empty)")
 	clawBin := flag.String("claw-bin", "", "path to PicoClaw binary (for RUNTIME_CLAW agents)")
 	envFile := flag.String("env-file", ".env", "path to .env file (empty to skip)")
+	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
+	logFile := flag.String("log-file", "", "path to JSON log file (optional)")
 	flag.Parse()
+
+	hklog.Init(*logLevel, *logFile)
+	logger := hklog.For("main")
 
 	// Load .env file if it exists.
 	if *envFile != "" {
 		if n, err := loadDotEnv(*envFile); err != nil {
-			log.Printf("[startup] WARNING: could not load %s: %v", *envFile, err)
+			logger.Warn("could not load env file", "file", *envFile, "error", err)
 		} else if n > 0 {
-			log.Printf("[startup] loaded %d var(s) from %s", n, *envFile)
+			logger.Info("loaded env vars", "count", n, "file", *envFile)
 		}
 	}
 
@@ -44,24 +50,29 @@ func main() {
 	cfg.NodeName = *nodeName
 	cfg.ListenAddr = *listenAddr
 
-	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Printf("HiveKernel starting on node %s", cfg.NodeName)
+	logger.Info("HiveKernel starting", "node", cfg.NodeName)
 
 	// Bootstrap the kernel.
 	king, err := kernel.New(cfg)
 	if err != nil {
-		log.Fatalf("Failed to bootstrap kernel: %v", err)
+		logger.Error("failed to bootstrap kernel", "error", err)
+		os.Exit(1)
 	}
+
+	// Bridge slog INFO+ to EventLog so kernel logs appear in dashboard.
+	hklog.SetEventLogEmitter(king)
+	hklog.AddEventLogHandler()
 
 	// Load startup config (empty = no agents).
 	startupCfg, err := kernel.LoadStartupConfig(*startupPath)
 	if err != nil {
-		log.Fatalf("Failed to load startup config: %v", err)
+		logger.Error("failed to load startup config", "error", err)
+		os.Exit(1)
 	}
 	if len(startupCfg.Agents) > 0 {
-		log.Printf("[startup] loaded %d agent(s) from %s", len(startupCfg.Agents), *startupPath)
+		logger.Info("loaded startup config", "agents", len(startupCfg.Agents), "path", *startupPath)
 	} else {
-		log.Printf("[startup] pure kernel mode (no agents)")
+		logger.Info("pure kernel mode, no agents")
 	}
 
 	// Normalize coreAddr for agents to dial back.
@@ -70,7 +81,7 @@ func main() {
 	// Resolve SDK path for Python agents.
 	resolvedSDK := resolveSDKPath(*sdkPath)
 	if resolvedSDK != "" {
-		log.Printf("[startup] Python SDK path: %s", resolvedSDK)
+		logger.Info("Python SDK path resolved", "path", resolvedSDK)
 	}
 
 	// Start runtime manager, executor, and health monitor.
@@ -80,16 +91,17 @@ func main() {
 	}
 	if *clawBin != "" {
 		rtManager.SetClawBin(*clawBin)
-		log.Printf("[startup] PicoClaw binary: %s", *clawBin)
+		logger.Info("PicoClaw binary set", "path", *clawBin)
 	}
 	king.SetRuntimeManager(rtManager)
 
 	// Wire push delivery: when a message arrives in a process's inbox,
 	// immediately deliver it to the agent's gRPC DeliverMessage RPC.
+	brokerLog := hklog.For("broker")
 	king.Broker().OnMessage = func(pid process.PID, msg *ipc.Message) {
 		client := rtManager.GetClient(pid)
 		if client == nil {
-			log.Printf("[broker] push delivery skipped for PID %d (type=%s): no runtime client", pid, msg.Type)
+			brokerLog.Warn("push delivery skipped, no runtime client", "pid", pid, "type", msg.Type)
 			return
 		}
 		pbMsg := &pb.AgentMessage{
@@ -105,7 +117,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if _, err := client.DeliverMessage(ctx, pbMsg); err != nil {
-			log.Printf("[broker] push delivery to PID %d failed: %v", pid, err)
+			brokerLog.Error("push delivery failed", "pid", pid, "error", err)
 			return
 		}
 		// Emit message_delivered event.
@@ -129,19 +141,41 @@ func main() {
 		3,              // max consecutive failures before kill
 		5*time.Second,  // ping timeout
 	)
+	healthLog := hklog.For("health")
 	healthMon.OnUnhealthy(func(pid process.PID) {
-		log.Printf("[health] PID %d unreachable, killing", pid)
+		healthLog.Warn("agent unreachable, killing", "pid", pid)
 		_ = rtManager.StopRuntime(pid)
 		_ = king.Registry().SetState(pid, process.StateZombie)
 		king.Signals().NotifyParent(pid, -1, "health: unreachable")
 	})
 
+	// Start supervisor (zombie reaping, restart policies).
+	supervisor := process.NewSupervisor(
+		king.Registry(),
+		king.Signals(),
+		process.NewTreeOps(king.Registry(), king.Signals()),
+		process.DefaultSupervisorConfig(),
+	)
+
+	// Wire restart callback: supervisor calls this when a daemon needs restarting.
+	supervisor.OnRestart(func(proc *process.Process) error {
+		// Reset RuntimeAddr to image spec for respawn (StartRuntime reads it as image).
+		proc.RuntimeAddr = proc.RuntimeImage
+		rtType := runtime.RuntimeType(proc.RuntimeType)
+		if rtType == "" {
+			rtType = runtime.RuntimePython
+		}
+		_, err := rtManager.StartRuntime(proc, rtType)
+		return err
+	})
+
 	// Process exit watcher: instant death detection for auto-exit and crashes.
+	// Delegates to supervisor which decides: restart (daemons) or zombie+notify (agents/tasks).
+	rtLog := hklog.For("runtime")
 	rtManager.OnProcessExit(func(pid process.PID, exitCode int) {
-		log.Printf("[runtime] PID %d exited (code %d), transitioning to zombie", pid, exitCode)
-		_ = king.Registry().SetState(pid, process.StateZombie)
-		king.Signals().NotifyParent(pid, exitCode, "process exited")
+		rtLog.Info("process exited", "pid", pid, "exit_code", exitCode)
 		healthMon.Remove(pid)
+		supervisor.HandleChildExit(pid, exitCode)
 	})
 
 	// Set up graceful shutdown.
@@ -159,13 +193,14 @@ func main() {
 
 	lis, err := listen(cfg.ListenAddr)
 	if err != nil {
-		log.Fatalf("Failed to listen on %s: %v", cfg.ListenAddr, err)
+		logger.Error("failed to listen", "addr", cfg.ListenAddr, "error", err)
+		os.Exit(1)
 	}
-	log.Printf("[grpc] CoreService listening on %s (agents dial %s)", cfg.ListenAddr, coreAddr)
+	logger.Info("CoreService listening", "addr", cfg.ListenAddr, "dial_addr", coreAddr)
 
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Printf("[grpc] server error: %v", err)
+			slog.Error("gRPC server error", "error", err)
 		}
 	}()
 
@@ -178,13 +213,6 @@ func main() {
 		}()
 	}
 
-	// Start supervisor (zombie reaping, restart policies).
-	supervisor := process.NewSupervisor(
-		king.Registry(),
-		king.Signals(),
-		process.NewTreeOps(king.Registry(), king.Signals()),
-		process.DefaultSupervisorConfig(),
-	)
 	go supervisor.Run(ctx)
 
 	// Start health monitor.
@@ -197,13 +225,14 @@ func main() {
 	// Start kernel main loop.
 	go func() {
 		if err := king.Run(ctx); err != nil && ctx.Err() == nil {
-			log.Fatalf("Kernel error: %v", err)
+			slog.Error("kernel error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	// Wait for shutdown signal.
 	sig := <-sigCh
-	log.Printf("Received %s, shutting down gracefully... (Ctrl+C again to force)", sig)
+	logger.Info("received shutdown signal", "signal", sig)
 
 	// 1. Cancel context — signals all goroutines (cron poller, health monitor, king.Run).
 	cancel()
@@ -226,17 +255,17 @@ func main() {
 	case <-done:
 		// Clean exit.
 	case <-sigCh:
-		log.Printf("Force shutdown!")
+		logger.Warn("force shutdown")
 		rtManager.KillAll()
 		grpcServer.Stop()
 	case <-time.After(15 * time.Second):
-		log.Printf("[shutdown] graceful shutdown timed out after 15s, forcing stop")
+		logger.Warn("graceful shutdown timed out, forcing stop")
 		rtManager.KillAll()
 		grpcServer.Stop()
 	}
 
 	king.Stop()
-	log.Printf("HiveKernel stopped.")
+	logger.Info("HiveKernel stopped")
 }
 
 // normalizeCoreAddr converts a listen address to a dialable address.
@@ -262,6 +291,7 @@ func listen(addr string) (net.Listener, error) {
 
 // spawnStartupAgents spawns all agents defined in the startup config.
 func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.StartupConfig) {
+	startupLog := hklog.For("startup")
 	for _, agent := range startupCfg.Agents {
 		name := agent.Name
 		// Append node name to daemon names if not already present.
@@ -299,14 +329,14 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 			Metadata:      metadata,
 		})
 		if err != nil {
-			log.Printf("[startup] failed to spawn %s: %v", agent.Name, err)
+			startupLog.Error("failed to spawn agent", "name", agent.Name, "error", err)
 			continue
 		}
-		log.Printf("[startup] spawned %s (PID %d)", agent.Name, proc.PID)
+		startupLog.Info("spawned agent", "name", agent.Name, "pid", proc.PID)
 
 		// Flush any messages that arrived before the agent was ready.
 		if flushed := king.Broker().FlushInbox(proc.PID); flushed > 0 {
-			log.Printf("[startup] flushed %d pending message(s) to %s (PID %d)", flushed, agent.Name, proc.PID)
+			startupLog.Info("flushed pending messages", "count", flushed, "name", agent.Name, "pid", proc.PID)
 		}
 
 		// Register cron entries for this agent.
@@ -316,9 +346,9 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 				action = "message"
 			}
 			if _, err := king.Cron().ParseAndAdd(cronEntry.Name, cronEntry.Expression, action, proc.PID, cronEntry.Description, cronEntry.Params); err != nil {
-				log.Printf("[startup] failed to add cron %q for %s: %v", cronEntry.Name, agent.Name, err)
+				startupLog.Error("failed to add cron", "cron", cronEntry.Name, "agent", agent.Name, "error", err)
 			} else {
-				log.Printf("[startup] cron %q (%s, action=%s) registered for %s (PID %d)", cronEntry.Name, cronEntry.Expression, action, agent.Name, proc.PID)
+				startupLog.Info("cron registered", "cron", cronEntry.Name, "expr", cronEntry.Expression, "action", action, "agent", agent.Name, "pid", proc.PID)
 			}
 		}
 	}
@@ -334,7 +364,7 @@ func resolveSDKPath(explicit string) string {
 			abs, _ := filepath.Abs(explicit)
 			return abs
 		}
-		log.Printf("[startup] WARNING: --sdk-path %q not found", explicit)
+		slog.Warn("sdk-path not found", "path", explicit)
 		return ""
 	}
 

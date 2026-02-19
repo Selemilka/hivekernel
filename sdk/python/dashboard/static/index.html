@@ -144,9 +144,44 @@
             </div>
             <div id="log-content">
                 <div id="log-controls">
-                    <button onclick="clearLogs()" class="btn-secondary" style="padding:3px 8px;font-size:11px">Clear</button>
+                    <div class="log-filter-row">
+                        <div class="log-level-filters">
+                            <button class="log-filter-btn active" data-level="all" onclick="setLogLevel('all', this)">ALL</button>
+                            <button class="log-filter-btn log-f-debug" data-level="debug" onclick="setLogLevel('debug', this)">DEBUG</button>
+                            <button class="log-filter-btn log-f-info" data-level="info" onclick="setLogLevel('info', this)">INFO</button>
+                            <button class="log-filter-btn log-f-warn" data-level="warn" onclick="setLogLevel('warn', this)">WARN</button>
+                            <button class="log-filter-btn log-f-error" data-level="error" onclick="setLogLevel('error', this)">ERROR</button>
+                        </div>
+                        <input type="text" id="log-search" placeholder="Search..." oninput="filterLogs()" style="flex:1;max-width:140px;padding:2px 6px;font-size:11px;background:#1e1e1e;color:#ccc;border:1px solid #444;border-radius:3px">
+                        <label style="font-size:11px;color:#888;cursor:pointer;white-space:nowrap"><input type="checkbox" id="log-autoscroll" checked onchange="toggleAutoScroll()"> Auto-scroll</label>
+                        <button onclick="clearLogs()" class="btn-secondary" style="padding:3px 8px;font-size:11px">Clear</button>
+                    </div>
                 </div>
                 <div id="log-entries"></div>
+            </div>
+        </div>
+
+        <!-- LLM Usage panel -->
+        <div id="llm-panel">
+            <div class="panel-header" onclick="toggleLLMPanel()">
+                <h2>LLM Usage</h2>
+                <span id="llm-toggle">+</span>
+            </div>
+            <div id="llm-content" style="display:none">
+                <button onclick="loadLLMUsage()" style="margin-bottom:8px">Refresh</button>
+                <div id="llm-summary" style="font-size:12px;color:#aaa;margin-bottom:8px"></div>
+                <table id="llm-table" style="width:100%;font-size:11px">
+                    <thead>
+                        <tr>
+                            <th>PID</th>
+                            <th>Name</th>
+                            <th>Tokens</th>
+                            <th>Calls</th>
+                            <th>Avg Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody id="llm-body"></tbody>
+                </table>
             </div>
         </div>
 

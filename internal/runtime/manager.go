@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -101,7 +101,7 @@ func (m *Manager) StartRuntime(proc *process.Process, rtType RuntimeType) (*Agen
 		}
 		m.runtimes[proc.PID] = rt
 		proc.RuntimeAddr = rt.Addr
-		log.Printf("[runtime] registered virtual runtime for PID %d (%s)", proc.PID, proc.Name)
+		hklog.For("runtime").Debug("registered virtual runtime", "pid", proc.PID, "name", proc.Name)
 		return rt, nil
 	}
 
@@ -231,7 +231,7 @@ func (m *Manager) launchAndConnect(proc *process.Process, rtType RuntimeType, cm
 	}
 
 	agentAddr := fmt.Sprintf("localhost:%s", strings.TrimSpace(port))
-	log.Printf("[runtime] PID %d agent listening on %s", proc.PID, agentAddr)
+	hklog.For("runtime").Info("agent listening", "pid", proc.PID, "addr", agentAddr)
 
 	// Dial gRPC to the agent.
 	conn, err := grpc.NewClient(agentAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -272,7 +272,7 @@ func (m *Manager) launchAndConnect(proc *process.Process, rtType RuntimeType, cm
 	}
 
 	proc.RuntimeAddr = agentAddr
-	log.Printf("[runtime] PID %d (%s) initialized successfully", proc.PID, proc.Name)
+	hklog.For("runtime").Info("agent initialized", "pid", proc.PID, "name", proc.Name)
 
 	rt := &AgentRuntime{
 		PID:         proc.PID,
@@ -315,7 +315,7 @@ func (m *Manager) watchProcessExit(rt *AgentRuntime) {
 	}
 
 	// Process died on its own — clean up and notify.
-	log.Printf("[runtime] PID %d (%s) process exited on its own (code %d)", rt.PID, rt.ProcessInfo.Name, exitCode)
+	hklog.For("runtime").Warn("process exited on its own", "pid", rt.PID, "name", rt.ProcessInfo.Name, "exit_code", exitCode)
 
 	if rt.Conn != nil {
 		rt.Conn.Close()
@@ -339,7 +339,7 @@ func (m *Manager) StopRuntime(pid process.PID) error {
 	delete(m.runtimes, pid)
 	m.mu.Unlock()
 
-	log.Printf("[runtime] stopping runtime for PID %d (%s)", pid, rt.ProcessInfo.Name)
+	hklog.For("runtime").Info("stopping runtime", "pid", pid, "name", rt.ProcessInfo.Name)
 
 	// Virtual process — nothing to stop.
 	if rt.Cmd == nil {
@@ -361,13 +361,13 @@ func (m *Manager) StopRuntime(pid process.PID) error {
 	case <-rt.exitCh:
 		// Process exited gracefully.
 	case <-time.After(5 * time.Second):
-		log.Printf("[runtime] PID %d did not exit in time, killing", pid)
+		hklog.For("runtime").Warn("process did not exit in time, killing", "pid", pid)
 		_ = rt.Cmd.Process.Kill()
 		select {
 		case <-rt.exitCh:
 			// Process exited after kill.
 		case <-time.After(2 * time.Second):
-			log.Printf("[runtime] PID %d: kill did not take effect, abandoning", pid)
+			hklog.For("runtime").Error("kill did not take effect, abandoning", "pid", pid)
 		}
 	}
 
@@ -391,7 +391,7 @@ func (m *Manager) StopAll() {
 
 	for _, pid := range pids {
 		if err := m.StopRuntime(pid); err != nil {
-			log.Printf("[runtime] StopAll: PID %d: %v", pid, err)
+			hklog.For("runtime").Error("StopAll failed for process", "pid", pid, "error", err)
 		}
 	}
 }
@@ -412,7 +412,7 @@ func (m *Manager) KillAll() {
 
 	for _, rt := range rts {
 		if rt.Cmd != nil && rt.Cmd.Process != nil {
-			log.Printf("[runtime] force-killing PID %d (%s)", rt.PID, rt.ProcessInfo.Name)
+			hklog.For("runtime").Warn("force-killing process", "pid", rt.PID, "name", rt.ProcessInfo.Name)
 			_ = rt.Cmd.Process.Kill()
 		}
 		if rt.Conn != nil {

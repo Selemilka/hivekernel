@@ -2,7 +2,7 @@ package process
 
 import (
 	"fmt"
-	"log"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"sync"
 	"time"
 )
@@ -88,7 +88,7 @@ func (r *SignalRouter) Send(pid PID, sig Signal, info *ExitInfo) error {
 		return fmt.Errorf("signal %s to PID %d: %w", sig, pid, err)
 	}
 
-	log.Printf("[signal] %s -> PID %d (%s)", sig, pid, proc.Name)
+	hklog.For("signal").Debug("signal sent", "signal", sig, "pid", pid, "name", proc.Name)
 
 	switch sig {
 	case SIGKILL:
@@ -132,7 +132,7 @@ func (r *SignalRouter) Send(pid PID, sig Signal, info *ExitInfo) error {
 // if the process is still alive.
 func (r *SignalRouter) SendWithGrace(pid PID, grace time.Duration) {
 	if err := r.Send(pid, SIGTERM, nil); err != nil {
-		log.Printf("[signal] SIGTERM failed for PID %d: %v", pid, err)
+		hklog.For("signal").Error("SIGTERM failed", "pid", pid, "error", err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (r *SignalRouter) SendWithGrace(pid PID, grace time.Duration) {
 			return // already removed
 		}
 		if proc.State != StateDead {
-			log.Printf("[signal] PID %d did not exit after %s, sending SIGKILL", pid, grace)
+			hklog.For("signal").Warn("process did not exit, sending SIGKILL", "pid", pid, "grace", grace)
 			_ = r.Send(pid, SIGKILL, nil)
 		}
 	}()

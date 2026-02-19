@@ -44,12 +44,20 @@ class ToolContext:
     workspace: str = ""  # Agent workspace directory (if configured)
     llm: Any = None  # LLMClient (for power tools that need LLM access)
 
-    async def log(self, level: str, message: str) -> None:
+    async def log(self, level: str, message: str, **fields) -> None:
         """Log a message via syscall or core."""
         if self.syscall is not None:
-            await self.syscall.log(level, message)
+            await self.syscall.log(level, message, **fields)
         elif self.core is not None:
-            await self.core.log(level, message)
+            await self.core.log(level, message, **fields)
+
+    async def log_event(self, event_type: str, message: str, **fields) -> None:
+        """Emit a typed event (llm_call, tool_call, etc.) via the log syscall."""
+        fields["event_type"] = event_type
+        if self.syscall is not None:
+            await self.syscall.log("info", message, **fields)
+        elif self.core is not None:
+            await self.core.log("info", message, **fields)
 
     async def store_artifact(self, key: str, content: bytes) -> str:
         """Store artifact via syscall or core."""

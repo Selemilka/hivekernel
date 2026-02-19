@@ -1,10 +1,10 @@
 package ipc
 
 import (
-	"log"
 	"sync"
 	"time"
 
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/process"
 )
 
@@ -84,8 +84,7 @@ func (eb *EventBus) Publish(topic string, source process.PID, payload []byte) {
 	}
 
 	if len(subs) > 0 {
-		log.Printf("[events] published %q from PID %d to %d/%d subscribers",
-			topic, source, delivered, len(subs))
+		hklog.For("events").Debug("published event", "topic", topic, "source_pid", source, "delivered", delivered, "total_subs", len(subs))
 	}
 }
 

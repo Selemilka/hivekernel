@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"time"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
@@ -39,7 +39,7 @@ func (h *KernelSyscallHandler) HandleSyscall(
 	call *pb.SystemCall,
 ) *pb.SyscallResult {
 	callID := call.CallId
-	log.Printf("[syscall] PID %d call_id=%s", callerPID, callID)
+	hklog.For("syscall").Debug("handling syscall", "pid", callerPID, "call_id", callID)
 
 	switch c := call.Call.(type) {
 	case *pb.SystemCall_Spawn:
@@ -63,7 +63,7 @@ func (h *KernelSyscallHandler) HandleSyscall(
 	case *pb.SystemCall_ListSiblings:
 		return h.handleListSiblings(callID, callerPID)
 	default:
-		log.Printf("[syscall] unknown syscall type for call_id=%s", callID)
+		hklog.For("syscall").Warn("unknown syscall type", "call_id", callID)
 		return &pb.SyscallResult{CallId: callID}
 	}
 }
@@ -106,7 +106,7 @@ func (h *KernelSyscallHandler) handleSpawn(callID string, callerPID process.PID,
 			},
 		}
 	}
-	log.Printf("[syscall] spawn: PID %d spawned %s (PID %d)", callerPID, proc.Name, proc.PID)
+	hklog.For("syscall").Info("spawn", "caller_pid", callerPID, "name", proc.Name, "child_pid", proc.PID)
 	return &pb.SyscallResult{
 		CallId: callID,
 		Result: &pb.SyscallResult_Spawn{
@@ -153,7 +153,7 @@ func (h *KernelSyscallHandler) handleKill(callID string, callerPID process.PID, 
 	h.king.Signals().NotifyParent(req.TargetPid, -1, "killed")
 	killed = append(killed, req.TargetPid)
 
-	log.Printf("[syscall] kill: PID %d killed %v", callerPID, killed)
+	hklog.For("syscall").Info("kill", "caller_pid", callerPID, "killed", killed)
 	return &pb.SyscallResult{
 		CallId: callID,
 		Result: &pb.SyscallResult_Kill{
@@ -213,7 +213,7 @@ func (h *KernelSyscallHandler) handleSend(callID string, callerPID process.PID, 
 		}
 	}
 
-	log.Printf("[syscall] send: PID %d -> PID %d, type=%s", callerPID, req.ToPid, req.Type)
+	hklog.For("syscall").Debug("send", "from_pid", callerPID, "to_pid", req.ToPid, "type", req.Type)
 
 	// Extract trace context from payload and propagate to receiver.
 	traceID, traceSpan := extractTraceFromPayload(req.Payload)
@@ -280,7 +280,7 @@ func (h *KernelSyscallHandler) handleStore(callID string, callerPID process.PID,
 		}
 	}
 
-	log.Printf("[syscall] store: PID %d stored %q (id=%s)", callerPID, req.Key, id)
+	hklog.For("syscall").Debug("store", "pid", callerPID, "key", req.Key, "id", id)
 	return &pb.SyscallResult{
 		CallId: callID,
 		Result: &pb.SyscallResult_Store{
@@ -320,7 +320,7 @@ func (h *KernelSyscallHandler) handleGetArtifact(callID string, callerPID proces
 }
 
 func (h *KernelSyscallHandler) handleEscalate(callID string, callerPID process.PID, req *pb.EscalateRequest) *pb.SyscallResult {
-	log.Printf("[syscall] escalate from PID %d: severity=%s issue=%s", callerPID, req.Severity, req.Issue)
+	hklog.For("syscall").Warn("escalate", "pid", callerPID, "severity", req.Severity, "issue", req.Issue)
 	h.king.Inbox().Push(&ipc.Message{
 		FromPID:  callerPID,
 		ToPID:    h.king.PID(),
@@ -346,7 +346,7 @@ func (h *KernelSyscallHandler) handleLog(callID string, callerPID process.PID, r
 	case pb.LogLevel_LOG_ERROR:
 		levelStr = "error"
 	}
-	log.Printf("[agent:%d] [%s] %s", callerPID, levelStr, req.Message)
+	hklog.For("syscall").Info("agent log", "pid", callerPID, "level", levelStr, "message", req.Message)
 
 	// Emit log event so dashboard can display it.
 	if el := h.king.EventLog(); el != nil {
@@ -355,12 +355,20 @@ func (h *KernelSyscallHandler) handleLog(callID string, callerPID process.PID, r
 		if p, err := h.king.Registry().Get(callerPID); err == nil {
 			name = p.Name
 		}
+
+		// Determine event type: if Fields contains "event_type", use it as a typed event.
+		evtType := process.EventLogged
+		if et, ok := req.Fields["event_type"]; ok {
+			evtType = process.EventType(et)
+		}
+
 		el.Emit(process.ProcessEvent{
-			Type:    process.EventLogged,
+			Type:    evtType,
 			PID:     callerPID,
 			Name:    name,
 			Level:   levelStr,
 			Message: req.Message,
+			Fields:  req.Fields,
 		})
 	}
 
@@ -420,7 +428,7 @@ func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID strin
 	}
 
 	// Execute the task on the target agent.
-	log.Printf("[syscall] execute_on: PID %d -> PID %d, task=%s", callerPID, req.TargetPid, req.Task.GetDescription())
+	hklog.For("syscall").Info("execute_on", "caller_pid", callerPID, "target_pid", req.TargetPid, "task", req.Task.GetDescription())
 	taskResult, err := h.executor.ExecuteTask(ctx, rt.Addr, req.TargetPid, req.Task)
 	if err != nil {
 		return errResult(fmt.Sprintf("execute_on failed: %v", err))
@@ -463,7 +471,7 @@ func (h *KernelSyscallHandler) handleListSiblings(callID string, callerPID proce
 		})
 	}
 
-	log.Printf("[syscall] list_siblings: PID %d found %d siblings", callerPID, len(siblings))
+	hklog.For("syscall").Debug("list_siblings", "pid", callerPID, "count", len(siblings))
 	return &pb.SyscallResult{
 		CallId: callID,
 		Result: &pb.SyscallResult_ListSiblings{

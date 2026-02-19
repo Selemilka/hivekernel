@@ -16,7 +16,7 @@ Agents lose all state (memory, conversation history, task progress) when kernel 
 - Checkpoint format: JSONL or SQLite in `data/` directory
 - Trigger: periodic (every N minutes) + on graceful shutdown (SIGTERM)
 
-### [ ] 2. Queen mailbox unification (plan 012)
+### [x] 2. Queen mailbox unification (plan 012)
 Queen has duplicate code paths: `handle_task` (via execute_task) and `handle_message` (via mailbox) with the same business logic in both. This is the #1 architectural debt.
 
 Fix: Queen **receives** all tasks via `handle_message()` (single entry point). Queen **delegates** to children via `core.execute_task()` (synchronous, waits for result -- this is fine, not legacy). `handle_task()` becomes a thin adapter that calls the same internal methods.
@@ -29,7 +29,7 @@ Note: `execute_task` is NOT legacy -- it's the right tool for parent->child dele
 - Phase 2: Unify handle_message as single entry
 - Phase 3: handle_task becomes thin wrapper
 
-### [ ] 3. Wire supervisor auto-restart
+### [x] 3. Wire supervisor auto-restart
 `Supervisor.onRestart` callback exists but is never set in `main.go`. Daemon crash recovery is architecturally correct but effectively a no-op. One-line fix to connect it to the runtime manager's `StartRuntime()`.
 
 **Files:** `cmd/hivekernel/main.go`, `internal/process/supervisor.go`, `internal/runtime/manager.go`

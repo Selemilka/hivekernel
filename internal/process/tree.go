@@ -2,8 +2,9 @@ package process
 
 import (
 	"fmt"
-	"log"
 	"time"
+
+	"github.com/selemilka/hivekernel/internal/hklog"
 )
 
 // TreeOps provides high-level operations on the process tree.
@@ -40,8 +41,7 @@ func (t *TreeOps) KillBranch(pid PID, grace time.Duration) ([]PID, error) {
 			continue
 		}
 
-		log.Printf("[tree] killing PID %d (%s) in branch of PID %d",
-			target.PID, target.Name, pid)
+		hklog.For("tree").Debug("killing process in branch", "pid", target.PID, "name", target.Name, "branch_root", pid)
 
 		// Send SIGTERM.
 		_ = t.signals.Send(target.PID, SIGTERM, nil)
@@ -57,7 +57,7 @@ func (t *TreeOps) KillBranch(pid PID, grace time.Duration) ([]PID, error) {
 				continue
 			}
 			if p.State != StateDead {
-				log.Printf("[tree] PID %d did not exit, sending SIGKILL", p.PID)
+				hklog.For("tree").Warn("process did not exit, sending SIGKILL", "pid", p.PID)
 				_ = t.signals.Send(p.PID, SIGKILL, nil)
 			}
 		}
@@ -131,8 +131,7 @@ func (t *TreeOps) Reparent(pid, newParentPID PID) error {
 	err = t.registry.Update(pid, func(p *Process) {
 		oldPPID := p.PPID
 		p.PPID = newParentPID
-		log.Printf("[tree] reparented PID %d (%s) from PPID %d to PPID %d",
-			p.PID, p.Name, oldPPID, newParentPID)
+		hklog.For("tree").Info("reparented", "pid", p.PID, "name", p.Name, "old_ppid", oldPPID, "new_ppid", newParentPID)
 	})
 	if err != nil {
 		return fmt.Errorf("reparent: %w", err)
@@ -161,7 +160,7 @@ func (t *TreeOps) OrphanAdoption(adoptiveParentPID PID) []PID {
 	}
 
 	if len(adopted) > 0 {
-		log.Printf("[tree] adopted %d orphans under PID %d", len(adopted), adoptiveParentPID)
+		hklog.For("tree").Info("adopted orphans", "count", len(adopted), "parent_pid", adoptiveParentPID)
 	}
 	return adopted
 }

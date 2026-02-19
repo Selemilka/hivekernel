@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/cluster"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
@@ -155,7 +155,7 @@ func New(cfg Config) (*King, error) {
 	k.budget.SetBudget(kernelProc.PID, resources.TierSonnet, cfg.DefaultLimits.MaxTokensTotal*10)
 	k.budget.SetBudget(kernelProc.PID, resources.TierMini, cfg.DefaultLimits.MaxTokensTotal*100)
 
-	log.Printf("[king] bootstrapped as PID %d on %s", kernelProc.PID, cfg.NodeName)
+	hklog.For("king").Info("bootstrapped", "pid", kernelProc.PID, "node", cfg.NodeName)
 	return k, nil
 }
 
@@ -297,13 +297,13 @@ func (k *King) PID() process.PID {
 // Run starts the kernel main loop. Blocks until ctx is cancelled.
 func (k *King) Run(ctx context.Context) error {
 	ctx, k.cancel = context.WithCancel(ctx)
-	log.Printf("[king] running, listening for messages...")
+	hklog.For("king").Info("running, listening for messages")
 
 	// Main loop: process incoming messages.
 	for {
 		msg := k.inbox.PopWait(ctx.Done())
 		if msg == nil {
-			log.Printf("[king] shutting down")
+			hklog.For("king").Info("shutting down")
 			return ctx.Err()
 		}
 		k.handleMessage(msg)
@@ -421,15 +421,13 @@ func (k *King) SpawnChild(req process.SpawnRequest) (*process.Process, error) {
 		k.SetTrace(proc.PID, tID, childSpan)
 	}
 
-	log.Printf("[king] spawned %s (PID %d) under PID %d, role=%s, cog=%s",
-		proc.Name, proc.PID, proc.PPID, proc.Role, proc.CognitiveTier)
+	hklog.For("king").Info("spawned child", "name", proc.Name, "pid", proc.PID, "ppid", proc.PPID, "role", proc.Role, "cog", proc.CognitiveTier)
 	return proc, nil
 }
 
 // handleMessage dispatches a message to the appropriate handler.
 func (k *King) handleMessage(msg *ipc.Message) {
-	log.Printf("[king] received message %s from PID %d, type=%s, priority=%d",
-		msg.ID, msg.FromPID, msg.Type, msg.Priority)
+	hklog.For("king").Debug("received message", "id", msg.ID, "from_pid", msg.FromPID, "type", msg.Type, "priority", msg.Priority)
 
 	switch msg.Type {
 	case "escalation":
@@ -442,7 +440,7 @@ func (k *King) handleMessage(msg *ipc.Message) {
 }
 
 func (k *King) handleEscalation(msg *ipc.Message) {
-	log.Printf("[king] escalation from PID %d: %s", msg.FromPID, string(msg.Payload))
+	hklog.For("king").Warn("escalation received", "from_pid", msg.FromPID, "payload", string(msg.Payload))
 	// Publish as event so subscribers can react.
 	k.eventBus.Publish("escalation", msg.FromPID, msg.Payload)
 
@@ -463,38 +461,38 @@ func (k *King) handleOverloadEscalation(fromPID process.PID) {
 	sourceNode := proc.VPS
 	target, err := k.nodes.FindLeastLoaded(sourceNode)
 	if err != nil {
-		log.Printf("[king] no migration target available: %v", err)
+		hklog.For("king").Warn("no migration target available", "error", err)
 		return
 	}
 
 	mig, err := k.migrator.PrepareMigration(fromPID, target.ID)
 	if err != nil {
-		log.Printf("[king] migration preparation failed: %v", err)
+		hklog.For("king").Error("migration preparation failed", "error", err)
 		return
 	}
 
 	if err := k.migrator.ExecuteMigration(mig.ID); err != nil {
-		log.Printf("[king] migration execution failed: %v", err)
+		hklog.For("king").Error("migration execution failed", "error", err)
 		return
 	}
 
-	log.Printf("[king] migrated PID %d branch from %s to %s", fromPID, sourceNode, target.ID)
+	hklog.For("king").Info("migrated branch", "pid", fromPID, "from", sourceNode, "to", target.ID)
 	k.eventBus.Publish("migration_completed", fromPID,
 		[]byte(fmt.Sprintf("migrated from %s to %s", sourceNode, target.ID)))
 }
 
 func (k *King) handleSpawnRequest(msg *ipc.Message) {
-	log.Printf("[king] spawn request from PID %d: %s", msg.FromPID, string(msg.Payload))
+	hklog.For("king").Info("spawn request", "from_pid", msg.FromPID, "payload", string(msg.Payload))
 }
 
 func (k *King) routeMessage(msg *ipc.Message) {
 	if msg.ToPID == 0 && msg.ToQueue == "" {
-		log.Printf("[king] message %s has no target, dropping", msg.ID)
+		hklog.For("king").Warn("message has no target, dropping", "id", msg.ID)
 		return
 	}
 	// Route through broker (validates rules, computes priority, delivers).
 	if err := k.broker.Route(msg); err != nil {
-		log.Printf("[king] routing failed for message %s: %v", msg.ID, err)
+		hklog.For("king").Error("routing failed", "id", msg.ID, "error", err)
 	}
 }
 
@@ -503,11 +501,11 @@ func (k *King) routeMessage(msg *ipc.Message) {
 func (k *King) RunCronPoller(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	log.Printf("[cron] poller started (30s interval)")
+	hklog.For("cron").Info("poller started", "interval", "30s")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[cron] poller stopped")
+			hklog.For("cron").Info("poller stopped")
 			return
 		case <-ticker.C:
 			due := k.cron.CheckDue(time.Now())
@@ -520,17 +518,18 @@ func (k *King) RunCronPoller(ctx context.Context) {
 
 // executeCronEntry dispatches a single cron entry based on its action type.
 func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry) {
-	log.Printf("[cron] firing %q (action=%s, target=%d)", entry.Name, entry.Action, entry.TargetPID)
+	cronLog := hklog.For("cron")
+	cronLog.Info("firing cron entry", "name", entry.Name, "action", entry.Action, "target_pid", entry.TargetPID)
 
 	switch entry.Action {
 	case scheduler.CronExecute:
 		if k.executor == nil || k.rtManager == nil {
-			log.Printf("[cron] %q: executor or runtime manager not available", entry.Name)
+			cronLog.Error("executor or runtime manager not available", "name", entry.Name)
 			return
 		}
 		rt := k.rtManager.GetRuntime(entry.TargetPID)
 		if rt == nil {
-			log.Printf("[cron] %q: no runtime for PID %d", entry.Name, entry.TargetPID)
+			cronLog.Error("no runtime for target", "name", entry.Name, "pid", entry.TargetPID)
 			return
 		}
 		cronTraceID := fmt.Sprintf("cron-%s-%d", entry.ID, time.Now().Unix())
@@ -567,33 +566,53 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 				PayloadPreview: truncatePayload(string(jsonPayload), 2000),
 			})
 		}
+		execStart := time.Now()
 		result, err := k.executor.ExecuteTask(ctx, rt.Addr, entry.TargetPID, taskReq)
+		durationMs := time.Since(execStart).Milliseconds()
 		if err != nil {
-			log.Printf("[cron] %q: execute failed: %v", entry.Name, err)
+			cronLog.Error("execute failed", "name", entry.Name, "error", err)
+			entry.LastExitCode = 1
+			entry.LastOutput = fmt.Sprintf("error: %v", err)
+			entry.LastDurationMs = durationMs
 			if el := k.eventLog; el != nil {
 				el.Emit(process.ProcessEvent{
-					Type:    process.EventLogged,
+					Type:    process.EventCronExecuted,
 					PID:     entry.TargetPID,
 					Name:    entry.Name,
 					Level:   "error",
 					Message: fmt.Sprintf("[cron] %q: execute failed: %v", entry.Name, err),
+					Fields: map[string]string{
+						"cron_id":     entry.ID,
+						"cron_name":   entry.Name,
+						"exit_code":   "1",
+						"duration_ms": fmt.Sprint(durationMs),
+					},
 				})
 			}
 			return
 		}
-		log.Printf("[cron] %q: completed (exit=%d, output=%d bytes)",
-			entry.Name, result.ExitCode, len(result.Output))
+		entry.LastExitCode = result.ExitCode
+		entry.LastOutput = truncatePayload(result.Output, 4000)
+		entry.LastDurationMs = durationMs
+		cronLog.Info("cron completed", "name", entry.Name, "exit_code", result.ExitCode, "duration_ms", durationMs, "output_bytes", len(result.Output))
 		if el := k.eventLog; el != nil {
 			level := "info"
 			if result.ExitCode != 0 {
 				level = "warn"
 			}
 			el.Emit(process.ProcessEvent{
-				Type:    process.EventLogged,
+				Type:    process.EventCronExecuted,
 				PID:     entry.TargetPID,
 				Name:    entry.Name,
 				Level:   level,
 				Message: fmt.Sprintf("[cron] %q: exit=%d, output=%s", entry.Name, result.ExitCode, truncatePayload(result.Output, 500)),
+				Fields: map[string]string{
+					"cron_id":        entry.ID,
+					"cron_name":      entry.Name,
+					"exit_code":      fmt.Sprint(result.ExitCode),
+					"output_preview": truncatePayload(result.Output, 500),
+					"duration_ms":    fmt.Sprint(durationMs),
+				},
 			})
 		}
 
@@ -604,7 +623,7 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 		}
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
-			log.Printf("[cron] %q: failed to marshal payload: %v", entry.Name, err)
+			cronLog.Error("failed to marshal payload", "name", entry.Name, "error", err)
 			return
 		}
 		msg := &ipc.Message{
@@ -615,7 +634,7 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 			Payload:  jsonPayload,
 		}
 		if err := k.broker.Route(msg); err != nil {
-			log.Printf("[cron] %q: message route failed: %v", entry.Name, err)
+			cronLog.Error("message route failed", "name", entry.Name, "error", err)
 			return
 		}
 		// Emit message_sent event for dashboard visibility.
@@ -634,7 +653,7 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 				PayloadPreview: truncatePayload(string(jsonPayload), 2000),
 			})
 		}
-		log.Printf("[cron] %q: message sent to PID %d", entry.Name, entry.TargetPID)
+		cronLog.Info("message sent", "name", entry.Name, "target_pid", entry.TargetPID)
 
 	case scheduler.CronSpawn:
 		_, err := k.SpawnChild(process.SpawnRequest{
@@ -644,26 +663,46 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 			CognitiveTier: entry.SpawnTier,
 		})
 		if err != nil {
-			log.Printf("[cron] %q: spawn failed: %v", entry.Name, err)
+			cronLog.Error("spawn failed", "name", entry.Name, "error", err)
 		}
 
 	case scheduler.CronWake:
 		if err := k.registry.SetState(entry.TargetPID, process.StateRunning); err != nil {
-			log.Printf("[cron] %q: wake failed: %v", entry.Name, err)
+			cronLog.Error("wake failed", "name", entry.Name, "error", err)
 		}
 
 	default:
-		log.Printf("[cron] %q: unknown action %s", entry.Name, entry.Action)
+		cronLog.Warn("unknown cron action", "name", entry.Name, "action", entry.Action)
 	}
+}
+
+// EmitLog implements hklog.LogEmitter, forwarding kernel slog records to the EventLog.
+func (k *King) EmitLog(pid uint64, level, component, message string, fields map[string]string) {
+	el := k.eventLog
+	if el == nil {
+		return
+	}
+	if fields == nil {
+		fields = map[string]string{}
+	}
+	fields["component"] = component
+	el.Emit(process.ProcessEvent{
+		Type:    process.EventLogged,
+		PID:     process.PID(pid),
+		Name:    component,
+		Level:   level,
+		Message: message,
+		Fields:  fields,
+	})
 }
 
 // PrintProcessTable logs the current process table (ps-like output).
 func (k *King) PrintProcessTable() {
 	procs := k.registry.List()
-	log.Printf("PID  PPID USER       ROLE       COG        MODEL   VPS   STATE    COMMAND")
-	log.Printf("-------------------------------------------------------------------")
+	fmt.Printf("PID  PPID USER       ROLE       COG        MODEL   VPS   STATE    COMMAND\n")
+	fmt.Printf("-------------------------------------------------------------------\n")
 	for _, p := range procs {
-		log.Printf("%-4d %-4d %-10s %-10s %-10s %-7s %-5s %-8s %s",
+		fmt.Printf("%-4d %-4d %-10s %-10s %-10s %-7s %-5s %-8s %s\n",
 			p.PID, p.PPID, p.User, p.Role, p.CognitiveTier,
 			p.Model, p.VPS, p.State, p.Name)
 	}

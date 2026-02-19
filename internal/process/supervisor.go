@@ -2,9 +2,10 @@ package process
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/selemilka/hivekernel/internal/hklog"
 )
 
 // RestartPolicy defines how a process should be handled when it crashes.
@@ -124,8 +125,7 @@ func (s *Supervisor) HandleChildExit(exitedPID PID, exitCode int) {
 
 	policy := RestartPolicyForRole(proc.Role)
 
-	log.Printf("[supervisor] PID %d (%s) exited with code %d, policy=%d",
-		exitedPID, proc.Name, exitCode, policy)
+	hklog.For("supervisor").Info("child exited", "pid", exitedPID, "name", proc.Name, "exit_code", exitCode, "policy", policy)
 
 	switch policy {
 	case RestartAlways:
@@ -158,8 +158,7 @@ func (s *Supervisor) attemptRestart(proc *Process, exitCode int) {
 	}
 
 	if count >= s.config.MaxRestartAttempts {
-		log.Printf("[supervisor] PID %d (%s) exceeded max restart attempts (%d), giving up",
-			proc.PID, proc.Name, s.config.MaxRestartAttempts)
+		hklog.For("supervisor").Warn("max restart attempts exceeded", "pid", proc.PID, "name", proc.Name, "max_attempts", s.config.MaxRestartAttempts)
 		_ = s.registry.SetState(proc.PID, StateDead)
 		s.signals.NotifyParent(proc.PID, exitCode, "max restarts exceeded")
 		s.emitEvent("crashed", proc, "max restarts exceeded, notified parent")
@@ -168,8 +167,7 @@ func (s *Supervisor) attemptRestart(proc *Process, exitCode int) {
 
 	// Backoff before restart.
 	backoff := s.config.RestartBackoff * time.Duration(count+1)
-	log.Printf("[supervisor] restarting PID %d (%s) in %s (attempt %d/%d)",
-		proc.PID, proc.Name, backoff, count+1, s.config.MaxRestartAttempts)
+	hklog.For("supervisor").Info("restarting process", "pid", proc.PID, "name", proc.Name, "backoff", backoff, "attempt", count+1, "max_attempts", s.config.MaxRestartAttempts)
 
 	s.mu.Lock()
 	s.restartCounts[proc.PID] = count + 1
@@ -181,7 +179,7 @@ func (s *Supervisor) attemptRestart(proc *Process, exitCode int) {
 
 		if s.onRestart != nil {
 			if err := s.onRestart(proc); err != nil {
-				log.Printf("[supervisor] restart failed for PID %d: %v", proc.PID, err)
+				hklog.For("supervisor").Error("restart failed", "pid", proc.PID, "error", err)
 				s.emitEvent("crashed", proc, "restart failed: "+err.Error())
 				return
 			}
@@ -189,7 +187,7 @@ func (s *Supervisor) attemptRestart(proc *Process, exitCode int) {
 
 		_ = s.registry.SetState(proc.PID, StateRunning)
 		s.emitEvent("restarted", proc, "")
-		log.Printf("[supervisor] PID %d (%s) restarted successfully", proc.PID, proc.Name)
+		hklog.For("supervisor").Info("restarted successfully", "pid", proc.PID, "name", proc.Name)
 	}()
 }
 
@@ -217,8 +215,7 @@ func (s *Supervisor) reapZombies() {
 			continue
 		}
 		if now.Sub(p.UpdatedAt) > s.config.ZombieTimeout {
-			log.Printf("[supervisor] reaping zombie PID %d (%s), zombie for %s",
-				p.PID, p.Name, now.Sub(p.UpdatedAt).Round(time.Second))
+			hklog.For("supervisor").Info("reaping zombie", "pid", p.PID, "name", p.Name, "zombie_duration", now.Sub(p.UpdatedAt).Round(time.Second))
 
 			// Notify parent one more time.
 			s.signals.NotifyParent(p.PID, -1, "zombie reaped")
@@ -259,6 +256,6 @@ func (s *Supervisor) emitEvent(typ string, proc *Process, details string) {
 	case s.events <- evt:
 	default:
 		// Channel full, drop event.
-		log.Printf("[supervisor] event channel full, dropping: %+v", evt)
+		hklog.For("supervisor").Warn("event channel full, dropping event", "event_type", evt.Type, "pid", evt.PID)
 	}
 }

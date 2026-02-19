@@ -502,25 +502,47 @@ async function doExecute() {
 // ─── Logs ───
 
 const MAX_LOG_LINES = 200;
+let logLevelFilter = 'all';
+let logAutoScroll = true;
 
 function appendLogEntry(data) {
     const container = document.getElementById('log-entries');
     if (!container) return;
 
     const ts = data.ts ? new Date(data.ts).toLocaleTimeString() : '';
-    const level = (data.level || 'info').toUpperCase();
+    const level = (data.level || 'info').toLowerCase();
     const pid = data.pid || 0;
     const name = data.name || '';
     const msg = data.message || '';
+    const eventType = data.event_type || '';
 
     const div = document.createElement('div');
-    div.className = `log-line log-${(data.level || 'info').toLowerCase()}`;
+    div.className = `log-line log-${level}`;
+    if (eventType) div.classList.add(`log-evt-${eventType.replace('_', '-')}`);
+    div.dataset.level = level;
+    div.dataset.pid = pid;
+
+    let prefix = '';
+    if (eventType === 'llm_call') prefix = '<span class="log-evt-tag log-evt-llm">LLM</span> ';
+    else if (eventType === 'tool_call') prefix = '<span class="log-evt-tag log-evt-tool">TOOL</span> ';
+    else if (eventType === 'cron_executed') prefix = '<span class="log-evt-tag log-evt-cron">CRON</span> ';
+
     div.innerHTML =
         `<span class="log-ts">${ts}</span>` +
         `<span class="log-pid">PID ${pid}</span>` +
         (name ? `<span class="log-name">${name}</span>` : '') +
-        `<span class="log-level">[${level}]</span> ` +
+        prefix +
+        `<span class="log-level">[${level.toUpperCase()}]</span> ` +
         `<span class="log-msg">${escapeHtml(msg)}</span>`;
+
+    // Apply current filters.
+    if (logLevelFilter !== 'all' && level !== logLevelFilter) {
+        div.classList.add('log-hidden');
+    }
+    const search = (document.getElementById('log-search') || {}).value || '';
+    if (search && !msg.toLowerCase().includes(search.toLowerCase())) {
+        div.classList.add('log-hidden');
+    }
 
     container.appendChild(div);
 
@@ -530,7 +552,33 @@ function appendLogEntry(data) {
     }
 
     // Auto-scroll to bottom.
-    container.scrollTop = container.scrollHeight;
+    if (logAutoScroll) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function setLogLevel(level, btn) {
+    logLevelFilter = level;
+    document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    filterLogs();
+}
+
+function filterLogs() {
+    const search = (document.getElementById('log-search') || {}).value.toLowerCase();
+    const container = document.getElementById('log-entries');
+    if (!container) return;
+    for (const line of container.children) {
+        const lvl = line.dataset.level || '';
+        const msg = (line.querySelector('.log-msg') || {}).textContent || '';
+        const levelMatch = logLevelFilter === 'all' || lvl === logLevelFilter;
+        const textMatch = !search || msg.toLowerCase().includes(search);
+        line.classList.toggle('log-hidden', !(levelMatch && textMatch));
+    }
+}
+
+function toggleAutoScroll() {
+    logAutoScroll = document.getElementById('log-autoscroll').checked;
 }
 
 function escapeHtml(text) {
@@ -550,6 +598,47 @@ function toggleLogPanel() {
     if (content.style.display === 'none') {
         content.style.display = 'flex';
         toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
+// ─── LLM Usage Panel ───
+
+async function loadLLMUsage() {
+    try {
+        const resp = await fetch('/api/llm-usage');
+        const data = await resp.json();
+        if (!data.ok) return;
+
+        document.getElementById('llm-summary').textContent =
+            `Total: ${data.total_tokens.toLocaleString()} tokens, ${data.total_calls} calls`;
+
+        const tbody = document.getElementById('llm-body');
+        tbody.innerHTML = '';
+        data.entries.forEach(e => {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                `<td>${e.pid}</td>` +
+                `<td>${escapeHtml(e.name)}</td>` +
+                `<td>${e.tokens.toLocaleString()}</td>` +
+                `<td>${e.calls}</td>` +
+                `<td>${e.avg_latency_ms}ms</td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error('loadLLMUsage failed:', e);
+    }
+}
+
+function toggleLLMPanel() {
+    const content = document.getElementById('llm-content');
+    const toggle = document.getElementById('llm-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '-';
+        loadLLMUsage();
     } else {
         content.style.display = 'none';
         toggle.textContent = '+';
@@ -1310,6 +1399,18 @@ async function loadTraceDetail(traceId) {
                 desc = `[${escapeHtml(evt.level || 'info')}] ${escapeHtml(pidName)}: ${escapeHtml((evt.message || '').substring(0, 120))}`;
             } else if (evt.type === 'removed') {
                 desc = `PID ${evt.pid} removed`;
+            } else if (evt.type === 'llm_call') {
+                const f = evt.fields || {};
+                desc = `LLM: ${escapeHtml(f.model || '?')} (${f.total_tokens || 0} tokens, ${f.latency_ms || 0}ms)`;
+                cls = 'trace-evt-llm-call';
+            } else if (evt.type === 'tool_call') {
+                const f = evt.fields || {};
+                desc = `Tool: ${escapeHtml(f.tool_name || '?')} (${f.duration_ms || 0}ms)`;
+                cls = 'trace-evt-tool-call';
+            } else if (evt.type === 'cron_executed') {
+                const f = evt.fields || {};
+                desc = `Cron: ${escapeHtml(f.cron_name || '?')} exit=${f.exit_code || '?'} (${f.duration_ms || 0}ms)`;
+                cls = 'trace-evt-cron-executed';
             } else {
                 desc = `${evt.type} PID ${evt.pid}`;
             }
@@ -1323,6 +1424,45 @@ async function loadTraceDetail(traceId) {
             if (evt.trace_span) {
                 div.innerHTML += `<span class="trace-span">${escapeHtml(evt.trace_span)}</span>`;
             }
+
+            // Add expandable text previews for LLM and tool calls.
+            const f = evt.fields || {};
+            if (evt.type === 'llm_call' && (f.prompt_preview || f.response_preview)) {
+                const details = document.createElement('div');
+                details.className = 'trace-text-details';
+                details.style.display = 'none';
+                let html = '';
+                if (f.prompt_preview) {
+                    html += `<div class="trace-text-block"><div class="trace-text-label">Prompt:</div><pre class="trace-text-content">${escapeHtml(f.prompt_preview)}</pre></div>`;
+                }
+                if (f.response_preview) {
+                    html += `<div class="trace-text-block"><div class="trace-text-label">Response:</div><pre class="trace-text-content">${escapeHtml(f.response_preview)}</pre></div>`;
+                }
+                details.innerHTML = html;
+                div.appendChild(details);
+                div.style.cursor = 'pointer';
+                div.addEventListener('click', () => {
+                    details.style.display = details.style.display === 'none' ? 'block' : 'none';
+                });
+            } else if (evt.type === 'tool_call' && (f.args_preview || f.result_preview)) {
+                const details = document.createElement('div');
+                details.className = 'trace-text-details';
+                details.style.display = 'none';
+                let html = '';
+                if (f.args_preview) {
+                    html += `<div class="trace-text-block"><div class="trace-text-label">Args:</div><pre class="trace-text-content">${escapeHtml(f.args_preview)}</pre></div>`;
+                }
+                if (f.result_preview) {
+                    html += `<div class="trace-text-block"><div class="trace-text-label">Result:</div><pre class="trace-text-content">${escapeHtml(f.result_preview)}</pre></div>`;
+                }
+                details.innerHTML = html;
+                div.appendChild(details);
+                div.style.cursor = 'pointer';
+                div.addEventListener('click', () => {
+                    details.style.display = details.style.display === 'none' ? 'block' : 'none';
+                });
+            }
+
             container.appendChild(div);
         });
     } catch (e) {

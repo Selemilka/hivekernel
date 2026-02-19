@@ -81,6 +81,8 @@ func (s *Spawner) Spawn(req SpawnRequest) (*Process, error) {
 		Limits:        req.Limits,
 		SystemPrompt:  req.SystemPrompt,
 		Metadata:      req.Metadata,
+		RuntimeType:   req.RuntimeType,
+		RuntimeImage:  req.RuntimeImage,
 	}
 
 	pid, err := s.registry.Register(proc)

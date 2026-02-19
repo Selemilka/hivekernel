@@ -22,7 +22,7 @@ async function loadCronEntries() {
         const countEl = document.getElementById('cron-count');
 
         if (!cronData.ok) {
-            tbody.innerHTML = `<tr><td colspan="9" class="cron-empty">Error: ${cronData.error}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="cron-empty">Error: ${cronData.error}</td></tr>`;
             return;
         }
 
@@ -30,7 +30,7 @@ async function loadCronEntries() {
         countEl.textContent = entries.length + ' job' + (entries.length !== 1 ? 's' : '');
 
         if (entries.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="cron-empty">No cron jobs configured. Click "+ Add Cron Job" to create one.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="cron-empty">No cron jobs configured. Click "+ Add Cron Job" to create one.</td></tr>';
             return;
         }
 
@@ -49,6 +49,10 @@ async function loadCronEntries() {
                     : entry.execute_description)
                 : '-';
 
+            const exitCode = entry.last_run_ms ? String(entry.last_exit_code) : '-';
+            const exitClass = entry.last_exit_code === 0 ? 'badge-ok' : (entry.last_run_ms ? 'badge-off' : '');
+            const durationStr = entry.last_duration_ms ? (entry.last_duration_ms / 1000).toFixed(1) + 's' : '-';
+
             tr.innerHTML =
                 `<td class="cron-cell-name">${escapeHtml(entry.name)}</td>`
                 + `<td><code>${escapeHtml(entry.cron_expression)}</code><div class="cron-human">${describeCron(entry.cron_expression)}</div></td>`
@@ -58,12 +62,14 @@ async function loadCronEntries() {
                 + `<td>${statusBadge}</td>`
                 + `<td>${lastRun}</td>`
                 + `<td>${nextRun}</td>`
+                + `<td>${exitClass ? `<span class="badge ${exitClass}">${exitCode}</span>` : exitCode}</td>`
+                + `<td>${durationStr}</td>`
                 + `<td><button class="btn-danger" style="padding:3px 10px;font-size:11px" onclick="removeCron('${entry.id}')">Delete</button></td>`;
             tbody.appendChild(tr);
         });
     } catch (e) {
         document.getElementById('cron-body').innerHTML =
-            `<tr><td colspan="9" class="cron-empty">Failed to load: ${e.message}</td></tr>`;
+            `<tr><td colspan="11" class="cron-empty">Failed to load: ${e.message}</td></tr>`;
     }
 }
 

@@ -24,6 +24,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections import deque
 
 from .llm_agent import LLMAgent
@@ -134,7 +135,7 @@ class QueenAgent(LLMAgent):
         try:
             payload = json.loads(message.payload.decode("utf-8"))
             description = payload.get("task", payload.get("description", ""))
-            trace_id = payload.get("trace_id", "")
+            trace_id = payload.get("trace_id", "") or str(uuid.uuid4())
             if not description:
                 result_payload = json.dumps({"error": "empty task"}).encode("utf-8")
             else:
@@ -213,7 +214,7 @@ class QueenAgent(LLMAgent):
         """Execute stream entry point. Delegates to unified _core_handle_* methods."""
         description = task.params.get("task", task.description)
         self._max_workers = task.params.get("max_workers", "3")
-        trace_id = task.params.get("trace_id", "")
+        trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
         if not description.strip():
             return TaskResult(exit_code=1, output="Empty task description")
 

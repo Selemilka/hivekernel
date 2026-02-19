@@ -14,6 +14,7 @@ Runtime image: hivekernel_sdk.orchestrator:OrchestratorAgent
 import asyncio
 import json
 import logging
+import uuid
 
 from .llm_agent import LLMAgent
 from .syscall import SyscallContext
@@ -31,7 +32,7 @@ class OrchestratorAgent(LLMAgent):
         description = task.params.get("task", task.description)
         max_workers = int(task.params.get("max_workers", "3"))
         max_workers = min(max_workers, MAX_WORKERS)
-        trace_id = task.params.get("trace_id", "")
+        trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
 
         await ctx.log("info", f"Orchestrator starting: {description[:80]}")
         await ctx.report_progress("Analyzing task...", 5.0)

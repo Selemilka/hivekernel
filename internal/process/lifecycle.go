@@ -2,7 +2,7 @@ package process
 
 import (
 	"fmt"
-	"log"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"sync"
 	"time"
 )
@@ -55,7 +55,7 @@ func (lm *LifecycleManager) Sleep(pid PID) error {
 		return fmt.Errorf("sleep: %w", err)
 	}
 
-	log.Printf("[lifecycle] PID %d (%s) → sleeping", pid, proc.Name)
+	hklog.For("lifecycle").Info("process sleeping", "pid", pid, "name", proc.Name)
 	return nil
 }
 
@@ -79,7 +79,7 @@ func (lm *LifecycleManager) Wake(pid PID) error {
 		return fmt.Errorf("wake: %w", err)
 	}
 
-	log.Printf("[lifecycle] PID %d (%s) → woken", pid, proc.Name)
+	hklog.For("lifecycle").Info("process woken", "pid", pid, "name", proc.Name)
 	return nil
 }
 
@@ -110,7 +110,7 @@ func (lm *LifecycleManager) CompleteTask(pid PID, exitCode int, output []byte, e
 	// Notify parent via SIGCHLD.
 	_ = lm.signals.Send(proc.PPID, SIGCHLD, nil)
 
-	log.Printf("[lifecycle] PID %d (%s) completed: exit=%d", pid, proc.Name, exitCode)
+	hklog.For("lifecycle").Info("task completed", "pid", pid, "name", proc.Name, "exit_code", exitCode)
 	return result, nil
 }
 
@@ -195,7 +195,7 @@ func (lm *LifecycleManager) CollapseBranch(parentPID PID) ([]TaskResult, error) 
 		}
 	}
 
-	log.Printf("[lifecycle] collapsed branch under PID %d: %d children", parentPID, len(results))
+	hklog.For("lifecycle").Info("collapsed branch", "parent_pid", parentPID, "children", len(results))
 	return results, nil
 }
 

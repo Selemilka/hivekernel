@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any
 
 from .builtin_tools import ALL_BUILTIN_TOOLS, register_builtin_tools
@@ -138,6 +139,9 @@ class ToolAgent(LLMAgent):
         tool_ctx = self._make_tool_ctx(syscall=ctx)
         await self.memory.load(tool_ctx)
 
+        # Extract or generate trace_id for event correlation.
+        trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
+
         prompt = task.params.get("task", task.description)
         result = await self.agent_loop.run(
             prompt=prompt,
@@ -151,6 +155,11 @@ class ToolAgent(LLMAgent):
             metadata={
                 "iterations": str(result.iterations),
                 "tool_calls": str(result.tool_calls_total),
+                "tokens_used": str(result.total_tokens),
+                "prompt_tokens": str(result.prompt_tokens),
+                "completion_tokens": str(result.completion_tokens),
+                "llm_calls": str(result.llm_calls),
+                "latency_ms": str(result.total_latency_ms),
             },
         )
 

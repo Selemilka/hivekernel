@@ -2,9 +2,9 @@ package ipc
 
 import (
 	"fmt"
-	"log"
 	"sync"
 
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/process"
 )
 
@@ -71,8 +71,7 @@ func (b *Broker) Route(msg *Message) error {
 		// Named queue delivery.
 		q := b.GetNamedQueue(msg.ToQueue)
 		q.Push(msg)
-		log.Printf("[broker] PID %d -> queue %q (type=%s, priority=%d)",
-			msg.FromPID, msg.ToQueue, msg.Type, msg.Priority)
+		hklog.For("broker").Debug("routed to queue", "from_pid", msg.FromPID, "queue", msg.ToQueue, "type", msg.Type, "priority", msg.Priority)
 		return nil
 	}
 
@@ -90,8 +89,7 @@ func (b *Broker) Route(msg *Message) error {
 
 		q := b.GetInbox(msg.ToPID)
 		q.Push(msg)
-		log.Printf("[broker] PID %d -> PID %d (route=%s, type=%s, priority=%d)",
-			msg.FromPID, msg.ToPID, route, msg.Type, msg.Priority)
+		hklog.For("broker").Debug("routed to pid", "from_pid", msg.FromPID, "to_pid", msg.ToPID, "route", route, "type", msg.Type, "priority", msg.Priority)
 
 		// Push delivery: notify agent runtime immediately.
 		if b.OnMessage != nil {

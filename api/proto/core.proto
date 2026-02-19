@@ -169,7 +169,7 @@ message ExecuteTaskResponse {
 message ProcessEvent {
   uint64 seq = 1;
   int64  timestamp_ms = 2;
-  string type = 3;       // "spawned", "state_changed", "removed", "log"
+  string type = 3;       // "spawned", "state_changed", "removed", "log", "llm_call", "tool_call", "cron_executed"
   uint64 pid = 4;
   uint64 ppid = 5;
   string name = 6;
@@ -186,6 +186,7 @@ message ProcessEvent {
   string trace_id = 17;
   string trace_span = 18;
   string message_id = 19;
+  map<string, string> fields = 20;  // structured metadata for typed events
 }
 
 message SubscribeEventsRequest {
@@ -205,6 +206,9 @@ message CronEntryProto {
   bool enabled = 8;
   int64 last_run_ms = 9;
   int64 next_run_ms = 10;
+  int32 last_exit_code = 11;
+  string last_output = 12;
+  int64 last_duration_ms = 13;
 }
 
 message AddCronRequest {

@@ -60,6 +60,9 @@ MESSAGE_LOG_MAX = 500
 trace_log: dict[str, list[dict]] = {}
 MAX_TRACES = 100
 
+# LLM usage tracking (in-memory, pid -> stats).
+llm_usage: dict[int, dict] = {}  # pid -> {tokens, calls, latency_ms}
+
 
 def record_task(pid: int, name: str, description: str, result: str,
                 success: bool, error: str, duration_ms: int):
@@ -192,6 +195,10 @@ def apply_event(event) -> dict | None:
         elif event.type == "log":
             trace_entry["level"] = event.level
             trace_entry["message"] = event.message
+        elif event.type in ("llm_call", "tool_call", "cron_executed"):
+            trace_entry["level"] = event.level
+            trace_entry["message"] = event.message
+            trace_entry["fields"] = dict(event.fields) if event.fields else {}
         if evt_trace_id not in trace_log:
             # Evict oldest trace if at capacity.
             if len(trace_log) >= MAX_TRACES:
@@ -253,6 +260,70 @@ def apply_event(event) -> dict | None:
             "level": event.level,
             "message": event.message,
             "ts": event.timestamp_ms,
+        }
+
+    elif event.type == "llm_call":
+        # Track per-PID LLM usage.
+        fields = dict(event.fields) if event.fields else {}
+        pid = event.pid
+        tokens = int(fields.get("total_tokens", "0"))
+        latency = float(fields.get("latency_ms", "0"))
+        if pid not in llm_usage:
+            llm_usage[pid] = {"tokens": 0, "calls": 0, "latency_ms": 0.0}
+        llm_usage[pid]["tokens"] += tokens
+        llm_usage[pid]["calls"] += 1
+        llm_usage[pid]["latency_ms"] += latency
+
+        name = event.name
+        if not name and event.pid in tree_cache:
+            name = tree_cache[event.pid].get("name", "")
+        model = fields.get("model", "")
+        return {
+            "action": "log",
+            "pid": event.pid,
+            "name": name,
+            "level": "info",
+            "message": f"LLM call: {model} ({tokens} tokens, {latency}ms)",
+            "ts": event.timestamp_ms,
+            "event_type": "llm_call",
+            "fields": fields,
+        }
+
+    elif event.type == "tool_call":
+        fields = dict(event.fields) if event.fields else {}
+        name = event.name
+        if not name and event.pid in tree_cache:
+            name = tree_cache[event.pid].get("name", "")
+        tool_name = fields.get("tool_name", "")
+        duration = fields.get("duration_ms", "0")
+        return {
+            "action": "log",
+            "pid": event.pid,
+            "name": name,
+            "level": "info",
+            "message": f"Tool: {tool_name} ({duration}ms)",
+            "ts": event.timestamp_ms,
+            "event_type": "tool_call",
+            "fields": fields,
+        }
+
+    elif event.type == "cron_executed":
+        fields = dict(event.fields) if event.fields else {}
+        name = event.name
+        if not name and event.pid in tree_cache:
+            name = tree_cache[event.pid].get("name", "")
+        cron_name = fields.get("cron_name", "")
+        exit_code = fields.get("exit_code", "?")
+        duration = fields.get("duration_ms", "0")
+        return {
+            "action": "log",
+            "pid": event.pid,
+            "name": name,
+            "level": event.level or "info",
+            "message": f"Cron '{cron_name}' exit={exit_code} ({duration}ms)",
+            "ts": event.timestamp_ms,
+            "event_type": "cron_executed",
+            "fields": fields,
         }
 
     elif event.type == "message_delivered":
@@ -701,6 +772,33 @@ async def api_chat(body: dict):
         return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
 
 
+@app.get("/api/llm-usage")
+async def api_llm_usage():
+    """Per-PID LLM token usage breakdown."""
+    entries = []
+    total_tokens = 0
+    total_calls = 0
+    for pid, stats in llm_usage.items():
+        name = tree_cache.get(pid, {}).get("name", f"PID {pid}")
+        entries.append({
+            "pid": pid,
+            "name": name,
+            "tokens": stats["tokens"],
+            "calls": stats["calls"],
+            "latency_ms": round(stats["latency_ms"], 1),
+            "avg_latency_ms": round(stats["latency_ms"] / max(stats["calls"], 1), 1),
+        })
+        total_tokens += stats["tokens"]
+        total_calls += stats["calls"]
+    entries.sort(key=lambda e: e["tokens"], reverse=True)
+    return {
+        "ok": True,
+        "entries": entries,
+        "total_tokens": total_tokens,
+        "total_calls": total_calls,
+    }
+
+
 @app.get("/api/cron")
 async def api_cron_list():
     """List all cron entries."""
@@ -718,6 +816,9 @@ async def api_cron_list():
                 "enabled": e.enabled,
                 "last_run_ms": e.last_run_ms,
                 "next_run_ms": e.next_run_ms,
+                "last_exit_code": e.last_exit_code,
+                "last_output": e.last_output,
+                "last_duration_ms": e.last_duration_ms,
             })
         return {"ok": True, "entries": entries}
     except grpc.aio.AioRpcError as e:

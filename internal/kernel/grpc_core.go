@@ -3,11 +3,11 @@ package kernel
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 	"unicode/utf8"
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
+	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/ipc"
 	"github.com/selemilka/hivekernel/internal/permissions"
 	"github.com/selemilka/hivekernel/internal/process"
@@ -88,7 +88,7 @@ func (s *CoreServer) SpawnChild(ctx context.Context, req *pb.SpawnRequest) (*pb.
 		return &pb.SpawnResponse{Success: false, Error: err.Error()}, nil
 	}
 
-	log.Printf("[grpc] SpawnChild: PID %d spawned %s (PID %d)", parentPID, proc.Name, proc.PID)
+	hklog.For("grpc").Info("SpawnChild", "parent_pid", parentPID, "name", proc.Name, "child_pid", proc.PID)
 	return &pb.SpawnResponse{Success: true, ChildPid: proc.PID}, nil
 }
 
@@ -130,7 +130,7 @@ func (s *CoreServer) KillChild(ctx context.Context, req *pb.KillRequest) (*pb.Ki
 	s.king.Signals().NotifyParent(req.TargetPid, -1, "killed")
 	killed = append(killed, req.TargetPid)
 
-	log.Printf("[grpc] KillChild: PID %d killed %v", parentPID, killed)
+	hklog.For("grpc").Info("KillChild", "parent_pid", parentPID, "killed", killed)
 	return &pb.KillResponse{Success: true, KilledPids: killed}, nil
 }
 
@@ -215,7 +215,7 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 		return &pb.SendMessageResponse{Delivered: false, Error: err.Error()}, nil
 	}
 
-	log.Printf("[grpc] SendMessage: PID %d -> PID %d, type=%s", fromPID, req.ToPid, req.Type)
+	hklog.For("grpc").Debug("SendMessage", "from_pid", fromPID, "to_pid", req.ToPid, "type", req.Type)
 
 	// Extract trace context from payload and propagate to receiver.
 	traceID, traceSpan := extractTraceFromPayload(req.Payload)
@@ -262,7 +262,7 @@ func (s *CoreServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStrea
 		q = s.king.Broker().GetInbox(pid)
 	}
 
-	log.Printf("[grpc] Subscribe: PID %d subscribed to queue=%q", pid, req.Queue)
+	hklog.For("grpc").Info("Subscribe", "pid", pid, "queue", req.Queue)
 
 	// Stream messages until client disconnects.
 	ctx := stream.Context()
@@ -314,7 +314,7 @@ func (s *CoreServer) StoreArtifact(ctx context.Context, req *pb.StoreArtifactReq
 		return &pb.StoreArtifactResponse{Success: false, Error: err.Error()}, nil
 	}
 
-	log.Printf("[grpc] StoreArtifact: PID %d stored %q (id=%s, vis=%s)", pid, req.Key, id, vis)
+	hklog.For("grpc").Debug("StoreArtifact", "pid", pid, "key", req.Key, "id", id, "visibility", vis)
 	return &pb.StoreArtifactResponse{Success: true, ArtifactId: id}, nil
 }
 
@@ -421,14 +421,14 @@ func (s *CoreServer) RequestResources(ctx context.Context, req *pb.ResourceReque
 	// Try to allocate additional tokens from parent's budget.
 	err = s.king.Budget().Allocate(proc.PPID, pid, tier, req.Amount)
 	if err != nil {
-		log.Printf("[grpc] RequestResources: PID %d denied: %v", pid, err)
+		hklog.For("grpc").Warn("RequestResources denied", "pid", pid, "error", err)
 		return &pb.ResourceResponse{
 			Granted: false,
 			Reason:  err.Error(),
 		}, nil
 	}
 
-	log.Printf("[grpc] RequestResources: PID %d granted %d %s tokens", pid, req.Amount, tier)
+	hklog.For("grpc").Info("RequestResources granted", "pid", pid, "amount", req.Amount, "tier", tier)
 	return &pb.ResourceResponse{
 		Granted:       true,
 		GrantedAmount: req.Amount,
@@ -443,7 +443,7 @@ func (s *CoreServer) Escalate(ctx context.Context, req *pb.EscalateRequest) (*pb
 		return nil, err
 	}
 
-	log.Printf("[grpc] Escalate from PID %d: severity=%s issue=%s", fromPID, req.Severity, req.Issue)
+	hklog.For("grpc").Warn("Escalate", "from_pid", fromPID, "severity", req.Severity, "issue", req.Issue)
 
 	// Push as a message to king's inbox.
 	s.king.Inbox().Push(&ipc.Message{
@@ -461,13 +461,13 @@ func (s *CoreServer) Escalate(ctx context.Context, req *pb.EscalateRequest) (*pb
 
 func (s *CoreServer) Log(ctx context.Context, req *pb.LogRequest) (*pb.LogResponse, error) {
 	pid, _ := callerPID(ctx)
-	log.Printf("[agent:%d] [%s] %s", pid, req.Level, req.Message)
+	hklog.For("grpc").Info("agent log", "pid", pid, "level", req.Level, "message", req.Message)
 	return &pb.LogResponse{}, nil
 }
 
 func (s *CoreServer) ReportMetric(ctx context.Context, req *pb.MetricRequest) (*pb.MetricResponse, error) {
 	pid, _ := callerPID(ctx)
-	log.Printf("[metric:%d] %s = %f", pid, req.Name, req.Value)
+	hklog.For("grpc").Debug("metric reported", "pid", pid, "name", req.Name, "value", req.Value)
 
 	// If the metric is token usage, record it in accounting and budget.
 	if req.Name == "tokens_consumed" {
@@ -478,7 +478,7 @@ func (s *CoreServer) ReportMetric(ctx context.Context, req *pb.MetricRequest) (*
 			s.king.Accountant().Record(pid, tier, tokens)
 
 			if err := s.king.Budget().Consume(pid, tier, tokens); err != nil {
-				log.Printf("[metric:%d] budget exceeded: %v", pid, err)
+				hklog.For("grpc").Warn("budget exceeded", "pid", pid, "error", err)
 				// Publish budget exceeded event.
 				s.king.EventBus().Publish("budget_exceeded", pid,
 					[]byte(fmt.Sprintf("PID %d exceeded %s budget", pid, tier)))
@@ -532,7 +532,7 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 		TimeoutSeconds: uint32(req.TimeoutSeconds),
 	}
 
-	log.Printf("[grpc] ExecuteTask: target PID %d (%s), task=%s", req.TargetPid, target.Name, req.Description)
+	hklog.For("grpc").Info("ExecuteTask", "target_pid", req.TargetPid, "name", target.Name, "task", req.Description)
 	result, err := s.executor.ExecuteTask(ctx, rt.Addr, req.TargetPid, taskReq)
 	if err != nil {
 		return &pb.ExecuteTaskResponse{Success: false, Error: err.Error()}, nil
@@ -548,7 +548,7 @@ func (s *CoreServer) AddCron(ctx context.Context, req *pb.AddCronRequest) (*pb.A
 	if err != nil {
 		return &pb.AddCronResponse{Error: err.Error()}, nil
 	}
-	log.Printf("[grpc] AddCron: %q (%s) -> PID %d, action=%s", req.Name, req.CronExpression, req.TargetPid, req.Action)
+	hklog.For("grpc").Info("AddCron", "name", req.Name, "expr", req.CronExpression, "target_pid", req.TargetPid, "action", req.Action)
 	return &pb.AddCronResponse{CronId: sched}, nil
 }
 
@@ -556,7 +556,7 @@ func (s *CoreServer) RemoveCron(ctx context.Context, req *pb.RemoveCronRequest) 
 	if err := s.king.Cron().Remove(req.CronId); err != nil {
 		return &pb.RemoveCronResponse{Ok: false, Error: err.Error()}, nil
 	}
-	log.Printf("[grpc] RemoveCron: %s", req.CronId)
+	hklog.For("grpc").Info("RemoveCron", "cron_id", req.CronId)
 	return &pb.RemoveCronResponse{Ok: true}, nil
 }
 
@@ -585,6 +585,9 @@ func (s *CoreServer) ListCron(ctx context.Context, req *pb.ListCronRequest) (*pb
 			Enabled:            e.Enabled,
 			LastRunMs:           lastRunMs,
 			NextRunMs:           nextRunMs,
+			LastExitCode:        e.LastExitCode,
+			LastOutput:          e.LastOutput,
+			LastDurationMs:      e.LastDurationMs,
 		})
 	}
 	return resp, nil
@@ -648,7 +651,7 @@ func (s *CoreServer) ListSiblings(ctx context.Context, req *pb.ListSiblingsReque
 		})
 	}
 
-	log.Printf("[grpc] ListSiblings: PID %d found %d siblings", pid, len(siblings))
+	hklog.For("grpc").Debug("ListSiblings", "pid", pid, "count", len(siblings))
 	return &pb.ListSiblingsResponse{Siblings: siblings}, nil
 }
 
@@ -756,6 +759,7 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				TraceId:        evt.TraceID,
 				TraceSpan:      evt.TraceSpan,
 				MessageId:      evt.MessageID,
+				Fields:         evt.Fields,
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err

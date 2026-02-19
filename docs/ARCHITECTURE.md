@@ -63,7 +63,7 @@ processes, routes messages, enforces security, and bridges runtimes.
 - **Process tree**: Every agent is a process with PID, PPID, role, cognitive tier, state
 - **Hierarchical control**: Parent spawns, delegates, kills children. No peer-to-peer
 - **Cognitive tiers**: Strategic (opus) > Tactical (sonnet) > Operational (mini). Child tier <= parent tier
-- **Syscalls over stream**: Agents perform kernel operations (spawn, kill, send, store) via bidirectional gRPC stream during task execution
+- **Mailbox-first**: All agent interaction is messages through the IPC Broker. Agents use CoreClient for kernel operations
 - **Budget inheritance**: Token budgets flow down the tree. Parent allocates to child from its own pool
 - **USER inheritance**: All children share the parent's user identity (except kernel can assign different users)
 - **Config-driven startup**: Agents are spawned from `--startup config.json`, not hardcoded in Go
@@ -543,59 +543,74 @@ Role-based access control for 7 system actions (`internal/permissions/acl.go`):
 
 ---
 
-## 6. Scheduling
+## 6. Scheduling and Task Routing
 
-### Task Priority
+### How Tasks Are Routed
 
-Tasks are prioritized by cognitive tier + role, with aging to prevent starvation.
-
-```go
-// internal/scheduler/priority.go
-type TaskPriority struct {
-    Base        int           // from tier + role
-    EnqueuedAt  time.Time
-    AgingFactor float64
-}
-
-// Effective() = Base + age_seconds * AgingFactor
-// Higher effective = dispatched sooner
-```
-
-**Base priority computation:**
-
-| Tier | Base | Role | Bonus | Combined Example |
-|------|------|------|-------|-----------------|
-| strategic | 100 | kernel | +50 | 150 |
-| tactical | 50 | daemon | +40 | 90 |
-| tactical | 50 | lead | +20 | 70 |
-| operational | 10 | task | +5 | 15 |
-
-### Task States
+Task routing in HiveKernel is **agent-level, not kernel-level**. The process
+tree IS the routing topology:
 
 ```
-  submit       assign       start        finish
-    |            |            |             |
-    v            v            v             v
-  pending --> assigned --> running --> completed
-                                   \-> failed
-                                   \-> cancelled
+User/Dashboard sends "build a landing page"
+    |
+    v
+Queen receives task_request message in inbox
+    |
+    +-- _assess_complexity(task) -> COMPLEX
+    |
+    +-- Acquire idle lead from pool (or spawn new one)
+    +-- core.execute_task(lead_pid, task)
+    |       |
+    |       v
+    |   Lead (Orchestrator) decomposes task
+    |       |-- spawn worker-0 (HTML)
+    |       |-- spawn worker-1 (CSS)
+    |       |-- spawn worker-2 (JS)
+    |       |-- distribute subtasks
+    |       +-- synthesize results
+    |
+    +-- Return result to sender via reply_to
 ```
 
-### Scheduler
+Each parent is the scheduler for its subtree:
+- **Queen** manages complexity assessment + lead pool
+- **Lead/Orchestrator** decomposes tasks + distributes to workers
+- **Assistant** routes to Queen (complex) or Coder (code tasks)
 
-The scheduler (`internal/scheduler/scheduler.go`) manages task dispatch:
+The kernel's role is **delivery** (Broker routes messages, Executor runs
+bidi streams) and **enforcement** (ACL, budgets, rate limits). The kernel
+never decides WHO should handle a task -- parents decide.
 
-| Method | Description |
-|--------|-------------|
-| `Submit(name, tier, role, submitter, payload)` | Add task to ready queue |
-| `Assign(agentPID, agentTier, agentRole)` | Pop highest-priority compatible task |
-| `Complete(taskID, success)` | Mark task completed/failed |
-| `Cancel(taskID)` | Cancel pending/assigned task |
-| `Resubmit(taskID)` | Return failed/cancelled task to queue |
-| `TasksByState(state)` | List tasks by state |
-| `TasksByAgent(pid)` | List tasks assigned to an agent |
+### Message Priority (Broker-level)
 
-**Compatibility check**: Agent's tier must be >= task requirement AND agent's role must be >= task requirement (lower number = higher capability).
+The Broker's priority queue handles ordering within each agent's inbox:
+
+```
+effective_priority = base_priority - age_seconds * aging_factor
+```
+
+Priority is adjusted by relationship:
+- Parent -> child: HIGH (parent's instructions matter most)
+- Sibling -> sibling: NORMAL
+- Escalation: HIGH
+
+Aging prevents starvation: old messages gradually gain priority.
+This is the real "scheduler" -- it's built into the mailbox.
+
+### Kernel-Level Scheduler (unused)
+
+`internal/scheduler/scheduler.go` implements a pull-based task queue
+(Submit/Assign/Complete) designed for flat worker pools where agents
+ask "give me work". This follows the OS CPU scheduling metaphor.
+
+**Status: not wired to any production code path.** The hierarchical tree
+model means parents always know WHO should get work, making a centralized
+pull-based scheduler redundant. The code exists with tests but nothing
+calls `Submit()` or `Assign()` outside of tests.
+
+If HiveKernel evolves toward generic worker pools (anonymous interchangeable
+workers pulling from a shared queue), this infrastructure could be activated.
+For now, agent-level routing + Broker priority queues cover all use cases.
 
 ### Cron Scheduler
 
@@ -603,11 +618,13 @@ Core-managed recurring actions (`internal/scheduler/cron.go`):
 
 - **5-field cron expressions**: `minute hour day-of-month month day-of-week`
 - Supports: `*`, specific values, `*/N` intervals, comma-separated values
-- **Three actions**: `CronSpawn` (create new process), `CronWake` (wake sleeping process), and `CronMessage` (send message to agent inbox)
-- **Default action**: `message` -- sends a `cron_task` message to the target agent's inbox. The `execute` action is legacy.
-- **Per-VPS**: Each entry is associated with a VPS node
-- **Dedup**: Won't re-trigger within the same minute
-- Kernel holds the crontab for reliability (agents can add/remove via gRPC RPCs)
+- **Actions**: `CronSpawn` (new process), `CronWake` (wake sleeping), `CronMessage` (send to inbox)
+- **Default action**: `message` -- sends `cron_task` message to target agent's inbox
+- **Per-VPS**, dedup (won't re-trigger within same minute)
+- Kernel holds the crontab for reliability (agents add/remove via gRPC RPCs)
+
+Cron delivers via the mailbox: kernel sends `cron_task` message -> Broker ->
+agent inbox -> `handle_message()`. No special path.
 
 ### Lifecycle Manager
 
@@ -624,10 +641,10 @@ Dynamic process lifecycle (`internal/process/lifecycle.go`):
 
 ### Key Files
 
-- `internal/scheduler/priority.go` — TaskPriority, ReadyQueue, base priority computation
-- `internal/scheduler/scheduler.go` — Scheduler (submit, assign, complete, cancel)
-- `internal/scheduler/cron.go` — CronScheduler (parse, match, per-VPS entries)
-- `internal/process/lifecycle.go` — LifecycleManager (sleep/wake, complete, collapse)
+- `internal/scheduler/cron.go` -- CronScheduler (parse, match, per-VPS entries)
+- `internal/scheduler/scheduler.go` -- Scheduler (unused, pull-based task queue with priority/aging)
+- `internal/scheduler/priority.go` -- TaskPriority, ReadyQueue (used by Scheduler)
+- `internal/process/lifecycle.go` -- LifecycleManager (sleep/wake, complete, collapse)
 
 ---
 
@@ -708,15 +725,26 @@ The Manager handles agent process lifecycle:
 | `GetClient(pid)` | Get AgentServiceClient stub |
 | `ListRuntimes()` | List all active runtimes |
 
-### Primary Task Handler: `handle_message()`
+### Two Task Entry Points
 
-For new agents, the recommended task handler is `handle_message()`. All tasks arrive as messages (`cron_task`, `task_request`, etc.) delivered via the `DeliverMessage` RPC. Agents use `self.core` (CoreClient) for syscalls during message handling.
+Agents have two entry points for different purposes:
 
-The Execute bidi stream (`handle_task` + `SyscallContext`) is available but not the default path for new agents. See [docs/MAILBOX.md](MAILBOX.md) for the mailbox-first interaction model.
+**Mailbox** (receiving tasks from anyone):
+```
+Sender -> core.send_message(pid, "task_request") -> Broker -> inbox -> DeliverMessage -> handle_message()
+```
+
+**Execute** (parent delegating to child, synchronous):
+```
+Parent -> core.execute_task(child_pid, desc) -> Executor -> bidi stream -> handle_task() -> TaskResult
+```
+
+Mailbox is for receiving work. Execute is for delegating to children and
+waiting for the result. See [docs/MAILBOX.md](MAILBOX.md) for full details.
 
 ### Executor (`internal/runtime/executor.go`)
 
-Manages bidirectional Execute streams for task execution (legacy path):
+Manages bidirectional Execute streams for `core.execute_task()` calls:
 
 ```
   Core (Executor)                    Agent (handle_task)

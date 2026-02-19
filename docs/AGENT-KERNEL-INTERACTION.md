@@ -1,4 +1,4 @@
-# Agent-Kernel Interaction Architecture
+# Agent-Kernel Interaction
 
 How Python SDK agents communicate with the Go kernel.
 
@@ -29,235 +29,197 @@ Key files:
 
 ## 2. Three Interaction Patterns
 
-Agents interact with the kernel through three distinct patterns. Each has
-different semantics, blocking behavior, and use cases.
+### Pattern A: Mailbox (receiving tasks, async messaging)
 
-### Pattern A: Direct Invocation (Execute bidi stream)
-
-**Synchronous task delegation.** Caller blocks until target returns result.
-
-```
-Caller Agent                 Kernel (Executor)           Target Agent
-    |                            |                           |
-    | ctx.execute_on(pid, task)  |                           |
-    |--------------------------->|                           |
-    |  [caller blocks on Future] |-- Execute stream open --->|
-    |                            |-- TaskRequest ----------->|
-    |                            |                           |-- handle_task(task, ctx)
-    |                            |                           |     ctx.spawn(...)
-    |                            |<-- PROGRESS_SYSCALL ------|     [awaits Future]
-    |                            |-- SyscallResult --------->|     [Future resolved]
-    |                            |                           |     return TaskResult
-    |                            |<-- PROGRESS_COMPLETED ----|
-    |<-- SyscallResult(result) --|                           |
-    |  [caller resumes]          |                           |
-```
-
-**Mechanism:**
-- `ctx.execute_on(pid, desc)` -- via SyscallContext in Execute bidi stream
-- `core.execute_task(pid, desc)` -- via CoreClient direct RPC to CoreService
-
-Both end up calling `Executor.ExecuteTask()` on the Go side, which opens a
-new Execute bidi stream to the target agent.
-
-**Blocking:** Yes -- caller waits for TaskResult.
-
-**Entry point on target:** `handle_task(task, ctx) -> TaskResult`
-
-**Who uses it and how:**
-
-| Caller | Target | How | Code |
-|--------|--------|-----|------|
-| Queen | Worker | Simple task: spawn, execute, kill | `core.execute_task(worker_pid, desc)` |
-| Queen | Lead (Orchestrator) | Complex task: reuse/spawn lead, delegate | `core.execute_task(lead_pid, desc)` |
-| Queen | Architect | Get strategic plan | `core.execute_task(arch_pid, desc)` |
-| Orchestrator | Workers | Subtasks within groups, sequentially | `ctx.execute_on(wpid, subtask)` |
-| Assistant | Coder | Code generation (synchronous) | `ctx.execute_on(coder_pid, request)` |
-| Dashboard | Any agent | User-initiated task | CoreService.ExecuteTask RPC |
-
-**Note:** Queen uses `core.execute_task()` (CoreClient RPC) even inside
-`handle_task()` rather than `ctx.execute_on()` (SyscallContext). This is
-intentional -- it lets the same `_core_handle_*` methods work from both
-`handle_task()` (Execute stream entry) and `handle_message()` (IPC entry).
-
----
-
-### Pattern B: Async Mailbox (IPC Messages via DeliverMessage)
-
-**Fire-and-forget messaging.** Sender does not block. Optional reply
-correlation via `reply_to` field.
+**Asynchronous message delivery.** How tasks arrive at agents.
 
 ```
 Sender Agent              Kernel (Broker)          Receiver Agent
     |                          |                        |
-    | ctx.send(to=B, payload)  |                        |
+    | core.send_message(B, ..) |                        |
     |------------------------->|                        |
-    | [sender continues]       |-- Route(msg) --------->|
+    | [sender continues]       |-- Route + validate --->|
+    |                          |-- priority + aging      |
+    |                          |-- push to inbox ------->|
+    |                          |-- OnMessage callback -->|
     |                          |                        |-- DeliverMessage RPC
     |                          |                        |-- on_message(msg)
     |                          |                        |     handle_message(msg)
     |                          |                        |     reply_to(msg, result)
     |                          |<-- send(reply) --------|
     |<-- DeliverMessage -------|                        |
-    |-- on_message (resolve)   |                        |
+    |-- on_message(resolve)    |                        |
 ```
 
-**Mechanism:**
-- `ctx.send(to_pid, type, payload)` -- via SyscallContext during Execute stream
-- `core.send_message(to_pid, type, payload)` -- via CoreClient direct RPC
+**Sub-patterns:**
 
-Both route through the kernel's IPC Broker, which delivers to the target
-agent's `DeliverMessage` gRPC method.
+| Pattern | Blocking | Description |
+|---------|----------|-------------|
+| Fire-and-forget | No | `send_fire_and_forget(ctx, pid, type, payload)` |
+| Send-and-wait | Yes (timeout) | `send_and_wait(ctx, pid, type, payload)` |
+| Drain mailbox | No | `drain_pending_results()` -- collect stashed replies |
 
-**Blocking:** No. Three sub-patterns:
+**Entry point on receiver:** `handle_message(msg) -> MessageAck`
 
-1. **Fire-and-forget:** `send_fire_and_forget(ctx, pid, type, payload)` --
-   send, don't wait, collect results later from mailbox
-2. **Send-and-wait:** `send_and_wait(ctx, pid, type, payload, timeout)` --
-   send, block on Future, Future resolved when correlated reply arrives via
-   `on_message()` matching `reply_to` field
-3. **Drain mailbox:** `drain_pending_results()` -- collect all stashed
-   `task_response` messages that arrived asynchronously
+**Who uses it:**
 
-**Entry point on target:** `on_message(msg) -> handle_message(msg) -> MessageAck`
+| Sender | Receiver | Pattern | Purpose |
+|--------|----------|---------|---------|
+| Assistant | Queen | Fire-and-forget | Delegate complex tasks |
+| Queen | Assistant | Reply (reply_to) | Return task results |
+| Kernel cron | Any agent | Push delivery | Trigger periodic work |
+| Dashboard | Any agent | Send message | User-initiated tasks |
+| Any agent | Any agent | Direct message | Peer communication |
 
-**Reply correlation:** Sender generates `request_id`, sets it as `reply_to`
-on the message. Receiver includes the same `reply_to` in their reply.
-Sender's `on_message()` matches `reply_to` against `_pending_requests` dict
-and resolves the corresponding Future.
+### Pattern B: Task delegation (synchronous parent->child)
 
-**Who uses it and how:**
+**Synchronous execution.** Parent delegates task to child and waits for result.
 
-| Sender | Receiver | Pattern | Code |
-|--------|----------|---------|------|
-| Assistant | Queen | Fire-and-forget delegation | `send_fire_and_forget(ctx, queen_pid, "task_request", payload)` |
-| Queen | Sender | Reply with result | `core.send_message(to=from_pid, reply_to=msg.reply_to)` |
-| Assistant | (self) | Drain mailbox on next handle_task | `self.drain_pending_results()` |
-| Cron engine | Any agent | Cron trigger | kernel sends `cron_task` via DeliverMessage |
-| Any agent | Any agent | Peer-to-peer messaging | `ctx.send()` or `core.send_message()` |
+```
+Parent Agent             Kernel (Executor)           Child Agent
+    |                         |                          |
+    | core.execute_task(pid)  |                          |
+    |------------------------>|-- Execute stream open --->|
+    | [parent blocks]         |-- TaskRequest ---------->|
+    |                         |                          |-- handle_task(task, ctx)
+    |                         |                          |     do work...
+    |                         |                          |     return TaskResult
+    |                         |<-- PROGRESS_COMPLETED ---|
+    |<-- result --------------|                          |
+    | [parent resumes]        |                          |
+```
 
-**Real example -- Assistant delegates to Queen:**
+**Ideal for atomic workers** -- spawn, execute, get result, kill:
 
 ```python
-# Assistant._handle_delegation() -- sends async task to Queen
-request_id = await self.send_fire_and_forget(
-    ctx=ctx,
-    to_pid=queen_pid,
-    type="task_request",
-    payload=json.dumps({"task": "research quantum computing"}).encode(),
-)
-# Track for later correlation
-self._active_delegations[request_id] = {"target": "queen", "task": ...}
-# Returns immediately: "[Delegated to queen -- results will appear in next message]"
+workers = [await self.core.spawn_child(name=f"w-{i}", role="task", ...) for i in range(10)]
+results = await asyncio.gather(*[
+    self.core.execute_task(w, f"research subtopic {i}")
+    for i, w in enumerate(workers)
+])
+# results is list[TaskResult] -- no correlation, no reply_to, no boilerplate
 ```
 
-```python
-# Queen.handle_message() -- receives task_request, processes, replies
-async def handle_message(self, message):
-    if message.type == "task_request":
-        asyncio.create_task(self._process_message_task(message))
-        return MessageAck(status=ACK_QUEUED)
+**Entry point on child:** `handle_task(task, ctx) -> TaskResult`
 
-async def _process_message_task(self, message):
-    # ... execute task ...
-    await self.core.send_message(
-        to_pid=message.from_pid,
-        type="task_response",
-        payload=result_payload,
-        reply_to=message.reply_to,  # correlation ID
-    )
-```
+**Who uses it:**
 
-```python
-# Assistant.handle_task() -- on NEXT call, drains mailbox
-completed_results = self.drain_pending_results()
-for msg in completed_results:
-    delegation = self._active_delegations.pop(msg.reply_to, None)
-    # ... include result in response to user ...
-```
+| Parent | Child | Purpose |
+|--------|-------|---------|
+| Queen | Worker | Simple task delegation |
+| Queen | Lead (Orchestrator) | Complex task decomposition |
+| Orchestrator | Workers | Parallel subtask execution |
+| Dashboard | Any agent | User-initiated execution |
 
----
+### Pattern C: Kernel Operations (infrastructure)
 
-### Pattern C: Kernel Operations (CoreClient direct RPC)
-
-**Direct agent-to-kernel calls.** Not agent-to-agent. Synchronous, fast
-(no LLM involved).
+**Direct agent-to-kernel calls.** Not agent-to-agent.
 
 ```
 Agent                    CoreService (Go kernel)
     |                           |
     | core.spawn_child(...)     |-- Registry.Spawn()
+    | core.kill_child(...)      |-- Registry.SetState + Manager.Stop
     | core.store_artifact(...)  |-- SharedMemory.Store()
+    | core.get_artifact(...)    |-- SharedMemory.Get()
     | core.add_cron(...)        |-- Cron.Add()
     | core.log(...)             |-- EventLog.Emit()
     | core.get_process_info()   |-- Registry.Get()
     | core.list_children()      |-- Registry.GetChildren()
-    | core.list_artifacts()     |-- SharedMemory.List()
-    | core.get_resource_usage() |-- Budgets.Usage()
 ```
 
-**Mechanism:** Direct gRPC RPC to CoreService stub. Authenticated by
-`x-hivekernel-pid` metadata header.
+## 3. Comparison
 
-**Blocking:** Yes, but instant (kernel operations, no network/LLM).
-
-**Who uses it:**
-- **All agents:** `core.log()`, `core.store_artifact()`, `core.get_artifact()`
-- **Queen:** `core.spawn_child()`, `core.kill_child()`, `core.execute_task()`,
-  `core.get_process_info()`
-- **Assistant:** `core.add_cron()`, `core.send_message()`
-- **ToolAgent built-in tools:** `spawn_child`, `execute_task`, `send_message`,
-  `store_artifact`, `get_artifact` etc.
-
----
-
-## 3. Comparison Table
-
-| Aspect | A: Direct Invocation | B: Async Mailbox | C: Kernel Ops |
+| Aspect | A: Mailbox | B: Task Delegation | C: Kernel Ops |
 |--------|:---:|:---:|:---:|
-| **Semantics** | Request/Response | Fire & (optionally) forget | Request/Response |
-| **Blocking** | Yes | No (or with send_and_wait) | Yes (instant) |
-| **Go-side mechanism** | Executor bidi stream | Broker -> DeliverMessage RPC | CoreService RPC |
-| **Python-side trigger** | `ctx.execute_on()` / `core.execute_task()` | `ctx.send()` / `core.send_message()` | `core.*()` |
-| **Entry point on target** | `handle_task()` | `handle_message()` | N/A (kernel) |
-| **Return value** | `TaskResult` | `MessageAck` (+ optional reply) | RPC response |
-| **Supports syscalls** | Yes (nested via stream) | No | N/A |
-| **Use case** | Task delegation | Async inter-agent messaging | Infrastructure ops |
+| **Purpose** | Receive tasks, peer messaging | Parent->child work delegation | Infrastructure operations |
+| **Blocking** | No (or send_and_wait) | Yes (waits for result) | Yes (instant) |
+| **Go mechanism** | Broker -> DeliverMessage | Executor bidi stream | CoreService RPC |
+| **Python caller** | `core.send_message()` | `core.execute_task()` | `core.*()` |
+| **Entry on target** | `handle_message()` | `handle_task()` | N/A (kernel) |
+| **Return** | `MessageAck` + opt reply | `TaskResult` | RPC response |
+| **Best for** | Daemons, peers, cron | Atomic workers, parallel subtasks | spawn, kill, store, log |
 
-## 4. SyscallContext vs CoreClient
+## 4. Task Routing: Who Decides?
 
-Both provide the same 10 syscalls, but through different channels:
+**Agents always decide routing.** The kernel only delivers.
 
-| Syscall | SyscallContext (bidi stream) | CoreClient (direct RPC) |
-|---------|:---:|:---:|
-| `spawn` | `ctx.spawn()` | `core.spawn_child()` |
-| `kill` | `ctx.kill()` | `core.kill_child()` |
-| `send` | `ctx.send()` | `core.send_message()` |
-| `execute_on` | `ctx.execute_on()` | `core.execute_task()` |
-| `store_artifact` | `ctx.store_artifact()` | `core.store_artifact()` |
-| `get_artifact` | `ctx.get_artifact()` | `core.get_artifact()` |
-| `escalate` | `ctx.escalate()` | `core.escalate()` |
-| `log` | `ctx.log()` | `core.log()` |
-| `wait_child` | `ctx.wait_child()` | `core.wait_child()` |
-| `list_siblings` | `ctx.list_siblings()` | `core.list_siblings()` |
-
-**SyscallContext** (`ctx`) -- available only inside `handle_task()`. Syscalls
-go through the Execute bidi stream: agent puts SystemCall on output queue,
-kernel's Executor dispatches to SyscallHandler, result comes back through the
-same stream.
-
-**CoreClient** (`self.core`) -- available everywhere (on_init, handle_task,
-handle_message, background tasks). Syscalls go as direct gRPC RPCs to
-CoreService. Authenticated by PID metadata.
-
-**ToolContext** (Plan 013) -- wrapper that delegates to SyscallContext if
-available, falls back to CoreClient. Used by ToolAgent's built-in tools so
-they work in both `handle_task()` and `handle_message()` contexts.
-
-## 5. Agent Class Hierarchy
+The process tree IS the routing topology. Parents know their children's
+capabilities because they configured and spawned them.
 
 ```
-HiveAgent                     lifecycle, Execute bidi stream, DeliverMessage
+User sends task via WebUI
+    |
+    v
+Queen (daemon) receives task_request message in inbox
+    |
+    +-- assess_complexity(task)
+    |
+    +-- Simple? -> spawn worker, execute, kill, return result
+    |
+    +-- Complex? -> acquire idle lead from pool (or spawn new)
+    |              -> execute_task(lead_pid, task)
+    |              -> lead decomposes into subtasks
+    |              -> lead spawns workers, distributes, synthesizes
+    |
+    +-- Architect? -> spawn architect, get plan
+                   -> execute plan via lead
+```
+
+Each parent is the scheduler for its subtree:
+- **Queen** manages her lead pool (reuse idle leads, spawn new ones)
+- **Orchestrator/Lead** distributes subtasks across worker pool
+- **Assistant** routes to Queen (complex) or Coder (code tasks)
+
+A kernel-level centralized scheduler would duplicate this logic and violate
+the separation between kernel (infrastructure) and agents (business logic).
+See [MAILBOX.md](MAILBOX.md) section 8 for detailed rationale.
+
+## 5. The Two Entry Points
+
+Every agent has two entry points. They serve different purposes:
+
+| Entry | Triggered by | Purpose | Returns |
+|-------|-------------|---------|---------|
+| `handle_message(msg)` | Broker delivers message | Receive tasks, notifications, replies | `MessageAck` |
+| `handle_task(task, ctx)` | `core.execute_task()` from parent | Execute delegated work | `TaskResult` |
+
+**Rule**: receive via mailbox (handle_message), delegate via execute_task (handle_task).
+
+**Anti-pattern**: implementing the same business logic in BOTH entry points.
+If an agent needs to accept tasks from both peers (mailbox) and parents
+(execute_task), it should have ONE internal method called from both handlers.
+
+For **long-lived daemons** (Queen, Assistant): implement `handle_message()`.
+For **short-lived workers** (task role, atomic work): implement `handle_task()`.
+For **both** (leads, orchestrators): implement both, but with shared logic.
+
+## 6. SyscallContext vs CoreClient
+
+Both provide the same syscalls through different channels:
+
+| Syscall | SyscallContext (`ctx`) | CoreClient (`self.core`) |
+|---------|:---:|:---:|
+| spawn | `ctx.spawn()` | `core.spawn_child()` |
+| kill | `ctx.kill()` | `core.kill_child()` |
+| send | `ctx.send()` | `core.send_message()` |
+| execute_on | `ctx.execute_on()` | `core.execute_task()` |
+| store_artifact | `ctx.store_artifact()` | `core.store_artifact()` |
+| get_artifact | `ctx.get_artifact()` | `core.get_artifact()` |
+| escalate | `ctx.escalate()` | `core.escalate()` |
+| log | `ctx.log()` | `core.log()` |
+| wait_child | `ctx.wait_child()` | -- |
+| list_siblings | `ctx.list_siblings()` | -- |
+
+**SyscallContext** -- only inside `handle_task()`. Goes through Execute stream.
+**CoreClient** -- available everywhere. Goes as direct gRPC RPC.
+
+For new agents, prefer CoreClient. SyscallContext exists for legacy compatibility.
+
+## 7. Agent Class Hierarchy
+
+```
+HiveAgent                     lifecycle, Execute stream, DeliverMessage, mailbox helpers
   +-- LLMAgent                + LLMClient (OpenRouter), ask(), chat()
         +-- QueenAgent           task dispatcher daemon, 3-tier routing
         +-- AssistantAgent       24/7 chat daemon, async delegation
@@ -267,87 +229,34 @@ HiveAgent                     lifecycle, Execute bidi stream, DeliverMessage
         +-- ArchitectAgent       strategic planner
         +-- MaidAgent            LLM health monitoring
         +-- GitHubMonitorAgent   cron-triggered repo watcher
-        +-- ToolAgent (Plan 013) + AgentLoop + ToolRegistry + AgentMemory
+        +-- ToolAgent            + AgentLoop + ToolRegistry + AgentMemory
 ```
 
-**HiveAgent** -- base class. Implements AgentService gRPC interface via inner
-Servicer. Handles Init, Shutdown, Heartbeat, Execute (bidi stream with 3
-concurrent asyncio tasks: reader, writer, runner), DeliverMessage. Provides
-async messaging (send_and_wait, drain_pending_results).
+**ToolAgent** is the universal agent class (Plan 014). New agents should
+use ToolAgent with config-driven behavior (system prompt from .md file,
+tool set from config) rather than creating new subclasses.
 
-**LLMAgent** -- adds OpenRouter LLMClient. Loads API key from env/.env.
-Provides `ask(prompt)` and `chat(messages)` shortcuts.
-
-**ToolAgent** -- adds iterative LLM + tool execution engine (AgentLoop),
-tool registry with 9 built-in syscall tools, and artifact-backed persistent
-memory (AgentMemory). New agents should subclass ToolAgent and override
-`get_tools()` to add custom tools.
-
-## 6. IPC Message Routing
-
-Messages are routed by the kernel's IPC Broker based on process tree
-relationships:
-
-- **Parent <-> child:** direct delivery
-- **Siblings:** through broker (same parent)
-- **Cross-branch:** through nearest common ancestor
-
-The Broker uses a priority queue with aging. Messages have TTL, priority
-(critical/high/normal/low), and optional `requires_ack` flag.
-
-## 7. Kernel-Side Dispatch
-
-```
-Agent process sends syscall via Execute stream
-    |
-    v
-Executor.ExecuteTask()          (runtime/executor.go)
-    |-- stream.Recv() -> TaskProgress(SYSCALL)
-    |-- for each SystemCall:
-    |       SyscallHandler.HandleSyscall()   (kernel/syscall_handler.go)
-    |           |-- handleSpawn()    -> King.SpawnChild() -> Registry + Manager
-    |           |-- handleKill()     -> Registry.SetState + Manager.StopRuntime
-    |           |-- handleSend()     -> ACL check + RateLimit + Broker.Route()
-    |           |-- handleStore()    -> ACL check + SharedMemory.Store()
-    |           |-- handleExecuteOn() -> Executor.ExecuteTask() [recursive!]
-    |           |-- handleWaitChild() -> poll Registry until zombie/dead
-    |           |-- ...
-    |       stream.Send(SyscallResult)
-    |-- stream.Recv() -> TaskProgress(COMPLETED)
-    v
-Return TaskResult to caller
-```
-
-`execute_on` is recursive: the SyscallHandler calls Executor.ExecuteTask
-on the target agent, which opens a new Execute stream. This allows
-multi-level delegation (Queen -> Lead -> Worker) with each level having
-its own active Execute stream.
-
-## 8. Key Files Reference
+## 8. Key Files
 
 ### Go kernel
 | File | Responsibility |
 |------|---------------|
 | `internal/runtime/manager.go` | OS process spawn, READY handshake, gRPC dial, Init RPC |
-| `internal/runtime/executor.go` | Execute bidi stream management, syscall dispatch loop |
-| `internal/kernel/syscall_handler.go` | Dispatches 10 syscalls to King's subsystems |
+| `internal/runtime/executor.go` | Execute bidi stream, syscall dispatch loop |
+| `internal/kernel/syscall_handler.go` | Dispatches syscalls to King's subsystems |
 | `internal/kernel/grpc_core.go` | CoreService gRPC server (direct RPC API) |
 | `internal/kernel/king.go` | Central kernel: registry, broker, shared memory, budgets |
-| `internal/runtime/health.go` | Heartbeat monitoring (10s interval, 3 failures = kill) |
-| `api/proto/agent.proto` | AgentService definition + all message types |
-| `api/proto/core.proto` | CoreService definition |
+| `internal/ipc/broker.go` | Message routing, inboxes, priority queues |
+| `internal/runtime/health.go` | Heartbeat monitoring |
 
 ### Python SDK
 | File | Responsibility |
 |------|---------------|
 | `runner.py` | Entry point: load class, start gRPC server, print READY |
-| `agent.py` | HiveAgent base: lifecycle, Execute stream, DeliverMessage |
-| `llm_agent.py` | LLMAgent: adds LLMClient (OpenRouter) |
-| `syscall.py` | SyscallContext: 10 syscalls via Execute bidi stream |
-| `client.py` | CoreClient: 10 syscalls + extras via direct gRPC RPC |
-| `tool_agent.py` | ToolAgent: agent loop + tools + memory |
+| `agent.py` | HiveAgent base: lifecycle, Execute stream, DeliverMessage, mailbox helpers |
+| `client.py` | CoreClient: syscalls + extras via direct gRPC RPC |
+| `tool_agent.py` | ToolAgent: agent loop + tools + memory, config-driven |
 | `loop.py` | AgentLoop: iterative LLM + tool execution engine |
 | `memory.py` | AgentMemory: artifact-backed persistent state |
 | `tools.py` | Tool protocol, ToolContext, ToolRegistry |
-| `builtin_tools.py` | 9 built-in syscall tools for ToolAgent |
-| `llm.py` | LLMClient: async OpenRouter HTTP client |
+| `builtin_tools.py` | 11 built-in syscall tools for ToolAgent |

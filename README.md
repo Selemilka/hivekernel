@@ -6,6 +6,27 @@ Go kernel handles the process tree, IPC, scheduling, supervision, and resource m
 Agents (Python or [PicoClaw](https://github.com/sipeed/picoclaw)) make LLM calls
 and do the actual work. They communicate with the kernel over gRPC.
 
+## Documentation
+
+### Architecture
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) -- system internals: 5-layer model, process model, IPC, resources, permissions, scheduling, runtime, cluster, gRPC API, Python SDK
+- [docs/AGENT-KERNEL-INTERACTION.md](docs/AGENT-KERNEL-INTERACTION.md) -- how agents talk to the kernel: mailbox, execute_task, CoreClient, entry points, class hierarchy
+- [docs/MAILBOX.md](docs/MAILBOX.md) -- mailbox system: message types, routing, priority, patterns (fire-and-forget, send-and-wait), execute_task for delegation
+- [docs/AGENT-ROLES.md](docs/AGENT-ROLES.md) -- role design, cognitive tiers, lifecycle
+
+### Plans and research
+- [docs/plans/](docs/plans/) -- implementation plans (001-014, next: 015)
+- [docs/research/](docs/research/) -- research notes and gap analyses
+
+### Development
+- [CLAUDE.md](CLAUDE.md) -- development guide: commands, conventions, rules
+- [TODO.md](TODO.md) -- unified task tracker with priorities and dependencies
+- [CHANGELOG.md](CHANGELOG.md) -- development history
+
+## Roadmap
+
+See [TODO.md](TODO.md) for the full prioritized task list with dependencies.
+
 ## Architecture
 
 HiveKernel follows a 5-layer architecture inspired by operating system design:
@@ -212,42 +233,6 @@ python sdk/python/dashboard/app.py
 # Open http://localhost:8080
 ```
 
-## Writing an agent
-
-```python
-from hivekernel_sdk import LLMAgent, TaskResult
-
-class MyAgent(LLMAgent):
-    async def handle_task(self, task, ctx) -> TaskResult:
-        # Spawn a child
-        child = await ctx.spawn(
-            name="helper", role="task", cognitive_tier="operational",
-            model="mini", runtime_image="my_module:HelperAgent",
-            runtime_type="python",
-        )
-        # Delegate work
-        result = await ctx.execute_on(child, "research quantum computing")
-        # Store artifact
-        await ctx.store_artifact(key="report", content=result.output.encode())
-        return TaskResult(exit_code=0, output=result.output)
-```
-
-Available syscalls in `ctx`:
-
-| Syscall | What it does |
-|---------|-------------|
-| `spawn(name, role, ...)` | Create child process (Python, PicoClaw, or custom) |
-| `kill(pid)` | Terminate a child |
-| `execute_on(pid, description, params)` | Delegate task to child, await result |
-| `send(target_pid, type, payload)` | Send IPC message |
-| `store_artifact(key, content)` | Store in shared memory |
-| `get_artifact(key)` | Retrieve from shared memory |
-| `escalate(severity, issue)` | Escalate to parent |
-| `log(level, message)` | Write to process log |
-| `report_progress(message, percent)` | Report task progress |
-| `wait_child(pid)` | Wait for child to finish (like `waitpid`) |
-| `list_siblings()` | Discover peer processes |
-
 ## Project stats
 
 | | Files | Tests | Lines |
@@ -281,70 +266,6 @@ configs/                  Startup configs (empty, full, claw, telegram)
 docs/                     Architecture, agent roles, mailbox design, plans
 CHANGELOG.md              Development log
 ```
-
-## Docs
-
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) -- system internals (5-layer model)
-- [docs/AGENT-ROLES.md](docs/AGENT-ROLES.md) -- role design and lifecycle
-- [docs/MAILBOX.md](docs/MAILBOX.md) -- async messaging model
-- [CHANGELOG.md](CHANGELOG.md) -- development history
-
-## Roadmap
-
-Inspired by analyzing [Longshot](https://devpost.com/software/longshot) (autonomous
-coding orchestrator, 200+ agents, 1200 commits/hour) and similar multi-agent systems.
-
-### High priority
-
-**Wire the scheduler to execution pipeline.**
-The task priority scheduler (`internal/scheduler/scheduler.go`) is fully implemented
-but not connected to the execution pipeline. Currently tasks flow through
-`execute_on` syscall directly. The scheduler should become the central dispatch
-point: `submit -> queue -> assign -> execute`.
-
-**Wire supervisor auto-restart.**
-`Supervisor.onRestart` callback exists but is never set in `main.go`. Daemon
-crash recovery is architecturally correct but effectively a no-op. One-line fix
-to connect it to the runtime manager.
-
-**Merge queue for multi-agent code generation.**
-Multiple agents writing code simultaneously need conflict resolution. A merge
-queue subsystem with: git commit gating, conflict detection, build/test validation
-before merge, automatic rebase or retry on conflict. This is the biggest gap
-compared to systems like Longshot.
-
-### Medium priority
-
-**Frozen spec pattern (objective drift prevention).**
-Before a multi-agent task starts, freeze the specification as an immutable artifact.
-Agents get a read-only view of the spec plus a separate mutable decision log for
-runtime notes. Prevents the goal from shifting as agents iterate.
-
-**Application-level reconciler.**
-Current health monitoring only checks "is the process alive" (heartbeat). A
-reconciler daemon should periodically verify semantic health: run tests, check
-for regressions, validate outputs against acceptance criteria. Spawn targeted
-fix-tasks when issues are found.
-
-**DAG execution engine.**
-The orchestrator decomposes tasks into parallel groups, but there is no dependency
-graph. A DAG engine would allow: A depends on B, fan-out/fan-in, conditional
-branches, retry individual nodes.
-
-### Future
-
-**Scale testing (50-100+ agents).**
-The kernel has been tested with small process trees. Need load testing with many
-concurrent agents to find bottlenecks in the broker, scheduler, and runtime manager.
-
-**OS-level sandboxing.**
-Current isolation is application-level (ACL, capabilities). For untrusted agents,
-add filesystem restrictions (per-agent workspace), network policy enforcement,
-and resource limits at the OS level.
-
-**TUI monitor.**
-A terminal UI (like `htop` for agents) for quick monitoring without a browser.
-Process tree, message flow, resource usage, live logs.
 
 ## License
 

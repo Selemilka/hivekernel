@@ -132,6 +132,11 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.ListCronRequest.SerializeToString,
                 response_deserializer=core__pb2.ListCronResponse.FromString,
                 _registered_method=True)
+        self.ListInbox = channel.unary_unary(
+                '/hivekernel.core.CoreService/ListInbox',
+                request_serializer=core__pb2.ListInboxRequest.SerializeToString,
+                response_deserializer=core__pb2.ListInboxResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -262,6 +267,13 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListInbox(self, request, context):
+        """Inbox inspection
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -359,6 +371,11 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.ListCron,
                     request_deserializer=core__pb2.ListCronRequest.FromString,
                     response_serializer=core__pb2.ListCronResponse.SerializeToString,
+            ),
+            'ListInbox': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListInbox,
+                    request_deserializer=core__pb2.ListInboxRequest.FromString,
+                    response_serializer=core__pb2.ListInboxResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -876,6 +893,33 @@ class CoreService(object):
             '/hivekernel.core.CoreService/ListCron',
             core__pb2.ListCronRequest.SerializeToString,
             core__pb2.ListCronResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListInbox(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/ListInbox',
+            core__pb2.ListInboxRequest.SerializeToString,
+            core__pb2.ListInboxResponse.FromString,
             options,
             channel_credentials,
             insecure,

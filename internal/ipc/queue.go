@@ -162,6 +162,15 @@ func (pq *PriorityQueue) Len() int {
 	return pq.h.Len()
 }
 
+// Peek returns a copy of all messages in the queue without removing them.
+func (pq *PriorityQueue) Peek() []*Message {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	result := make([]*Message, len(pq.h.items))
+	copy(result, pq.h.items)
+	return result
+}
+
 func (pq *PriorityQueue) generateID() string {
 	n := pq.nextID.Add(1)
 	return "msg-" + uitoa(n)

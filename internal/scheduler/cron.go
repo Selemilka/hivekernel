@@ -17,6 +17,7 @@ const (
 	CronSpawn   CronAction = iota // spawn a new process
 	CronWake                      // wake a sleeping process
 	CronExecute                   // execute task on existing process
+	CronMessage                   // send IPC message to existing process
 )
 
 func (a CronAction) String() string {
@@ -27,6 +28,8 @@ func (a CronAction) String() string {
 		return "wake"
 	case CronExecute:
 		return "execute"
+	case CronMessage:
+		return "message"
 	default:
 		return "unknown"
 	}
@@ -290,6 +293,8 @@ func (cs *CronScheduler) ParseAndAdd(
 		cronAction = CronSpawn
 	case "wake":
 		cronAction = CronWake
+	case "message":
+		cronAction = CronMessage
 	default:
 		return "", fmt.Errorf("unknown cron action: %q", action)
 	}

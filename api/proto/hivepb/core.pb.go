@@ -1041,6 +1041,7 @@ type ProcessEvent struct {
 	PayloadPreview string                 `protobuf:"bytes,16,opt,name=payload_preview,json=payloadPreview,proto3" json:"payload_preview,omitempty"`
 	TraceId        string                 `protobuf:"bytes,17,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	TraceSpan      string                 `protobuf:"bytes,18,opt,name=trace_span,json=traceSpan,proto3" json:"trace_span,omitempty"`
+	MessageId      string                 `protobuf:"bytes,19,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1197,6 +1198,13 @@ func (x *ProcessEvent) GetTraceId() string {
 func (x *ProcessEvent) GetTraceSpan() string {
 	if x != nil {
 		return x.TraceSpan
+	}
+	return ""
+}
+
+func (x *ProcessEvent) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
 	}
 	return ""
 }
@@ -1673,6 +1681,102 @@ func (x *ListCronResponse) GetEntries() []*CronEntryProto {
 	return nil
 }
 
+type ListInboxRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           uint64                 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInboxRequest) Reset() {
+	*x = ListInboxRequest{}
+	mi := &file_core_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInboxRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInboxRequest) ProtoMessage() {}
+
+func (x *ListInboxRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInboxRequest.ProtoReflect.Descriptor instead.
+func (*ListInboxRequest) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListInboxRequest) GetPid() uint64 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+type ListInboxResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*AgentMessage        `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInboxResponse) Reset() {
+	*x = ListInboxResponse{}
+	mi := &file_core_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInboxResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInboxResponse) ProtoMessage() {}
+
+func (x *ListInboxResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInboxResponse.ProtoReflect.Descriptor instead.
+func (*ListInboxResponse) Descriptor() ([]byte, []int) {
+	return file_core_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListInboxResponse) GetMessages() []*AgentMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *ListInboxResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
 var File_core_proto protoreflect.FileDescriptor
 
 const file_core_proto_rawDesc = "" +
@@ -1760,7 +1864,7 @@ const file_core_proto_rawDesc = "" +
 	"\x13ExecuteTaskResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x124\n" +
 	"\x06result\x18\x02 \x01(\v2\x1c.hivekernel.agent.TaskResultR\x06result\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xcd\x03\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xec\x03\n" +
 	"\fProcessEvent\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12\x12\n" +
@@ -1781,7 +1885,9 @@ const file_core_proto_rawDesc = "" +
 	"\x0fpayload_preview\x18\x10 \x01(\tR\x0epayloadPreview\x12\x19\n" +
 	"\btrace_id\x18\x11 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
-	"trace_span\x18\x12 \x01(\tR\ttraceSpan\"5\n" +
+	"trace_span\x18\x12 \x01(\tR\ttraceSpan\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x13 \x01(\tR\tmessageId\"5\n" +
 	"\x16SubscribeEventsRequest\x12\x1b\n" +
 	"\tsince_seq\x18\x01 \x01(\x04R\bsinceSeq\"\xbc\x03\n" +
 	"\x0eCronEntryProto\x12\x0e\n" +
@@ -1821,7 +1927,12 @@ const file_core_proto_rawDesc = "" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"\x11\n" +
 	"\x0fListCronRequest\"M\n" +
 	"\x10ListCronResponse\x129\n" +
-	"\aentries\x18\x01 \x03(\v2\x1f.hivekernel.core.CronEntryProtoR\aentries2\xef\f\n" +
+	"\aentries\x18\x01 \x03(\v2\x1f.hivekernel.core.CronEntryProtoR\aentries\"$\n" +
+	"\x10ListInboxRequest\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x04R\x03pid\"e\n" +
+	"\x11ListInboxResponse\x12:\n" +
+	"\bmessages\x18\x01 \x03(\v2\x1e.hivekernel.agent.AgentMessageR\bmessages\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total2\xc3\r\n" +
 	"\vCoreService\x12M\n" +
 	"\n" +
 	"SpawnChild\x12\x1e.hivekernel.agent.SpawnRequest\x1a\x1f.hivekernel.agent.SpawnResponse\x12J\n" +
@@ -1843,7 +1954,8 @@ const file_core_proto_rawDesc = "" +
 	"\aAddCron\x12\x1f.hivekernel.core.AddCronRequest\x1a .hivekernel.core.AddCronResponse\x12U\n" +
 	"\n" +
 	"RemoveCron\x12\".hivekernel.core.RemoveCronRequest\x1a#.hivekernel.core.RemoveCronResponse\x12O\n" +
-	"\bListCron\x12 .hivekernel.core.ListCronRequest\x1a!.hivekernel.core.ListCronResponseB2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
+	"\bListCron\x12 .hivekernel.core.ListCronRequest\x1a!.hivekernel.core.ListCronResponse\x12R\n" +
+	"\tListInbox\x12!.hivekernel.core.ListInboxRequest\x1a\".hivekernel.core.ListInboxResponseB2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
 
 var (
 	file_core_proto_rawDescOnce sync.Once
@@ -1857,7 +1969,7 @@ func file_core_proto_rawDescGZIP() []byte {
 	return file_core_proto_rawDescData
 }
 
-var file_core_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_core_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_core_proto_goTypes = []any{
 	(*ProcessInfoRequest)(nil),     // 0: hivekernel.core.ProcessInfoRequest
 	(*ProcessInfo)(nil),            // 1: hivekernel.core.ProcessInfo
@@ -1884,88 +1996,93 @@ var file_core_proto_goTypes = []any{
 	(*RemoveCronResponse)(nil),     // 22: hivekernel.core.RemoveCronResponse
 	(*ListCronRequest)(nil),        // 23: hivekernel.core.ListCronRequest
 	(*ListCronResponse)(nil),       // 24: hivekernel.core.ListCronResponse
-	nil,                            // 25: hivekernel.core.MetricRequest.LabelsEntry
-	nil,                            // 26: hivekernel.core.ExecuteTaskRequest.ParamsEntry
-	nil,                            // 27: hivekernel.core.CronEntryProto.ExecuteParamsEntry
-	nil,                            // 28: hivekernel.core.AddCronRequest.ExecuteParamsEntry
-	(AgentRole)(0),                 // 29: hivekernel.agent.AgentRole
-	(CognitiveTier)(0),             // 30: hivekernel.agent.CognitiveTier
-	(AgentState)(0),                // 31: hivekernel.agent.AgentState
-	(Priority)(0),                  // 32: hivekernel.agent.Priority
-	(*TaskResult)(nil),             // 33: hivekernel.agent.TaskResult
-	(*SpawnRequest)(nil),           // 34: hivekernel.agent.SpawnRequest
-	(*KillRequest)(nil),            // 35: hivekernel.agent.KillRequest
-	(*SendMessageRequest)(nil),     // 36: hivekernel.agent.SendMessageRequest
-	(*StoreArtifactRequest)(nil),   // 37: hivekernel.agent.StoreArtifactRequest
-	(*GetArtifactRequest)(nil),     // 38: hivekernel.agent.GetArtifactRequest
-	(*EscalateRequest)(nil),        // 39: hivekernel.agent.EscalateRequest
-	(*LogRequest)(nil),             // 40: hivekernel.agent.LogRequest
-	(*SpawnResponse)(nil),          // 41: hivekernel.agent.SpawnResponse
-	(*KillResponse)(nil),           // 42: hivekernel.agent.KillResponse
-	(*SendMessageResponse)(nil),    // 43: hivekernel.agent.SendMessageResponse
-	(*AgentMessage)(nil),           // 44: hivekernel.agent.AgentMessage
-	(*StoreArtifactResponse)(nil),  // 45: hivekernel.agent.StoreArtifactResponse
-	(*GetArtifactResponse)(nil),    // 46: hivekernel.agent.GetArtifactResponse
-	(*EscalateResponse)(nil),       // 47: hivekernel.agent.EscalateResponse
-	(*LogResponse)(nil),            // 48: hivekernel.agent.LogResponse
+	(*ListInboxRequest)(nil),       // 25: hivekernel.core.ListInboxRequest
+	(*ListInboxResponse)(nil),      // 26: hivekernel.core.ListInboxResponse
+	nil,                            // 27: hivekernel.core.MetricRequest.LabelsEntry
+	nil,                            // 28: hivekernel.core.ExecuteTaskRequest.ParamsEntry
+	nil,                            // 29: hivekernel.core.CronEntryProto.ExecuteParamsEntry
+	nil,                            // 30: hivekernel.core.AddCronRequest.ExecuteParamsEntry
+	(AgentRole)(0),                 // 31: hivekernel.agent.AgentRole
+	(CognitiveTier)(0),             // 32: hivekernel.agent.CognitiveTier
+	(AgentState)(0),                // 33: hivekernel.agent.AgentState
+	(Priority)(0),                  // 34: hivekernel.agent.Priority
+	(*TaskResult)(nil),             // 35: hivekernel.agent.TaskResult
+	(*AgentMessage)(nil),           // 36: hivekernel.agent.AgentMessage
+	(*SpawnRequest)(nil),           // 37: hivekernel.agent.SpawnRequest
+	(*KillRequest)(nil),            // 38: hivekernel.agent.KillRequest
+	(*SendMessageRequest)(nil),     // 39: hivekernel.agent.SendMessageRequest
+	(*StoreArtifactRequest)(nil),   // 40: hivekernel.agent.StoreArtifactRequest
+	(*GetArtifactRequest)(nil),     // 41: hivekernel.agent.GetArtifactRequest
+	(*EscalateRequest)(nil),        // 42: hivekernel.agent.EscalateRequest
+	(*LogRequest)(nil),             // 43: hivekernel.agent.LogRequest
+	(*SpawnResponse)(nil),          // 44: hivekernel.agent.SpawnResponse
+	(*KillResponse)(nil),           // 45: hivekernel.agent.KillResponse
+	(*SendMessageResponse)(nil),    // 46: hivekernel.agent.SendMessageResponse
+	(*StoreArtifactResponse)(nil),  // 47: hivekernel.agent.StoreArtifactResponse
+	(*GetArtifactResponse)(nil),    // 48: hivekernel.agent.GetArtifactResponse
+	(*EscalateResponse)(nil),       // 49: hivekernel.agent.EscalateResponse
+	(*LogResponse)(nil),            // 50: hivekernel.agent.LogResponse
 }
 var file_core_proto_depIdxs = []int32{
-	29, // 0: hivekernel.core.ProcessInfo.role:type_name -> hivekernel.agent.AgentRole
-	30, // 1: hivekernel.core.ProcessInfo.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
-	31, // 2: hivekernel.core.ProcessInfo.state:type_name -> hivekernel.agent.AgentState
-	31, // 3: hivekernel.core.ListChildrenRequest.filter_state:type_name -> hivekernel.agent.AgentState
+	31, // 0: hivekernel.core.ProcessInfo.role:type_name -> hivekernel.agent.AgentRole
+	32, // 1: hivekernel.core.ProcessInfo.cognitive_tier:type_name -> hivekernel.agent.CognitiveTier
+	33, // 2: hivekernel.core.ProcessInfo.state:type_name -> hivekernel.agent.AgentState
+	33, // 3: hivekernel.core.ListChildrenRequest.filter_state:type_name -> hivekernel.agent.AgentState
 	1,  // 4: hivekernel.core.ListChildrenResponse.children:type_name -> hivekernel.core.ProcessInfo
-	32, // 5: hivekernel.core.SubscribeRequest.min_priority:type_name -> hivekernel.agent.Priority
+	34, // 5: hivekernel.core.SubscribeRequest.min_priority:type_name -> hivekernel.agent.Priority
 	7,  // 6: hivekernel.core.ListArtifactsResponse.artifacts:type_name -> hivekernel.core.ArtifactMeta
-	25, // 7: hivekernel.core.MetricRequest.labels:type_name -> hivekernel.core.MetricRequest.LabelsEntry
-	26, // 8: hivekernel.core.ExecuteTaskRequest.params:type_name -> hivekernel.core.ExecuteTaskRequest.ParamsEntry
-	33, // 9: hivekernel.core.ExecuteTaskResponse.result:type_name -> hivekernel.agent.TaskResult
-	27, // 10: hivekernel.core.CronEntryProto.execute_params:type_name -> hivekernel.core.CronEntryProto.ExecuteParamsEntry
-	28, // 11: hivekernel.core.AddCronRequest.execute_params:type_name -> hivekernel.core.AddCronRequest.ExecuteParamsEntry
+	27, // 7: hivekernel.core.MetricRequest.labels:type_name -> hivekernel.core.MetricRequest.LabelsEntry
+	28, // 8: hivekernel.core.ExecuteTaskRequest.params:type_name -> hivekernel.core.ExecuteTaskRequest.ParamsEntry
+	35, // 9: hivekernel.core.ExecuteTaskResponse.result:type_name -> hivekernel.agent.TaskResult
+	29, // 10: hivekernel.core.CronEntryProto.execute_params:type_name -> hivekernel.core.CronEntryProto.ExecuteParamsEntry
+	30, // 11: hivekernel.core.AddCronRequest.execute_params:type_name -> hivekernel.core.AddCronRequest.ExecuteParamsEntry
 	18, // 12: hivekernel.core.ListCronResponse.entries:type_name -> hivekernel.core.CronEntryProto
-	34, // 13: hivekernel.core.CoreService.SpawnChild:input_type -> hivekernel.agent.SpawnRequest
-	35, // 14: hivekernel.core.CoreService.KillChild:input_type -> hivekernel.agent.KillRequest
-	0,  // 15: hivekernel.core.CoreService.GetProcessInfo:input_type -> hivekernel.core.ProcessInfoRequest
-	2,  // 16: hivekernel.core.CoreService.ListChildren:input_type -> hivekernel.core.ListChildrenRequest
-	36, // 17: hivekernel.core.CoreService.SendMessage:input_type -> hivekernel.agent.SendMessageRequest
-	4,  // 18: hivekernel.core.CoreService.Subscribe:input_type -> hivekernel.core.SubscribeRequest
-	37, // 19: hivekernel.core.CoreService.StoreArtifact:input_type -> hivekernel.agent.StoreArtifactRequest
-	38, // 20: hivekernel.core.CoreService.GetArtifact:input_type -> hivekernel.agent.GetArtifactRequest
-	5,  // 21: hivekernel.core.CoreService.ListArtifacts:input_type -> hivekernel.core.ListArtifactsRequest
-	8,  // 22: hivekernel.core.CoreService.GetResourceUsage:input_type -> hivekernel.core.ResourceUsageRequest
-	10, // 23: hivekernel.core.CoreService.RequestResources:input_type -> hivekernel.core.ResourceRequest
-	39, // 24: hivekernel.core.CoreService.Escalate:input_type -> hivekernel.agent.EscalateRequest
-	40, // 25: hivekernel.core.CoreService.Log:input_type -> hivekernel.agent.LogRequest
-	12, // 26: hivekernel.core.CoreService.ReportMetric:input_type -> hivekernel.core.MetricRequest
-	14, // 27: hivekernel.core.CoreService.ExecuteTask:input_type -> hivekernel.core.ExecuteTaskRequest
-	17, // 28: hivekernel.core.CoreService.SubscribeEvents:input_type -> hivekernel.core.SubscribeEventsRequest
-	19, // 29: hivekernel.core.CoreService.AddCron:input_type -> hivekernel.core.AddCronRequest
-	21, // 30: hivekernel.core.CoreService.RemoveCron:input_type -> hivekernel.core.RemoveCronRequest
-	23, // 31: hivekernel.core.CoreService.ListCron:input_type -> hivekernel.core.ListCronRequest
-	41, // 32: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
-	42, // 33: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
-	1,  // 34: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
-	3,  // 35: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
-	43, // 36: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
-	44, // 37: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
-	45, // 38: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
-	46, // 39: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
-	6,  // 40: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
-	9,  // 41: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
-	11, // 42: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
-	47, // 43: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
-	48, // 44: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
-	13, // 45: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
-	15, // 46: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
-	16, // 47: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
-	20, // 48: hivekernel.core.CoreService.AddCron:output_type -> hivekernel.core.AddCronResponse
-	22, // 49: hivekernel.core.CoreService.RemoveCron:output_type -> hivekernel.core.RemoveCronResponse
-	24, // 50: hivekernel.core.CoreService.ListCron:output_type -> hivekernel.core.ListCronResponse
-	32, // [32:51] is the sub-list for method output_type
-	13, // [13:32] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	36, // 13: hivekernel.core.ListInboxResponse.messages:type_name -> hivekernel.agent.AgentMessage
+	37, // 14: hivekernel.core.CoreService.SpawnChild:input_type -> hivekernel.agent.SpawnRequest
+	38, // 15: hivekernel.core.CoreService.KillChild:input_type -> hivekernel.agent.KillRequest
+	0,  // 16: hivekernel.core.CoreService.GetProcessInfo:input_type -> hivekernel.core.ProcessInfoRequest
+	2,  // 17: hivekernel.core.CoreService.ListChildren:input_type -> hivekernel.core.ListChildrenRequest
+	39, // 18: hivekernel.core.CoreService.SendMessage:input_type -> hivekernel.agent.SendMessageRequest
+	4,  // 19: hivekernel.core.CoreService.Subscribe:input_type -> hivekernel.core.SubscribeRequest
+	40, // 20: hivekernel.core.CoreService.StoreArtifact:input_type -> hivekernel.agent.StoreArtifactRequest
+	41, // 21: hivekernel.core.CoreService.GetArtifact:input_type -> hivekernel.agent.GetArtifactRequest
+	5,  // 22: hivekernel.core.CoreService.ListArtifacts:input_type -> hivekernel.core.ListArtifactsRequest
+	8,  // 23: hivekernel.core.CoreService.GetResourceUsage:input_type -> hivekernel.core.ResourceUsageRequest
+	10, // 24: hivekernel.core.CoreService.RequestResources:input_type -> hivekernel.core.ResourceRequest
+	42, // 25: hivekernel.core.CoreService.Escalate:input_type -> hivekernel.agent.EscalateRequest
+	43, // 26: hivekernel.core.CoreService.Log:input_type -> hivekernel.agent.LogRequest
+	12, // 27: hivekernel.core.CoreService.ReportMetric:input_type -> hivekernel.core.MetricRequest
+	14, // 28: hivekernel.core.CoreService.ExecuteTask:input_type -> hivekernel.core.ExecuteTaskRequest
+	17, // 29: hivekernel.core.CoreService.SubscribeEvents:input_type -> hivekernel.core.SubscribeEventsRequest
+	19, // 30: hivekernel.core.CoreService.AddCron:input_type -> hivekernel.core.AddCronRequest
+	21, // 31: hivekernel.core.CoreService.RemoveCron:input_type -> hivekernel.core.RemoveCronRequest
+	23, // 32: hivekernel.core.CoreService.ListCron:input_type -> hivekernel.core.ListCronRequest
+	25, // 33: hivekernel.core.CoreService.ListInbox:input_type -> hivekernel.core.ListInboxRequest
+	44, // 34: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
+	45, // 35: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
+	1,  // 36: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
+	3,  // 37: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
+	46, // 38: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
+	36, // 39: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
+	47, // 40: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
+	48, // 41: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
+	6,  // 42: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
+	9,  // 43: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
+	11, // 44: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
+	49, // 45: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
+	50, // 46: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
+	13, // 47: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
+	15, // 48: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
+	16, // 49: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
+	20, // 50: hivekernel.core.CoreService.AddCron:output_type -> hivekernel.core.AddCronResponse
+	22, // 51: hivekernel.core.CoreService.RemoveCron:output_type -> hivekernel.core.RemoveCronResponse
+	24, // 52: hivekernel.core.CoreService.ListCron:output_type -> hivekernel.core.ListCronResponse
+	26, // 53: hivekernel.core.CoreService.ListInbox:output_type -> hivekernel.core.ListInboxResponse
+	34, // [34:54] is the sub-list for method output_type
+	14, // [14:34] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_core_proto_init() }
@@ -1980,7 +2097,7 @@ func file_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_proto_rawDesc), len(file_core_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

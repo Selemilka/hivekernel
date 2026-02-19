@@ -44,6 +44,9 @@ service CoreService {
   rpc AddCron(AddCronRequest) returns (AddCronResponse);
   rpc RemoveCron(RemoveCronRequest) returns (RemoveCronResponse);
   rpc ListCron(ListCronRequest) returns (ListCronResponse);
+
+  // Inbox inspection
+  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse);
 }
 
 // ─── Process management ───
@@ -178,6 +181,7 @@ message ProcessEvent {
   string payload_preview = 16;
   string trace_id = 17;
   string trace_span = 18;
+  string message_id = 19;
 }
 
 message SubscribeEventsRequest {
@@ -226,4 +230,15 @@ message ListCronRequest {}
 
 message ListCronResponse {
   repeated CronEntryProto entries = 1;
+}
+
+// ─── Inbox inspection ───
+
+message ListInboxRequest {
+  uint64 pid = 1;
+}
+
+message ListInboxResponse {
+  repeated hivekernel.agent.AgentMessage messages = 1;
+  int32 total = 2;
 }

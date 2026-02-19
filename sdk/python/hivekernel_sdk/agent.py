@@ -99,8 +99,37 @@ class HiveAgent:
         return await self.handle_message(message)
 
     async def handle_message(self, message: Message) -> MessageAck:
-        """Handle incoming message (application logic). Override in subclass."""
+        """Handle incoming message -- the primary task handler.
+
+        All tasks arrive as messages: cron_task, task_request, etc.
+        Use self.core for syscalls: spawn_child, send_message, store_artifact.
+        Send replies via self.reply_to(message, payload, type="task_response").
+
+        Override in subclass to implement application logic.
+        Default behavior for cron_task messages: log and accept.
+        """
+        if message.type == "cron_task":
+            logger.info("PID %d received cron_task from PID %d", self._pid, message.from_pid)
         return MessageAck(status=MessageAck.ACK_ACCEPTED)
+
+    async def reply_to(
+        self,
+        original: Message,
+        payload: bytes,
+        type: str = "task_response",
+    ) -> None:
+        """Send a reply to a received message.
+
+        Convenience method that sends a message back to the sender with
+        reply_to set to the original message's ID for correlation.
+        """
+        if self._core:
+            await self._core.send_message(
+                to_pid=original.from_pid,
+                type=type,
+                payload=payload,
+                reply_to=original.message_id,
+            )
 
     async def send_and_wait(
         self,

@@ -18,7 +18,8 @@ const (
 	EventStateChanged EventType = "state_changed"
 	EventRemoved      EventType = "removed"
 	EventLogged       EventType = "log"
-	EventMessageSent  EventType = "message_sent"
+	EventMessageSent      EventType = "message_sent"
+	EventMessageDelivered EventType = "message_delivered"
 )
 
 // ProcessEvent represents a single mutation in the process registry.
@@ -41,6 +42,7 @@ type ProcessEvent struct {
 	PayloadPreview string    `json:"payload_preview,omitempty"`
 	TraceID        string    `json:"trace_id,omitempty"`
 	TraceSpan      string    `json:"trace_span,omitempty"`
+	MessageID      string    `json:"message_id,omitempty"`
 }
 
 // TraceLookupFunc returns trace context for a given PID.

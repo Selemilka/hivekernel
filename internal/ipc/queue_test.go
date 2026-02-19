@@ -130,6 +130,43 @@ func TestPriorityQueuePopWaitCancelled(t *testing.T) {
 	}
 }
 
+func TestPriorityQueue_Peek(t *testing.T) {
+	pq := NewPriorityQueue(0)
+
+	pq.Push(&Message{Priority: PriorityLow, Type: "low"})
+	pq.Push(&Message{Priority: PriorityCritical, Type: "critical"})
+	pq.Push(&Message{Priority: PriorityNormal, Type: "normal"})
+
+	// Peek should return all 3 messages without removing them.
+	peeked := pq.Peek()
+	if len(peeked) != 3 {
+		t.Fatalf("expected 3 messages from Peek, got %d", len(peeked))
+	}
+
+	// Queue should still have all 3.
+	if pq.Len() != 3 {
+		t.Fatalf("expected queue to still have 3 messages after Peek, got %d", pq.Len())
+	}
+
+	// Pop should still work after Peek.
+	msg := pq.Pop()
+	if msg == nil {
+		t.Fatal("expected a message after Peek")
+	}
+	if pq.Len() != 2 {
+		t.Fatalf("expected 2 after one Pop, got %d", pq.Len())
+	}
+}
+
+func TestPriorityQueue_PeekEmpty(t *testing.T) {
+	pq := NewPriorityQueue(0)
+
+	peeked := pq.Peek()
+	if len(peeked) != 0 {
+		t.Fatalf("expected 0 messages from empty queue Peek, got %d", len(peeked))
+	}
+}
+
 func TestPriorityQueueIDGeneration(t *testing.T) {
 	pq := NewPriorityQueue(0)
 

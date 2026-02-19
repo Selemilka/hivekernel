@@ -364,6 +364,38 @@ func TestCronScheduler_CheckDue_Execute(t *testing.T) {
 	}
 }
 
+func TestCronAction_Message_String(t *testing.T) {
+	if CronMessage.String() != "message" {
+		t.Errorf("CronMessage.String()=%q, want message", CronMessage.String())
+	}
+}
+
+func TestCronScheduler_ParseAndAdd_MessageAction(t *testing.T) {
+	cs := NewCronScheduler()
+
+	id, err := cs.ParseAndAdd("msg-test", "*/10 * * * *", "message", 42, "run health check", map[string]string{"scope": "full"})
+	if err != nil {
+		t.Fatalf("ParseAndAdd: %v", err)
+	}
+	if id == "" {
+		t.Error("ID should not be empty")
+	}
+
+	entry, _ := cs.Get(id)
+	if entry.Action != CronMessage {
+		t.Errorf("Action=%s, want message", entry.Action)
+	}
+	if entry.TargetPID != 42 {
+		t.Errorf("TargetPID=%d, want 42", entry.TargetPID)
+	}
+	if entry.ExecuteDesc != "run health check" {
+		t.Errorf("ExecuteDesc=%q", entry.ExecuteDesc)
+	}
+	if entry.ExecuteParams["scope"] != "full" {
+		t.Errorf("ExecuteParams=%v", entry.ExecuteParams)
+	}
+}
+
 func TestCronScheduler_SpawnEntry(t *testing.T) {
 	cs := NewCronScheduler()
 	sched, _ := ParseCron("0 */2 * * *")

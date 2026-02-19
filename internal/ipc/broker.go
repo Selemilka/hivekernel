@@ -214,3 +214,38 @@ func (b *Broker) InboxLen(pid process.PID) int {
 	}
 	return q.Len()
 }
+
+// ListInbox returns a snapshot of messages currently in a PID's inbox
+// without removing them (non-destructive peek).
+func (b *Broker) ListInbox(pid process.PID) []*Message {
+	b.mu.RLock()
+	q, ok := b.inboxes[pid]
+	b.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	return q.Peek()
+}
+
+// FlushInbox pops all messages from a PID's inbox and re-delivers each
+// via the OnMessage callback. Used after agent init to deliver messages
+// that arrived before the agent was ready.
+func (b *Broker) FlushInbox(pid process.PID) int {
+	b.mu.RLock()
+	q, ok := b.inboxes[pid]
+	b.mu.RUnlock()
+	if !ok || b.OnMessage == nil {
+		return 0
+	}
+
+	count := 0
+	for {
+		msg := q.Pop()
+		if msg == nil {
+			break
+		}
+		go b.OnMessage(pid, msg)
+		count++
+	}
+	return count
+}

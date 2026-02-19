@@ -101,6 +101,25 @@ function applyDelta(delta) {
         }
         return;
     }
+    if (delta.action === 'message_delivered') {
+        // Update matching message entry state to "delivered".
+        const msgId = delta.message_id;
+        if (msgId) {
+            [delta.from_pid, delta.to_pid].forEach(pid => {
+                if (!pid || !nodeMessages[pid]) return;
+                nodeMessages[pid].forEach(entry => {
+                    if (entry.message_id === msgId) {
+                        entry.state = 'delivered';
+                    }
+                });
+            });
+            // Re-render if selected node is involved.
+            if (selectedNode && (selectedNode.pid === delta.from_pid || selectedNode.pid === delta.to_pid)) {
+                renderMessagesPanel(selectedNode.pid);
+            }
+        }
+        return;
+    }
     if (!treeData) return;
     if (delta.action === 'add' && delta.node) {
         treeData.push(delta.node);
@@ -827,8 +846,9 @@ function toggleActivityPanel() {
 
 // ─── Messages Panel ───
 
-const nodeMessages = {};  // pid -> [{ts, from_pid, to_pid, from_name, to_name, type, direction}, ...]
+const nodeMessages = {};  // pid -> [{ts, from_pid, to_pid, from_name, to_name, type, direction, message_id, state, reply_to, payload_preview}, ...]
 const NODE_MESSAGES_MAX = 50;
+let inboxFilter = 'all';  // 'all', 'incoming', 'outgoing'
 
 function recordMessageEvent(data) {
     // Store for both sender and receiver.
@@ -843,11 +863,35 @@ function recordMessageEvent(data) {
             to_name: data.to_name || '',
             type: data.type || '',
             direction: pid === data.from_pid ? 'outgoing' : 'incoming',
+            message_id: data.message_id || '',
+            state: 'sent',
+            reply_to: data.reply_to || '',
+            payload_preview: data.payload_preview || '',
         });
         while (nodeMessages[pid].length > NODE_MESSAGES_MAX) {
             nodeMessages[pid].shift();
         }
     });
+
+    // If this message has a reply_to, find the original and mark it as "replied".
+    if (data.reply_to) {
+        [data.from_pid, data.to_pid].forEach(pid => {
+            if (!pid || !nodeMessages[pid]) return;
+            nodeMessages[pid].forEach(entry => {
+                if (entry.message_id === data.reply_to) {
+                    entry.state = 'replied';
+                }
+            });
+        });
+    }
+}
+
+function setInboxFilter(filter, btn) {
+    inboxFilter = filter;
+    // Update active tab.
+    document.querySelectorAll('.inbox-tab').forEach(t => t.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    if (selectedNode) renderMessagesPanel(selectedNode.pid);
 }
 
 function renderMessagesPanel(pid) {
@@ -855,19 +899,55 @@ function renderMessagesPanel(pid) {
     const container = document.getElementById('messages-entries');
     const entries = nodeMessages[pid] || [];
 
-    if (entries.length === 0) {
-        panel.style.display = 'none';
+    // Always show inbox panel when a node is selected (Send Message button must be accessible).
+    panel.style.display = 'block';
+
+    // Apply filter.
+    let filtered = entries;
+    if (inboxFilter === 'incoming') {
+        filtered = entries.filter(e => e.direction === 'incoming');
+    } else if (inboxFilter === 'outgoing') {
+        filtered = entries.filter(e => e.direction === 'outgoing');
+    }
+
+    document.getElementById('messages-count').textContent = filtered.length || '';
+    container.innerHTML = '';
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="color:#666;font-size:12px;padding:8px 0">No messages yet. Use Send Message to start.</div>';
         return;
     }
 
-    panel.style.display = 'block';
-    document.getElementById('messages-count').textContent = entries.length;
-    container.innerHTML = '';
+    // Build a set of all message_ids present in filtered entries.
+    const presentIds = new Set();
+    filtered.forEach(entry => {
+        if (entry.message_id) presentIds.add(entry.message_id);
+    });
 
-    const reversed = [...entries].reverse();
+    // Build a reply_to lookup: message_id -> reply entries.
+    // Only group replies under a parent if the parent exists in the list.
+    const replyMap = {};
+    filtered.forEach(entry => {
+        if (entry.reply_to && entry.reply_to !== entry.message_id && presentIds.has(entry.reply_to)) {
+            if (!replyMap[entry.reply_to]) replyMap[entry.reply_to] = [];
+            replyMap[entry.reply_to].push(entry);
+        }
+    });
+
+    // Track which entries are replies (shown nested, skip at top level).
+    const replyIds = new Set();
+    Object.values(replyMap).forEach(replies => {
+        replies.forEach(r => replyIds.add(r.message_id || (r.ts + '-' + r.type)));
+    });
+
+    const reversed = [...filtered].reverse();
     reversed.forEach(entry => {
+        // Skip entries that are shown as nested replies.
+        const entryKey = entry.message_id || (entry.ts + '-' + entry.type);
+        if (replyIds.has(entryKey)) return;
+
         const div = document.createElement('div');
-        const isReply = entry.type === 'task_response';
+        const isReply = entry.type === 'task_response' || entry.type === 'cron_result';
         let cls = 'msg-' + entry.direction;
         if (isReply) cls = 'msg-reply';
         div.className = `msg-line ${cls}`;
@@ -878,40 +958,110 @@ function renderMessagesPanel(pid) {
             ? `${entry.to_name || 'PID ' + entry.to_pid}`
             : `${entry.from_name || 'PID ' + entry.from_pid}`;
 
+        // State badge.
+        const state = entry.state || 'sent';
+        const stateClass = 'msg-state-' + state;
+        const stateBadge = `<span class="msg-state ${stateClass}">${state.toUpperCase()}</span>`;
+
         div.innerHTML =
             `<span class="msg-ts">${ts}</span>`
             + `<span class="msg-arrow">${arrow}</span>`
             + `<span class="msg-peer">${escapeHtml(peer)}</span>`
-            + `<span class="msg-type">[${escapeHtml(entry.type)}]</span>`;
+            + `<span class="msg-type">[${escapeHtml(entry.type)}]</span>`
+            + stateBadge;
+
+        // Expandable payload preview.
+        if (entry.payload_preview) {
+            const preview = document.createElement('div');
+            preview.className = 'msg-payload';
+            preview.textContent = entry.payload_preview.substring(0, 200);
+            preview.style.display = 'none';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                preview.style.display = preview.style.display === 'none' ? 'block' : 'none';
+            };
+            div.appendChild(preview);
+        }
+
         container.appendChild(div);
+
+        // Show nested replies.
+        const replies = replyMap[entry.message_id] || [];
+        replies.forEach(reply => {
+            const replyDiv = document.createElement('div');
+            replyDiv.className = 'msg-line msg-nested-reply';
+            const rts = reply.ts ? new Date(reply.ts).toLocaleTimeString() : '';
+            const rPeer = reply.direction === 'outgoing'
+                ? `${reply.to_name || 'PID ' + reply.to_pid}`
+                : `${reply.from_name || 'PID ' + reply.from_pid}`;
+            const rState = reply.state || 'sent';
+            replyDiv.innerHTML =
+                `<span class="msg-ts">${rts}</span>`
+                + `<span class="msg-arrow"><-</span>`
+                + `<span class="msg-peer">${escapeHtml(rPeer)}</span>`
+                + `<span class="msg-type">[${escapeHtml(reply.type)}]</span>`
+                + `<span class="msg-state msg-state-${rState}">${rState.toUpperCase()}</span>`;
+            container.appendChild(replyDiv);
+        });
     });
 
     container.scrollTop = 0;
 }
 
 async function loadMessages(pid) {
+    // Fetch both message history (event log) and live inbox (queued messages) in parallel.
     try {
-        const resp = await fetch(`/api/messages?pid=${pid}&limit=50`);
-        const data = await resp.json();
-        if (!data.ok) return;
+        const [histResp, inboxResp] = await Promise.all([
+            fetch(`/api/messages?pid=${pid}&limit=50`).then(r => r.json()).catch(() => null),
+            fetch(`/api/inbox/${pid}`).then(r => r.json()).catch(() => null),
+        ]);
 
-        // Merge into nodeMessages from server data.
         if (!nodeMessages[pid]) nodeMessages[pid] = [];
-        data.entries.forEach(entry => {
-            nodeMessages[pid].push({
-                ts: entry.timestamp,
-                from_pid: entry.from_pid,
-                to_pid: entry.to_pid,
-                from_name: entry.from_name || '',
-                to_name: entry.to_name || '',
-                type: entry.type || '',
-                direction: pid === entry.from_pid ? 'outgoing' : 'incoming',
+
+        // Merge message history from server event log.
+        if (histResp && histResp.ok) {
+            histResp.entries.forEach(entry => {
+                nodeMessages[pid].push({
+                    ts: entry.timestamp,
+                    from_pid: entry.from_pid,
+                    to_pid: entry.to_pid,
+                    from_name: entry.from_name || '',
+                    to_name: entry.to_name || '',
+                    type: entry.type || '',
+                    direction: pid === entry.from_pid ? 'outgoing' : 'incoming',
+                    message_id: entry.message_id || '',
+                    state: entry.state || 'sent',
+                    reply_to: entry.reply_to || '',
+                    payload_preview: entry.payload_preview || '',
+                });
             });
-        });
-        // Deduplicate by timestamp (rough).
+        }
+
+        // Merge queued inbox messages from kernel.
+        if (inboxResp && inboxResp.ok && inboxResp.messages.length > 0) {
+            inboxResp.messages.forEach(msg => {
+                nodeMessages[pid].push({
+                    ts: Date.now(),
+                    from_pid: msg.from_pid,
+                    to_pid: pid,
+                    from_name: msg.from_name || '',
+                    to_name: '',
+                    type: msg.type || '',
+                    direction: 'incoming',
+                    message_id: msg.message_id || '',
+                    state: 'queued',
+                    reply_to: msg.reply_to || '',
+                    payload_preview: msg.payload_preview || '',
+                });
+            });
+        }
+
+        // Deduplicate by message_id first, then by timestamp+type.
         const seen = new Set();
         nodeMessages[pid] = nodeMessages[pid].filter(e => {
-            const key = `${e.ts}-${e.from_pid}-${e.to_pid}-${e.type}`;
+            const key = e.message_id
+                ? `mid:${e.message_id}`
+                : `${e.ts}-${e.from_pid}-${e.to_pid}-${e.type}`;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
@@ -1195,6 +1345,43 @@ function toggleTracesPanel() {
     } else {
         content.style.display = 'none';
         toggle.textContent = '+';
+    }
+}
+
+// ─── Send Message Modal ───
+
+function openSendMsgModal() {
+    if (!selectedNode) return;
+    document.getElementById('sm-target-pid').textContent = selectedNode.pid;
+    document.getElementById('sm-target-name').textContent = selectedNode.name || '?';
+    document.getElementById('sm-type').value = 'task_request';
+    document.getElementById('sm-payload').value = '';
+    document.getElementById('send-msg-modal').style.display = 'flex';
+    document.getElementById('sm-payload').focus();
+}
+
+async function doSendMsg() {
+    if (!selectedNode) return;
+    const toPid = selectedNode.pid;
+    const msgType = document.getElementById('sm-type').value;
+    const payload = document.getElementById('sm-payload').value;
+
+    closeModal('send-msg-modal');
+
+    try {
+        const resp = await fetch('/api/send-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to_pid: toPid, type: msgType, payload: payload }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            toast('success', `Message sent (ID: ${data.message_id})`);
+        } else {
+            toast('error', `Send failed: ${data.error}`);
+        }
+    } catch (e) {
+        toast('error', `Send error: ${e.message}`);
     }
 }
 

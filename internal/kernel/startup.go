@@ -65,6 +65,7 @@ type StartupAgent struct {
 type StartupCron struct {
 	Name        string            `json:"name"`
 	Expression  string            `json:"expression"`
+	Action      string            `json:"action,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Params      map[string]string `json:"params,omitempty"`
 }

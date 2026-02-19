@@ -209,6 +209,18 @@ The spawner (`internal/process/spawner.go`) enforces:
 
 Inter-process communication follows hierarchical routing rules.
 
+### Mailbox Model
+
+The mailbox is the **central interaction model**. Every agent has a priority inbox managed by the Broker. All work arrives as messages:
+
+- **Agent-to-agent**: message -> inbox -> `handle_message()` -> reply
+- **Cron tasks**: kernel sends `cron_task` message -> inbox -> agent processes -> `cron_result` reply
+- **WebUI/external**: dashboard sends `task_request` -> inbox -> agent processes -> reply visible in dashboard
+
+Agents use `self.core` (CoreClient) for syscalls during message handling -- no Execute stream needed.
+
+See [docs/MAILBOX.md](MAILBOX.md) for the full mailbox design: message types, lifecycle, patterns, and migration guide.
+
 ### Message Structure
 
 ```go
@@ -591,7 +603,8 @@ Core-managed recurring actions (`internal/scheduler/cron.go`):
 
 - **5-field cron expressions**: `minute hour day-of-month month day-of-week`
 - Supports: `*`, specific values, `*/N` intervals, comma-separated values
-- **Two actions**: `CronSpawn` (create new process) and `CronWake` (wake sleeping process)
+- **Three actions**: `CronSpawn` (create new process), `CronWake` (wake sleeping process), and `CronMessage` (send message to agent inbox)
+- **Default action**: `message` -- sends a `cron_task` message to the target agent's inbox. The `execute` action is legacy.
 - **Per-VPS**: Each entry is associated with a VPS node
 - **Dedup**: Won't re-trigger within the same minute
 - Kernel holds the crontab for reliability (agents can add/remove via gRPC RPCs)
@@ -695,9 +708,15 @@ The Manager handles agent process lifecycle:
 | `GetClient(pid)` | Get AgentServiceClient stub |
 | `ListRuntimes()` | List all active runtimes |
 
+### Primary Task Handler: `handle_message()`
+
+For new agents, the recommended task handler is `handle_message()`. All tasks arrive as messages (`cron_task`, `task_request`, etc.) delivered via the `DeliverMessage` RPC. Agents use `self.core` (CoreClient) for syscalls during message handling.
+
+The Execute bidi stream (`handle_task` + `SyscallContext`) is available but not the default path for new agents. See [docs/MAILBOX.md](MAILBOX.md) for the mailbox-first interaction model.
+
 ### Executor (`internal/runtime/executor.go`)
 
-Manages bidirectional Execute streams for task execution:
+Manages bidirectional Execute streams for task execution (legacy path):
 
 ```
   Core (Executor)                    Agent (handle_task)

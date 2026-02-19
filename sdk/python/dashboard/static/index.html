@@ -106,13 +106,21 @@
             </div>
         </div>
 
-        <!-- Messages panel -->
+        <!-- Inbox panel (mailbox view) -->
         <div id="messages-panel" style="display:none">
             <div class="panel-header" onclick="toggleMessagesPanel()">
-                <h2>Messages <span id="messages-count" class="panel-badge"></span></h2>
+                <h2>Inbox <span id="messages-count" class="panel-badge"></span></h2>
                 <span id="messages-toggle">-</span>
             </div>
             <div id="messages-content">
+                <div id="inbox-controls">
+                    <button id="btn-send-msg" class="btn-primary" style="padding:3px 10px;font-size:11px" onclick="openSendMsgModal()">Send Message</button>
+                    <div id="inbox-tabs">
+                        <button class="inbox-tab active" onclick="setInboxFilter('all', this)">All</button>
+                        <button class="inbox-tab" onclick="setInboxFilter('incoming', this)">Incoming</button>
+                        <button class="inbox-tab" onclick="setInboxFilter('outgoing', this)">Outgoing</button>
+                    </div>
+                </div>
                 <div id="messages-entries"></div>
             </div>
         </div>
@@ -291,6 +299,29 @@
         <div class="modal-actions">
             <button id="rt-submit" onclick="doRunTask()">Run</button>
             <button class="btn-secondary" onclick="closeModal('run-task-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Send Message Modal -->
+<div id="send-msg-modal" class="modal" style="display:none">
+    <div class="modal-content">
+        <h2>Send Message to <span id="sm-target-name"></span> <span style="color:#888;font-size:13px">(PID <span id="sm-target-pid"></span>)</span></h2>
+        <div class="form-group">
+            <label>Message Type</label>
+            <select id="sm-type">
+                <option value="task_request">task_request</option>
+                <option value="notification">notification</option>
+                <option value="cron_task">cron_task</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Payload</label>
+            <textarea id="sm-payload" rows="4" placeholder="Message payload text..."></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-primary" onclick="doSendMsg()">Send</button>
+            <button class="btn-secondary" onclick="closeModal('send-msg-modal')">Cancel</button>
         </div>
     </div>
 </div>

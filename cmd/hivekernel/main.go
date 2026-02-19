@@ -105,6 +105,16 @@ func main() {
 		defer cancel()
 		if _, err := client.DeliverMessage(ctx, pbMsg); err != nil {
 			log.Printf("[broker] push delivery to PID %d failed: %v", pid, err)
+			return
+		}
+		// Emit message_delivered event.
+		if el := king.EventLog(); el != nil {
+			el.Emit(process.ProcessEvent{
+				Type:      process.EventMessageDelivered,
+				PID:       pid,
+				PPID:      msg.FromPID,
+				MessageID: msg.ID,
+			})
 		}
 	}
 
@@ -280,12 +290,21 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 		}
 		log.Printf("[startup] spawned %s (PID %d)", agent.Name, proc.PID)
 
+		// Flush any messages that arrived before the agent was ready.
+		if flushed := king.Broker().FlushInbox(proc.PID); flushed > 0 {
+			log.Printf("[startup] flushed %d pending message(s) to %s (PID %d)", flushed, agent.Name, proc.PID)
+		}
+
 		// Register cron entries for this agent.
 		for _, cronEntry := range agent.Cron {
-			if _, err := king.Cron().ParseAndAdd(cronEntry.Name, cronEntry.Expression, "execute", proc.PID, cronEntry.Description, cronEntry.Params); err != nil {
+			action := cronEntry.Action
+			if action == "" {
+				action = "message"
+			}
+			if _, err := king.Cron().ParseAndAdd(cronEntry.Name, cronEntry.Expression, action, proc.PID, cronEntry.Description, cronEntry.Params); err != nil {
 				log.Printf("[startup] failed to add cron %q for %s: %v", cronEntry.Name, agent.Name, err)
 			} else {
-				log.Printf("[startup] cron %q (%s) registered for %s (PID %d)", cronEntry.Name, cronEntry.Expression, agent.Name, proc.PID)
+				log.Printf("[startup] cron %q (%s, action=%s) registered for %s (PID %d)", cronEntry.Name, cronEntry.Expression, action, agent.Name, proc.PID)
 			}
 		}
 	}

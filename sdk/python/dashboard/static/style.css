@@ -720,6 +720,86 @@ button.btn-primary:hover {
     font-size: 11px;
 }
 
+/* Inbox controls */
+#inbox-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+#inbox-tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.inbox-tab {
+    background: #2a2a3a;
+    border: 1px solid #3a3a4a;
+    color: #888;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.inbox-tab.active {
+    background: #3a3a5a;
+    color: #e0e0e0;
+    border-color: #54a0ff;
+}
+
+/* Message state badges */
+.msg-state {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.msg-state-sent {
+    background: rgba(87, 101, 116, 0.3);
+    color: #888;
+}
+
+.msg-state-delivered {
+    background: rgba(16, 172, 132, 0.2);
+    color: #10ac84;
+}
+
+.msg-state-replied {
+    background: rgba(84, 160, 255, 0.2);
+    color: #54a0ff;
+}
+
+.msg-state-queued {
+    background: rgba(249, 202, 36, 0.2);
+    color: #f9ca24;
+}
+
+/* Nested reply */
+.msg-nested-reply {
+    margin-left: 16px;
+    border-left-color: #555;
+    background: rgba(100, 100, 120, 0.06);
+    font-size: 11px;
+}
+
+/* Payload preview */
+.msg-payload {
+    color: #888;
+    font-size: 11px;
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 3px;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
 /* ─── Message flow animation ─── */
 .message-flash {
     pointer-events: none;

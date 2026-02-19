@@ -254,6 +254,24 @@ def apply_event(event) -> dict | None:
             "ts": event.timestamp_ms,
         }
 
+    elif event.type == "message_delivered":
+        # event.pid = to_pid, event.ppid = from_pid
+        message_id = getattr(event, "message_id", "") or ""
+        import time as _time
+        # Update matching message_log entry with delivered_at.
+        for entry in reversed(message_log):
+            if entry.get("message_id") == message_id and message_id:
+                entry["delivered_at"] = int(_time.time() * 1000)
+                entry["state"] = "delivered"
+                break
+        return {
+            "action": "message_delivered",
+            "message_id": message_id,
+            "to_pid": event.pid,
+            "from_pid": event.ppid,
+            "ts": event.timestamp_ms,
+        }
+
     elif event.type == "message_sent":
         # event.pid = from_pid, event.ppid = to_pid,
         # event.name = from_name, event.role = to_name, event.message = msg_type
@@ -264,11 +282,14 @@ def apply_event(event) -> dict | None:
         msg_type = event.message
         reply_to = getattr(event, "reply_to", "") or ""
         payload_preview = getattr(event, "payload_preview", "") or ""
+        message_id = getattr(event, "message_id", "") or ""
 
         # Record in message log.
         entry = record_message(from_pid, to_pid, from_name, to_name,
                                msg_type, reply_to, payload_preview,
                                trace_id=evt_trace_id, trace_span=evt_trace_span)
+        entry["message_id"] = message_id
+        entry["state"] = "sent"
 
         # Record task_response as a delegation result in task_history.
         if msg_type == "task_response" and payload_preview:
@@ -309,6 +330,7 @@ def apply_event(event) -> dict | None:
             "ts": event.timestamp_ms,
             "trace_id": evt_trace_id,
             "trace_span": evt_trace_span,
+            "message_id": message_id,
         }
 
     return None
@@ -743,6 +765,34 @@ async def api_task_history(limit: int = 50, pid: int = 0):
     return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
 
 
+@app.post("/api/send-message")
+async def api_send_message(body: dict):
+    """Send a message to an agent's inbox. Dashboard sends as PID 1 (king)."""
+    to_pid = body.get("to_pid", 0)
+    msg_type = body.get("type", "task_request")
+    payload = body.get("payload", "")
+
+    if not to_pid:
+        return JSONResponse({"ok": False, "error": "to_pid is required"}, status_code=400)
+
+    try:
+        resp = await stub.SendMessage(
+            agent_pb2.SendMessageRequest(
+                to_pid=to_pid,
+                type=msg_type,
+                payload=payload.encode("utf-8") if isinstance(payload, str) else payload,
+                priority=agent_pb2.PRIORITY_NORMAL,
+            ),
+            metadata=md(1),
+            timeout=10,
+        )
+        if resp.delivered:
+            return {"ok": True, "message_id": resp.message_id}
+        return JSONResponse({"ok": False, "error": resp.error}, status_code=400)
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
+
+
 @app.get("/api/messages")
 async def api_messages(pid: int = 0, limit: int = 50):
     """Return recent IPC messages, optionally filtered by PID (from or to)."""
@@ -750,6 +800,30 @@ async def api_messages(pid: int = 0, limit: int = 50):
     if pid > 0:
         filtered = [m for m in message_log if m["from_pid"] == pid or m["to_pid"] == pid]
     return {"ok": True, "entries": list(reversed(filtered[-limit:]))}
+
+
+@app.get("/api/inbox/{pid}")
+async def api_inbox(pid: int):
+    """Return messages currently queued in a process's kernel inbox."""
+    try:
+        resp = await stub.ListInbox(
+            core_pb2.ListInboxRequest(pid=pid), metadata=md(1), timeout=5,
+        )
+        messages = []
+        for m in resp.messages:
+            messages.append({
+                "message_id": m.message_id,
+                "from_pid": m.from_pid,
+                "from_name": m.from_name,
+                "type": m.type,
+                "priority": int(m.priority),
+                "payload_preview": m.payload[:200].decode("utf-8", errors="replace") if m.payload else "",
+                "requires_ack": m.requires_ack,
+                "reply_to": m.reply_to,
+            })
+        return {"ok": True, "messages": messages, "total": resp.total}
+    except grpc.aio.AioRpcError as e:
+        return JSONResponse({"ok": False, "error": e.details()}, status_code=500)
 
 
 @app.get("/api/traces")

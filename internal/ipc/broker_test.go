@@ -151,3 +151,49 @@ func TestBrokerCrossBranch(t *testing.T) {
 		t.Fatalf("expected 1 message in worker-b inbox")
 	}
 }
+
+func TestBroker_ListInbox(t *testing.T) {
+	_, b := setupBrokerTree(t)
+
+	// Route 3 messages to worker-a (PID 3).
+	b.Route(&Message{FromPID: 2, ToPID: 3, Type: "task1", Priority: PriorityNormal})
+	b.Route(&Message{FromPID: 2, ToPID: 3, Type: "task2", Priority: PriorityHigh})
+	b.Route(&Message{FromPID: 2, ToPID: 3, Type: "task3", Priority: PriorityLow})
+
+	// ListInbox should return all 3 without removing them.
+	msgs := b.ListInbox(3)
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages from ListInbox, got %d", len(msgs))
+	}
+
+	// InboxLen should still be 3 (non-destructive).
+	if b.InboxLen(3) != 3 {
+		t.Fatalf("expected InboxLen=3 after ListInbox, got %d", b.InboxLen(3))
+	}
+
+	// ListInbox for a PID with no inbox returns nil.
+	msgs = b.ListInbox(999)
+	if msgs != nil {
+		t.Fatalf("expected nil for non-existent PID, got %d messages", len(msgs))
+	}
+}
+
+func TestBroker_InboxLen(t *testing.T) {
+	_, b := setupBrokerTree(t)
+
+	// Empty inbox.
+	if b.InboxLen(3) != 0 {
+		t.Fatalf("expected 0 for empty inbox, got %d", b.InboxLen(3))
+	}
+
+	// Route a message.
+	b.Route(&Message{FromPID: 2, ToPID: 3, Type: "test", Priority: PriorityNormal})
+	if b.InboxLen(3) != 1 {
+		t.Fatalf("expected 1 after routing, got %d", b.InboxLen(3))
+	}
+
+	// Non-existent PID.
+	if b.InboxLen(999) != 0 {
+		t.Fatalf("expected 0 for non-existent PID, got %d", b.InboxLen(999))
+	}
+}

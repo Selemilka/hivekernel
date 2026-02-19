@@ -18,7 +18,7 @@ import time
 
 from .agent import HiveAgent
 from .syscall import SyscallContext
-from .types import TaskResult
+from .types import Message, MessageAck, TaskResult
 
 logger = logging.getLogger("hivekernel.maid")
 
@@ -55,6 +55,32 @@ class MaidAgent(HiveAgent):
         report = await self._scan()
         summary = self._format_report(report)
         return TaskResult(exit_code=0, output=summary)
+
+    async def handle_message(self, message: Message) -> MessageAck:
+        """Handle incoming messages. Runs health scan on cron_task."""
+        if message.type == "cron_task":
+            desc = ""
+            try:
+                payload = json.loads(message.payload)
+                desc = payload.get("description", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+            logger.info("Cron task received: %s", desc or "(no description)")
+            report = await self._scan()
+            summary = self._format_report(report)
+            # Send result back to sender for visibility.
+            if self.core:
+                try:
+                    await self.core.send_message(
+                        to_pid=message.from_pid,
+                        type="cron_result",
+                        payload=summary.encode("utf-8"),
+                        reply_to=message.message_id,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send cron result: %s", e)
+            return MessageAck(status=MessageAck.ACK_ACCEPTED)
+        return await super().handle_message(message)
 
     # --- Internal ---
 

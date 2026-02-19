@@ -240,6 +240,7 @@ func (s *CoreServer) SendMessage(ctx context.Context, req *pb.SendMessageRequest
 			PayloadPreview: truncatePayload(string(req.Payload), 2000),
 			TraceID:        traceID,
 			TraceSpan:      traceSpan,
+			MessageID:      msg.ID,
 		})
 	}
 
@@ -589,6 +590,37 @@ func (s *CoreServer) ListCron(ctx context.Context, req *pb.ListCronRequest) (*pb
 	return resp, nil
 }
 
+// --- Inbox inspection ---
+
+func (s *CoreServer) ListInbox(ctx context.Context, req *pb.ListInboxRequest) (*pb.ListInboxResponse, error) {
+	pid := process.PID(req.Pid)
+	if pid == 0 {
+		var err error
+		pid, err = callerPID(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	msgs := s.king.Broker().ListInbox(pid)
+	resp := &pb.ListInboxResponse{
+		Total: int32(len(msgs)),
+	}
+	for _, msg := range msgs {
+		resp.Messages = append(resp.Messages, &pb.AgentMessage{
+			MessageId:   msg.ID,
+			FromPid:     msg.FromPID,
+			FromName:    msg.FromName,
+			Type:        msg.Type,
+			Priority:    pb.Priority(msg.Priority),
+			Payload:     msg.Payload,
+			RequiresAck: msg.RequiresAck,
+			ReplyTo:     msg.ReplyTo,
+		})
+	}
+	return resp, nil
+}
+
 // --- Event sourcing ---
 
 func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc.ServerStreamingServer[pb.ProcessEvent]) error {
@@ -626,6 +658,7 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				PayloadPreview: evt.PayloadPreview,
 				TraceId:        evt.TraceID,
 				TraceSpan:      evt.TraceSpan,
+				MessageId:      evt.MessageID,
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err

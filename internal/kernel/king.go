@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -540,10 +541,71 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 		result, err := k.executor.ExecuteTask(ctx, rt.Addr, entry.TargetPID, taskReq)
 		if err != nil {
 			log.Printf("[cron] %q: execute failed: %v", entry.Name, err)
+			if el := k.eventLog; el != nil {
+				el.Emit(process.ProcessEvent{
+					Type:    process.EventLogged,
+					PID:     entry.TargetPID,
+					Name:    entry.Name,
+					Level:   "error",
+					Message: fmt.Sprintf("[cron] %q: execute failed: %v", entry.Name, err),
+				})
+			}
 			return
 		}
 		log.Printf("[cron] %q: completed (exit=%d, output=%d bytes)",
 			entry.Name, result.ExitCode, len(result.Output))
+		if el := k.eventLog; el != nil {
+			level := "info"
+			if result.ExitCode != 0 {
+				level = "warn"
+			}
+			el.Emit(process.ProcessEvent{
+				Type:    process.EventLogged,
+				PID:     entry.TargetPID,
+				Name:    entry.Name,
+				Level:   level,
+				Message: fmt.Sprintf("[cron] %q: exit=%d, output=%s", entry.Name, result.ExitCode, truncatePayload(result.Output, 500)),
+			})
+		}
+
+	case scheduler.CronMessage:
+		payload := map[string]interface{}{
+			"description": entry.ExecuteDesc,
+			"params":      entry.ExecuteParams,
+		}
+		jsonPayload, err := json.Marshal(payload)
+		if err != nil {
+			log.Printf("[cron] %q: failed to marshal payload: %v", entry.Name, err)
+			return
+		}
+		msg := &ipc.Message{
+			FromPID:  1, // King
+			FromName: "king",
+			ToPID:    entry.TargetPID,
+			Type:     "cron_task",
+			Payload:  jsonPayload,
+		}
+		if err := k.broker.Route(msg); err != nil {
+			log.Printf("[cron] %q: message route failed: %v", entry.Name, err)
+			return
+		}
+		// Emit message_sent event for dashboard visibility.
+		if el := k.eventLog; el != nil {
+			toName := ""
+			if receiver, err := k.registry.Get(entry.TargetPID); err == nil {
+				toName = receiver.Name
+			}
+			el.Emit(process.ProcessEvent{
+				Type:           process.EventMessageSent,
+				PID:            1,
+				PPID:           entry.TargetPID,
+				Name:           "king",
+				Role:           toName,
+				Message:        "cron_task",
+				PayloadPreview: truncatePayload(string(jsonPayload), 2000),
+			})
+		}
+		log.Printf("[cron] %q: message sent to PID %d", entry.Name, entry.TargetPID)
 
 	case scheduler.CronSpawn:
 		_, err := k.SpawnChild(process.SpawnRequest{

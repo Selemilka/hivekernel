@@ -15,6 +15,7 @@ Features:
 - Task history: remembers recent results to inform routing
 - Maid integration: reads health report before complex tasks
 - Architect routing: strategic planner for design/architecture tasks
+- Mailbox-first: unified code path via CoreClient for both IPC and Execute stream
 
 Runtime image: hivekernel_sdk.queen:QueenAgent
 """
@@ -46,7 +47,7 @@ _COMPLEX_KEYWORDS = frozenset({
     "develop", "build", "optimize", "benchmark",
 })
 
-# Architect keywords — trigger strategic planning path.
+# Architect keywords -- trigger strategic planning path.
 _ARCHITECT_KEYWORDS = frozenset({
     "architect", "architecture", "blueprint", "roadmap",
     "infrastructure", "framework",
@@ -128,8 +129,7 @@ class QueenAgent(LLMAgent):
     async def _process_message_task(self, message: Message):
         """Process a task_request received via IPC and send result back.
 
-        Uses CoreClient direct RPCs (not SyscallContext) since we're outside
-        an Execute bidi stream. This allows full spawn/execute capabilities.
+        Uses the unified _core_handle_* methods (same code path as handle_task).
         """
         try:
             payload = json.loads(message.payload.decode("utf-8"))
@@ -140,13 +140,47 @@ class QueenAgent(LLMAgent):
             else:
                 logger.info("Queen processing IPC task from PID %d: %s",
                             message.from_pid, description[:80])
+
+                # Check Maid health report.
+                health_warning = await self._check_maid_health()
+                if health_warning:
+                    await self.core.log("warn", f"Maid health: {health_warning}")
+
+                # Assess complexity.
                 complexity = await self._assess_complexity(description)
                 logger.info("IPC task complexity: %s", complexity)
 
+                # Execute using unified core methods.
                 if complexity == "simple":
-                    result = await self._ipc_handle_simple(description, trace_id=trace_id)
+                    result = await self._core_handle_simple(description, trace_id=trace_id)
+                elif complexity == "architect":
+                    result = await self._core_handle_architect(description, trace_id=trace_id)
                 else:
-                    result = await self._ipc_handle_complex(description, trace_id=trace_id)
+                    result = await self._core_handle_complex(description, trace_id=trace_id)
+
+                # Record in task history.
+                self._task_history.append({
+                    "task": description,
+                    "complexity": complexity,
+                    "exit_code": result["exit_code"],
+                    "ts": time.time(),
+                })
+
+                # Store result artifact.
+                safe_key = description.lower().replace(" ", "-")[:40]
+                try:
+                    await self.core.store_artifact(
+                        key=f"queen-result-{safe_key}",
+                        content=json.dumps({
+                            "task": description,
+                            "complexity": complexity,
+                            "output": result["output"][:4000],
+                            "exit_code": result["exit_code"],
+                        }, ensure_ascii=False).encode("utf-8"),
+                        content_type="application/json",
+                    )
+                except Exception as e:
+                    logger.warning("Failed to store artifact: %s", e)
 
                 result_payload = json.dumps({
                     "output": result["output"],
@@ -173,119 +207,44 @@ class QueenAgent(LLMAgent):
                 logger.error("Queen failed to send reply to PID %d: %s",
                              message.from_pid, e)
 
-    async def _ipc_handle_simple(self, description: str, trace_id: str = "") -> dict:
-        """Simple IPC task: spawn worker via CoreClient, execute, collect."""
-        worker_pid = None
-        try:
-            await self.core.log("info", f"IPC simple: spawning task worker")
-            worker_pid = await self.core.spawn_child(
-                name="queen-ipc-task",
-                role="task",
-                cognitive_tier="operational",
-                model="mini",
-                system_prompt="You are a skilled assistant. Complete the given task thoroughly and concisely.",
-                runtime_image="hivekernel_sdk.worker:WorkerAgent",
-                runtime_type="python",
-            )
-            logger.info("IPC spawned worker PID %d for simple task", worker_pid)
-            params = {"subtask": description}
-            if trace_id:
-                params["trace_id"] = trace_id
-            result = await self.core.execute_task(
-                target_pid=worker_pid,
-                description=description,
-                params=params,
-                timeout_seconds=120,
-            )
-            # Kill worker after success -- IPC workers can't be reused.
-            try:
-                await self.core.kill_child(worker_pid)
-            except Exception:
-                pass
-            return {**result, "metadata": {**result.get("metadata", {}), "strategy": "simple"}}
-        except Exception as e:
-            logger.error("IPC simple task failed: %s", e)
-            if worker_pid:
-                try:
-                    await self.core.kill_child(worker_pid)
-                except Exception:
-                    pass
-            return {"output": f"Task failed: {e}", "exit_code": 1}
-
-    async def _ipc_handle_complex(self, description: str, trace_id: str = "") -> dict:
-        """Complex IPC task: spawn lead via CoreClient, execute, collect."""
-        lead_pid = None
-        try:
-            await self.core.log("info", f"IPC complex: spawning orchestrator lead")
-            lead_pid = await self.core.spawn_child(
-                name="queen-ipc-lead",
-                role="lead",
-                cognitive_tier="tactical",
-                model="sonnet",
-                system_prompt="You are a task orchestrator. You decompose tasks, delegate to workers, and synthesize results.",
-                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
-                runtime_type="python",
-            )
-            logger.info("IPC spawned lead PID %d for complex task", lead_pid)
-            params = {"task": description, "max_workers": self._max_workers}
-            if trace_id:
-                params["trace_id"] = trace_id
-            result = await self.core.execute_task(
-                target_pid=lead_pid,
-                description=description,
-                params=params,
-                timeout_seconds=300,
-            )
-            # Kill lead after success -- IPC-spawned leads can't be reused
-            # (no SyscallContext), so adding to idle pool just creates zombies.
-            try:
-                await self.core.kill_child(lead_pid)
-            except Exception:
-                pass
-            return {**result, "metadata": {**result.get("metadata", {}), "strategy": "complex"}}
-        except Exception as e:
-            logger.error("IPC complex task failed: %s", e)
-            if lead_pid:
-                try:
-                    await self.core.kill_child(lead_pid)
-                except Exception:
-                    pass
-            return {"output": f"Task failed: {e}", "exit_code": 1}
-
-    # --- Task Handling ---
+    # --- Task Handling (Execute stream -- thin wrapper) ---
 
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
+        """Execute stream entry point. Delegates to unified _core_handle_* methods."""
         description = task.params.get("task", task.description)
         self._max_workers = task.params.get("max_workers", "3")
         trace_id = task.params.get("trace_id", "")
         if not description.strip():
             return TaskResult(exit_code=1, output="Empty task description")
 
-        await ctx.log("info", f"Queen received task: {description[:100]}")
         await ctx.report_progress("Assessing task complexity...", 5.0)
+        await self.core.log("info", f"Queen received task: {description[:100]}")
 
         # 1. Check Maid health report before execution.
         health_warning = await self._check_maid_health()
         if health_warning:
-            await ctx.log("warn", f"Maid health: {health_warning}")
+            await self.core.log("warn", f"Maid health: {health_warning}")
 
         # 2. Assess complexity (history -> heuristics -> LLM).
         complexity = await self._assess_complexity(description)
-        await ctx.log("info", f"Task complexity: {complexity}")
+        await self.core.log("info", f"Task complexity: {complexity}")
 
-        # 3. Execute based on complexity.
+        # 3. Execute based on complexity (unified core methods).
         if complexity == "simple":
-            result = await self._handle_simple(description, ctx, trace_id=trace_id)
+            await ctx.report_progress("Spawning task worker...", 15.0)
+            result = await self._core_handle_simple(description, trace_id=trace_id)
         elif complexity == "architect":
-            result = await self._handle_architect(description, ctx, trace_id=trace_id)
+            await ctx.report_progress("Spawning architect...", 15.0)
+            result = await self._core_handle_architect(description, trace_id=trace_id)
         else:
-            result = await self._handle_complex(description, ctx, trace_id=trace_id)
+            await ctx.report_progress("Acquiring orchestrator...", 15.0)
+            result = await self._core_handle_complex(description, trace_id=trace_id)
 
         # 4. Record in task history.
         self._task_history.append({
             "task": description,
             "complexity": complexity,
-            "exit_code": result.exit_code,
+            "exit_code": result["exit_code"],
             "ts": time.time(),
         })
 
@@ -293,23 +252,28 @@ class QueenAgent(LLMAgent):
         await ctx.report_progress("Storing result...", 95.0)
         safe_key = description.lower().replace(" ", "-")[:40]
         try:
-            await ctx.store_artifact(
+            await self.core.store_artifact(
                 key=f"queen-result-{safe_key}",
                 content=json.dumps({
                     "task": description,
                     "complexity": complexity,
-                    "output": result.output[:4000],
-                    "exit_code": result.exit_code,
+                    "output": result["output"][:4000],
+                    "exit_code": result["exit_code"],
                 }, ensure_ascii=False).encode("utf-8"),
                 content_type="application/json",
             )
         except Exception as e:
             logger.warning("Failed to store artifact: %s", e)
 
-        await ctx.log("info", f"Queen task done (exit={result.exit_code})")
-        return result
+        await self.core.log("info", f"Queen task done (exit={result['exit_code']})")
+        return TaskResult(
+            exit_code=result["exit_code"],
+            output=result["output"],
+            artifacts=result.get("artifacts", {}),
+            metadata=result.get("metadata", {}),
+        )
 
-    # --- Complexity Assessment (Phase 3) ---
+    # --- Complexity Assessment ---
 
     async def _assess_complexity(self, description: str) -> str:
         """Three-tier assessment: history -> heuristics -> LLM."""
@@ -370,7 +334,7 @@ class QueenAgent(LLMAgent):
             logger.warning("LLM complexity assessment failed: %s, defaulting to complex", e)
         return "complex"
 
-    # --- Maid Integration (Phase 3) ---
+    # --- Maid Integration ---
 
     async def _check_maid_health(self) -> str:
         """Read latest Maid health report artifact. Returns warning or empty."""
@@ -385,17 +349,20 @@ class QueenAgent(LLMAgent):
             pass  # No report yet or Maid not spawned
         return ""
 
-    # --- Lead Management (Phase 3) ---
+    # --- Lead Management ---
 
-    async def _acquire_lead(self, ctx: SyscallContext) -> int:
-        """Get a lead PID: reuse idle lead or spawn new one."""
+    async def _acquire_lead(self, ctx: SyscallContext = None) -> int:
+        """Get a lead PID: reuse idle lead or spawn new one.
+
+        When ctx is provided, spawns via SyscallContext (Execute stream).
+        When ctx is None, spawns via self.core (CoreClient).
+        """
         while self._idle_leads:
             pid, _ = self._idle_leads.pop(0)
             try:
                 info = await self.core.get_process_info(pid)
                 if info.state in (0, 1):  # STATE_IDLE or STATE_RUNNING
                     logger.info("Reusing idle lead PID %d", pid)
-                    await ctx.log("info", f"Reusing idle lead PID {pid}")
                     return pid
                 logger.info("Idle lead PID %d not alive (state=%d), skip",
                             pid, info.state)
@@ -403,20 +370,33 @@ class QueenAgent(LLMAgent):
                 logger.info("Idle lead PID %d gone, skip", pid)
 
         # No reusable lead: spawn new one.
-        lead_pid = await ctx.spawn(
-            name="queen-lead",
-            role="lead",
-            cognitive_tier="tactical",
-            model="sonnet",
-            system_prompt=(
-                "You are a task orchestrator. You decompose tasks, "
-                "delegate to workers, and synthesize results."
-            ),
-            runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
-            runtime_type="python",
-        )
+        if ctx is not None:
+            lead_pid = await ctx.spawn(
+                name="queen-lead",
+                role="lead",
+                cognitive_tier="tactical",
+                model="sonnet",
+                system_prompt=(
+                    "You are a task orchestrator. You decompose tasks, "
+                    "delegate to workers, and synthesize results."
+                ),
+                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
+                runtime_type="python",
+            )
+        else:
+            lead_pid = await self.core.spawn_child(
+                name="queen-lead",
+                role="lead",
+                cognitive_tier="tactical",
+                model="sonnet",
+                system_prompt=(
+                    "You are a task orchestrator. You decompose tasks, "
+                    "delegate to workers, and synthesize results."
+                ),
+                runtime_image="hivekernel_sdk.orchestrator:OrchestratorAgent",
+                runtime_type="python",
+            )
         logger.info("Spawned new lead PID %d", lead_pid)
-        await ctx.log("info", f"Spawned new lead PID {lead_pid}")
         return lead_pid
 
     async def _release_lead(self, lead_pid: int):
@@ -425,15 +405,84 @@ class QueenAgent(LLMAgent):
         logger.info("Lead PID %d returned to idle pool (%d idle)",
                      lead_pid, len(self._idle_leads))
 
-    # --- Task Execution ---
+    # --- Core-based Task Execution (unified path) ---
 
-    async def _handle_architect(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
-        """Architect path: strategic plan -> lead execution."""
-        await ctx.report_progress("Spawning architect...", 15.0)
-        await ctx.log("info", "Architect strategy: spawning strategic planner")
+    async def _core_handle_simple(self, description: str, trace_id: str = "") -> dict:
+        """Simple task: spawn worker via CoreClient, execute, collect."""
+        worker_pid = None
+        try:
+            await self.core.log("info", "Simple strategy: spawning task worker")
+            worker_pid = await self.core.spawn_child(
+                name="queen-task",
+                role="task",
+                cognitive_tier="operational",
+                model="mini",
+                system_prompt=(
+                    "You are a skilled assistant. Complete the given task "
+                    "thoroughly and concisely."
+                ),
+                runtime_image="hivekernel_sdk.worker:WorkerAgent",
+                runtime_type="python",
+            )
+            logger.info("Spawned worker PID %d for simple task", worker_pid)
+            params = {"subtask": description}
+            if trace_id:
+                params["trace_id"] = trace_id
+            result = await self.core.execute_task(
+                target_pid=worker_pid,
+                description=description,
+                params=params,
+                timeout_seconds=120,
+            )
+            # Task-role workers auto-exit; kill to be safe.
+            try:
+                await self.core.kill_child(worker_pid)
+            except Exception:
+                pass
+            return {**result, "metadata": {**result.get("metadata", {}), "strategy": "simple"}}
+        except Exception as e:
+            logger.error("Simple task failed: %s", e)
+            if worker_pid:
+                try:
+                    await self.core.kill_child(worker_pid)
+                except Exception:
+                    pass
+            return {"output": f"Task failed: {e}", "exit_code": 1}
+
+    async def _core_handle_complex(self, description: str, trace_id: str = "") -> dict:
+        """Complex task: acquire lead (reuse or spawn), delegate, collect."""
+        await self.core.log("info", "Complex strategy: acquiring orchestrator lead")
+        lead_pid = await self._acquire_lead()
+
+        try:
+            params = {"task": description, "max_workers": self._max_workers}
+            if trace_id:
+                params["trace_id"] = trace_id
+            result = await self.core.execute_task(
+                target_pid=lead_pid,
+                description=description,
+                params=params,
+                timeout_seconds=300,
+            )
+            # Success: return lead to idle pool for reuse.
+            await self._release_lead(lead_pid)
+            return {**result, "metadata": {**result.get("metadata", {}),
+                                           "strategy": "complex",
+                                           "lead_pid": str(lead_pid)}}
+        except Exception as e:
+            logger.error("Orchestrator lead failed: %s", e)
+            try:
+                await self.core.kill_child(lead_pid)
+            except Exception:
+                pass
+            return {"output": f"Task failed: {e}", "exit_code": 1}
+
+    async def _core_handle_architect(self, description: str, trace_id: str = "") -> dict:
+        """Architect task: strategic plan -> lead execution."""
+        await self.core.log("info", "Architect strategy: spawning strategic planner")
 
         # 1. Spawn Architect (task role, auto-exits after plan).
-        arch_pid = await ctx.spawn(
+        arch_pid = await self.core.spawn_child(
             name="architect",
             role="task",
             cognitive_tier="tactical",
@@ -445,31 +494,28 @@ class QueenAgent(LLMAgent):
             runtime_image="hivekernel_sdk.architect:ArchitectAgent",
             runtime_type="python",
         )
-        await ctx.log("info", f"Architect spawned as PID {arch_pid}")
+        await self.core.log("info", f"Architect spawned as PID {arch_pid}")
 
         # 2. Get plan from Architect.
-        await ctx.report_progress("Architect designing plan...", 20.0)
         try:
             arch_params = {"task": description, "max_workers": self._max_workers}
             if trace_id:
                 arch_params["trace_id"] = trace_id
-            plan_result = await ctx.execute_on(
-                pid=arch_pid,
+            plan_result = await self.core.execute_task(
+                target_pid=arch_pid,
                 description=description,
                 params=arch_params,
                 timeout_seconds=120,
             )
         except Exception as e:
-            await ctx.log("error", f"Architect failed: {e}, falling back to complex")
-            return await self._handle_complex(description, ctx)
+            await self.core.log("error", f"Architect failed: {e}, falling back to complex")
+            return await self._core_handle_complex(description, trace_id=trace_id)
 
-        plan_json = plan_result.output
-        await ctx.log("info", f"Architect plan received ({len(plan_json)} bytes)")
+        plan_json = plan_result["output"]
+        await self.core.log("info", f"Architect plan received ({len(plan_json)} bytes)")
 
         # 3. Acquire lead and execute with the Architect's plan.
-        await ctx.report_progress("Acquiring orchestrator...", 30.0)
-        lead_pid = await self._acquire_lead(ctx)
-        await ctx.report_progress("Lead executing plan...", 35.0)
+        lead_pid = await self._acquire_lead()
 
         try:
             lead_params = {
@@ -479,104 +525,20 @@ class QueenAgent(LLMAgent):
             }
             if trace_id:
                 lead_params["trace_id"] = trace_id
-            result = await ctx.execute_on(
-                pid=lead_pid,
+            result = await self.core.execute_task(
+                target_pid=lead_pid,
                 description=description,
                 params=lead_params,
                 timeout_seconds=300,
             )
             await self._release_lead(lead_pid)
-            return TaskResult(
-                exit_code=result.exit_code,
-                output=result.output,
-                artifacts=result.artifacts,
-                metadata={**result.metadata, "strategy": "architect",
-                          "architect_pid": str(arch_pid)},
-            )
+            return {**result, "metadata": {**result.get("metadata", {}),
+                                           "strategy": "architect",
+                                           "architect_pid": str(arch_pid)}}
         except Exception as e:
-            await ctx.log("error", f"Lead execution failed: {e}")
+            await self.core.log("error", f"Lead execution failed: {e}")
             try:
-                await ctx.kill(lead_pid)
+                await self.core.kill_child(lead_pid)
             except Exception:
                 pass
-            return TaskResult(exit_code=1, output=f"Architect execution failed: {e}")
-
-    async def _handle_simple(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
-        """Simple path: spawn a task-role worker, execute, collect result."""
-        await ctx.report_progress("Spawning task worker...", 15.0)
-        await ctx.log("info", "Simple strategy: spawning task worker")
-
-        worker_pid = await ctx.spawn(
-            name="queen-task",
-            role="task",
-            cognitive_tier="operational",
-            model="mini",
-            system_prompt=(
-                "You are a skilled assistant. Complete the given task "
-                "thoroughly and concisely."
-            ),
-            runtime_image="hivekernel_sdk.worker:WorkerAgent",
-            runtime_type="python",
-        )
-        await ctx.log("info", f"Task worker spawned: PID {worker_pid}")
-        await ctx.report_progress("Executing task...", 30.0)
-
-        try:
-            params = {"subtask": description}
-            if trace_id:
-                params["trace_id"] = trace_id
-            result = await ctx.execute_on(
-                pid=worker_pid,
-                description=description,
-                params=params,
-                timeout_seconds=120,
-            )
-            return TaskResult(
-                exit_code=result.exit_code,
-                output=result.output,
-                artifacts=result.artifacts,
-                metadata={**result.metadata, "strategy": "simple"},
-            )
-        except Exception as e:
-            await ctx.log("error", f"Task worker failed: {e}")
-            try:
-                await ctx.kill(worker_pid)
-            except Exception:
-                pass
-            return TaskResult(exit_code=1, output=f"Task execution failed: {e}")
-
-    async def _handle_complex(self, description: str, ctx: SyscallContext, trace_id: str = "") -> TaskResult:
-        """Complex path: acquire lead (reuse or spawn), delegate, collect."""
-        await ctx.report_progress("Acquiring orchestrator...", 15.0)
-        await ctx.log("info", "Complex strategy: acquiring orchestrator lead")
-
-        lead_pid = await self._acquire_lead(ctx)
-        await ctx.report_progress("Lead working on task...", 25.0)
-
-        try:
-            params = {"task": description, "max_workers": self._max_workers}
-            if trace_id:
-                params["trace_id"] = trace_id
-            result = await ctx.execute_on(
-                pid=lead_pid,
-                description=description,
-                params=params,
-                timeout_seconds=300,
-            )
-            # Success: return lead to idle pool for reuse.
-            await self._release_lead(lead_pid)
-            return TaskResult(
-                exit_code=result.exit_code,
-                output=result.output,
-                artifacts=result.artifacts,
-                metadata={**result.metadata, "strategy": "complex",
-                          "lead_pid": str(lead_pid)},
-            )
-        except Exception as e:
-            await ctx.log("error", f"Orchestrator lead failed: {e}")
-            # Failure: kill lead (don't reuse broken state).
-            try:
-                await ctx.kill(lead_pid)
-            except Exception:
-                pass
-            return TaskResult(exit_code=1, output=f"Task execution failed: {e}")
+            return {"output": f"Architect execution failed: {e}", "exit_code": 1}

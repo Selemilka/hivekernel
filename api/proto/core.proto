@@ -47,6 +47,10 @@ service CoreService {
 
   // Inbox inspection
   rpc ListInbox(ListInboxRequest) returns (ListInboxResponse);
+
+  // Sibling / wait support (mirror of syscall equivalents)
+  rpc ListSiblings(hivekernel.agent.ListSiblingsRequest) returns (hivekernel.agent.ListSiblingsResponse);
+  rpc WaitChild(hivekernel.agent.WaitChildRequest) returns (hivekernel.agent.WaitChildResponse);
 }
 
 // ─── Process management ───

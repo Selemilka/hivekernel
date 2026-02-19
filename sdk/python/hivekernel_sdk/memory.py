@@ -107,6 +107,18 @@ class AgentMemory:
         result.extend(self.messages)
         return result
 
-    def needs_summarization(self, threshold: int = 20) -> bool:
-        """Check if messages should be summarized."""
-        return len(self.messages) > threshold
+    def estimate_tokens(self) -> int:
+        """Rough token estimate: ~2.5 chars per token."""
+        total = sum(len(str(m.get("content", ""))) for m in self.messages)
+        return int(total / 2.5)
+
+    def needs_summarization(self, threshold: int = 20, max_tokens: int = 60000) -> bool:
+        """Check if messages should be summarized (count or token trigger)."""
+        return len(self.messages) > threshold or self.estimate_tokens() > max_tokens
+
+    def force_compress(self) -> None:
+        """Emergency compression: drop oldest 50%, keep at least last 2 messages."""
+        if len(self.messages) <= 2:
+            return
+        keep = max(2, len(self.messages) // 2)
+        self.messages = self.messages[-keep:]

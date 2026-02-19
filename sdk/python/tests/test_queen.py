@@ -1,4 +1,4 @@
-"""Unit tests for QueenAgent (Phases 3-5).
+"""Unit tests for QueenAgent -- mailbox-first pattern.
 
 Run: python sdk/python/tests/test_queen.py -v
 """
@@ -22,15 +22,17 @@ from hivekernel_sdk.queen import (
     _ARCHITECT_KEYWORDS,
     SIMILARITY_THRESHOLD,
 )
+from hivekernel_sdk.types import Message, MessageAck
 
 
 # --- Helper factories ---
 
 def _mock_ctx():
-    """Create a mock SyscallContext."""
+    """Create a mock SyscallContext (only used for progress reporting now)."""
     ctx = AsyncMock()
     ctx.log = AsyncMock()
     ctx.report_progress = AsyncMock()
+    # Old methods kept for backward compat in tests that still use ctx.spawn:
     ctx.spawn = AsyncMock(return_value=10)
     ctx.kill = AsyncMock()
     ctx.execute_on = AsyncMock(return_value=MagicMock(
@@ -41,6 +43,27 @@ def _mock_ctx():
     ))
     ctx.store_artifact = AsyncMock()
     return ctx
+
+
+def _mock_core():
+    """Create a mock CoreClient with standard returns."""
+    core = AsyncMock()
+    core.log = AsyncMock()
+    core.spawn_child = AsyncMock(return_value=10)
+    core.kill_child = AsyncMock()
+    core.execute_task = AsyncMock(return_value={
+        "exit_code": 0,
+        "output": "test result",
+        "artifacts": {},
+        "metadata": {},
+    })
+    core.store_artifact = AsyncMock()
+    core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
+    core.get_process_info = AsyncMock(return_value=_mock_process_info(10, state=1))
+    core.send_message = AsyncMock(return_value="msg-1")
+    core.list_siblings = AsyncMock(return_value=[])
+    core.wait_child = AsyncMock(return_value={"pid": 10, "exit_code": 0, "output": ""})
+    return core
 
 
 def _mock_task(description="test task", params=None):
@@ -58,6 +81,21 @@ def _mock_process_info(pid, state=1, name="test"):
     info.state = state
     info.name = name
     return info
+
+
+def _mock_message(description="test task", from_pid=5, reply_to="req-123", trace_id=""):
+    """Create a mock IPC message."""
+    payload = {"task": description}
+    if trace_id:
+        payload["trace_id"] = trace_id
+    return Message(
+        message_id="msg-001",
+        from_pid=from_pid,
+        from_name="caller",
+        type="task_request",
+        payload=json.dumps(payload).encode("utf-8"),
+        reply_to=reply_to,
+    )
 
 
 # --- Word Similarity Tests ---
@@ -101,7 +139,7 @@ class TestHeuristicComplexity(unittest.IsolatedAsyncioTestCase):
     async def _make_queen(self):
         """Create a QueenAgent with mocked dependencies."""
         queen = QueenAgent()
-        queen._core = AsyncMock()
+        queen._core = _mock_core()
         queen.llm = MagicMock()
         queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
         return queen
@@ -152,7 +190,7 @@ class TestTaskHistory(unittest.IsolatedAsyncioTestCase):
 
     async def _make_queen(self):
         queen = QueenAgent()
-        queen._core = AsyncMock()
+        queen._core = _mock_core()
         queen.llm = MagicMock()
         queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
         return queen
@@ -184,13 +222,23 @@ class TestTaskHistory(unittest.IsolatedAsyncioTestCase):
         # Should hit heuristic (2 complex keywords).
         self.assertEqual(result, "complex")
 
-    async def test_history_recorded_after_task(self):
+    async def test_history_recorded_after_handle_task(self):
         queen = await self._make_queen()
-        queen._core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
         ctx = _mock_ctx()
         task = _mock_task("summarize this article")
 
         await queen.handle_task(task, ctx)
+
+        self.assertEqual(len(queen._task_history), 1)
+        entry = queen._task_history[0]
+        self.assertEqual(entry["task"], "summarize this article")
+        self.assertEqual(entry["complexity"], "simple")
+
+    async def test_history_recorded_after_ipc_task(self):
+        queen = await self._make_queen()
+        msg = _mock_message("summarize this article")
+
+        await queen._process_message_task(msg)
 
         self.assertEqual(len(queen._task_history), 1)
         entry = queen._task_history[0]
@@ -217,7 +265,7 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
 
     async def _make_queen(self):
         queen = QueenAgent()
-        queen._core = AsyncMock()
+        queen._core = _mock_core()
         queen.llm = MagicMock()
         queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
         return queen
@@ -228,12 +276,11 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
         queen._core.get_process_info = AsyncMock(
             return_value=_mock_process_info(42, state=1)
         )
-        ctx = _mock_ctx()
 
-        pid = await queen._acquire_lead(ctx)
+        pid = await queen._acquire_lead()
         self.assertEqual(pid, 42)
         self.assertEqual(len(queen._idle_leads), 0)
-        ctx.spawn.assert_not_called()
+        queen._core.spawn_child.assert_not_called()
 
     async def test_acquire_reuses_idle_state_lead(self):
         """Lead in IDLE state (0) should be reused -- this is the common case."""
@@ -242,12 +289,11 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
         queen._core.get_process_info = AsyncMock(
             return_value=_mock_process_info(42, state=0)  # IDLE
         )
-        ctx = _mock_ctx()
 
-        pid = await queen._acquire_lead(ctx)
+        pid = await queen._acquire_lead()
         self.assertEqual(pid, 42)
         self.assertEqual(len(queen._idle_leads), 0)
-        ctx.spawn.assert_not_called()
+        queen._core.spawn_child.assert_not_called()
 
     async def test_acquire_skips_dead_lead(self):
         queen = await self._make_queen()
@@ -256,20 +302,18 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
             _mock_process_info(42, state=5),  # zombie
             _mock_process_info(43, state=1),  # running
         ])
-        ctx = _mock_ctx()
 
-        pid = await queen._acquire_lead(ctx)
+        pid = await queen._acquire_lead()
         self.assertEqual(pid, 43)
         self.assertEqual(len(queen._idle_leads), 0)
 
     async def test_acquire_spawns_when_pool_empty(self):
         queen = await self._make_queen()
-        ctx = _mock_ctx()
-        ctx.spawn = AsyncMock(return_value=99)
+        queen._core.spawn_child = AsyncMock(return_value=99)
 
-        pid = await queen._acquire_lead(ctx)
+        pid = await queen._acquire_lead()
         self.assertEqual(pid, 99)
-        ctx.spawn.assert_called_once()
+        queen._core.spawn_child.assert_called_once()
 
     async def test_acquire_spawns_when_all_dead(self):
         queen = await self._make_queen()
@@ -277,11 +321,21 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
         queen._core.get_process_info = AsyncMock(
             side_effect=RuntimeError("not found")
         )
-        ctx = _mock_ctx()
-        ctx.spawn = AsyncMock(return_value=99)
+        queen._core.spawn_child = AsyncMock(return_value=99)
 
-        pid = await queen._acquire_lead(ctx)
+        pid = await queen._acquire_lead()
         self.assertEqual(pid, 99)
+
+    async def test_acquire_with_ctx_spawns_via_ctx(self):
+        """When ctx is provided, _acquire_lead should use ctx.spawn."""
+        queen = await self._make_queen()
+        ctx = _mock_ctx()
+        ctx.spawn = AsyncMock(return_value=77)
+
+        pid = await queen._acquire_lead(ctx=ctx)
+        self.assertEqual(pid, 77)
+        ctx.spawn.assert_called_once()
+        queen._core.spawn_child.assert_not_called()
 
     async def test_release_adds_to_pool(self):
         queen = await self._make_queen()
@@ -291,11 +345,10 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
 
     async def test_complex_task_releases_lead_on_success(self):
         queen = await self._make_queen()
-        queen._core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
+        queen._core.spawn_child = AsyncMock(return_value=50)
         ctx = _mock_ctx()
-        ctx.spawn = AsyncMock(return_value=50)
-
         task = _mock_task("research and analyze the impact of AI")
+
         await queen.handle_task(task, ctx)
 
         # Lead should be in idle pool after success.
@@ -304,17 +357,16 @@ class TestLeadReuse(unittest.IsolatedAsyncioTestCase):
 
     async def test_complex_task_kills_lead_on_failure(self):
         queen = await self._make_queen()
-        queen._core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
+        queen._core.spawn_child = AsyncMock(return_value=50)
+        queen._core.execute_task = AsyncMock(side_effect=RuntimeError("lead crashed"))
         ctx = _mock_ctx()
-        ctx.spawn = AsyncMock(return_value=50)
-        ctx.execute_on = AsyncMock(side_effect=RuntimeError("lead crashed"))
-
         task = _mock_task("research and analyze the impact of AI")
+
         result = await queen.handle_task(task, ctx)
 
         # Lead should be killed, not pooled.
         self.assertEqual(len(queen._idle_leads), 0)
-        ctx.kill.assert_called_with(50)
+        queen._core.kill_child.assert_called_with(50)
         self.assertEqual(result.exit_code, 1)
 
 
@@ -398,14 +450,14 @@ class TestMaidIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(warning, "")
 
 
-# --- Architect Routing Tests (Phase 5) ---
+# --- Architect Routing Tests ---
 
 class TestArchitectRouting(unittest.IsolatedAsyncioTestCase):
     """Test architect keyword detection and routing."""
 
     async def _make_queen(self):
         queen = QueenAgent()
-        queen._core = AsyncMock()
+        queen._core = _mock_core()
         queen.llm = MagicMock()
         queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
         return queen
@@ -456,13 +508,14 @@ class TestArchitectRouting(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "architect")
 
 
-class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
-    """Test _handle_architect flow."""
+# --- Core Handle Architect Tests ---
+
+class TestCoreHandleArchitect(unittest.IsolatedAsyncioTestCase):
+    """Test _core_handle_architect flow."""
 
     async def _make_queen(self):
         queen = QueenAgent()
-        queen._core = AsyncMock()
-        queen._core.get_artifact = AsyncMock(side_effect=RuntimeError("not found"))
+        queen._core = _mock_core()
         queen.llm = MagicMock()
         queen.ask = AsyncMock(return_value='{"complexity": "architect"}')
         return queen
@@ -470,45 +523,42 @@ class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
     async def test_architect_flow_spawn_plan_execute(self):
         queen = await self._make_queen()
 
-        spawn_calls = []
+        spawn_pids = [101, 102]  # architect, then lead
+        spawn_idx = [0]
 
         async def mock_spawn(**kwargs):
-            spawn_calls.append(kwargs)
-            return 100 + len(spawn_calls)
+            pid = spawn_pids[spawn_idx[0]]
+            spawn_idx[0] += 1
+            return pid
+
+        queen._core.spawn_child = mock_spawn
 
         execute_results = [
             # Architect result (plan)
-            MagicMock(
-                output='{"groups": [{"name": "g1", "subtasks": ["do stuff"]}]}',
-                exit_code=0, metadata={}, artifacts={},
-            ),
+            {
+                "output": '{"groups": [{"name": "g1", "subtasks": ["do stuff"]}]}',
+                "exit_code": 0, "metadata": {}, "artifacts": {},
+            },
             # Lead result
-            MagicMock(
-                output="Final result", exit_code=0,
-                metadata={"groups_count": "1"}, artifacts={},
-            ),
+            {
+                "output": "Final result", "exit_code": 0,
+                "metadata": {"groups_count": "1"}, "artifacts": {},
+            },
         ]
-        execute_call_count = [0]
+        exec_idx = [0]
 
-        async def mock_execute_on(pid, description, params, **kwargs):
-            idx = execute_call_count[0]
-            execute_call_count[0] += 1
-            return execute_results[idx]
+        async def mock_execute(target_pid, description, params, **kwargs):
+            result = execute_results[exec_idx[0]]
+            exec_idx[0] += 1
+            return result
 
-        ctx = _mock_ctx()
-        ctx.spawn = mock_spawn
-        ctx.execute_on = mock_execute_on
+        queen._core.execute_task = mock_execute
 
-        result = await queen._handle_architect("architect a new system", ctx)
+        result = await queen._core_handle_architect("architect a new system")
 
-        # Should have spawned architect (task) + lead
-        self.assertEqual(len(spawn_calls), 2)
-        self.assertEqual(spawn_calls[0]["role"], "task")  # architect
-        self.assertEqual(spawn_calls[0]["cognitive_tier"], "tactical")
-        self.assertEqual(spawn_calls[1]["role"], "lead")  # lead
-
-        self.assertEqual(result.exit_code, 0)
-        self.assertEqual(result.metadata["strategy"], "architect")
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["metadata"]["strategy"], "architect")
+        self.assertEqual(result["metadata"]["architect_pid"], "101")
 
     async def test_architect_failure_falls_back_to_complex(self):
         queen = await self._make_queen()
@@ -519,26 +569,26 @@ class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
             spawn_count[0] += 1
             return 100 + spawn_count[0]
 
+        queen._core.spawn_child = mock_spawn
+
         call_count = [0]
 
-        async def mock_execute_on(pid, description, params, **kwargs):
+        async def mock_execute(target_pid, description, params, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("architect crashed")
             # Fallback complex path: lead execution
-            return MagicMock(
-                output="Fallback result", exit_code=0,
-                metadata={}, artifacts={},
-            )
+            return {
+                "output": "Fallback result", "exit_code": 0,
+                "metadata": {}, "artifacts": {},
+            }
 
-        ctx = _mock_ctx()
-        ctx.spawn = mock_spawn
-        ctx.execute_on = mock_execute_on
+        queen._core.execute_task = mock_execute
 
-        result = await queen._handle_architect("architect a system", ctx)
+        result = await queen._core_handle_architect("architect a system")
 
-        # Should still succeed via complex fallback
-        self.assertEqual(result.exit_code, 0)
+        # Should still succeed via complex fallback.
+        self.assertEqual(result["exit_code"], 0)
         # Spawned: architect (failed) + lead (fallback complex)
         self.assertGreaterEqual(spawn_count[0], 2)
 
@@ -549,24 +599,287 @@ class TestHandleArchitect(unittest.IsolatedAsyncioTestCase):
         async def mock_spawn(**kwargs):
             return 42
 
+        queen._core.spawn_child = mock_spawn
+
         execute_params_log = []
 
-        async def mock_execute_on(pid, description, params, **kwargs):
+        async def mock_execute(target_pid, description, params, **kwargs):
             execute_params_log.append(params)
-            return MagicMock(
-                output="result", exit_code=0, metadata={}, artifacts={},
-            )
+            return {"output": "result", "exit_code": 0, "metadata": {}, "artifacts": {}}
 
-        ctx = _mock_ctx()
-        ctx.spawn = mock_spawn
-        ctx.execute_on = mock_execute_on
+        queen._core.execute_task = mock_execute
 
-        await queen._handle_architect("architect a system", ctx)
+        await queen._core_handle_architect("architect a system")
 
-        # Second execute_on (to lead) should have "plan" param
+        # Second execute_task (to lead) should have "plan" param.
         self.assertGreaterEqual(len(execute_params_log), 2)
         lead_params = execute_params_log[1]
         self.assertIn("plan", lead_params)
+
+
+# --- Core Handle Simple Tests ---
+
+class TestCoreHandleSimple(unittest.IsolatedAsyncioTestCase):
+    """Test _core_handle_simple flow."""
+
+    async def test_simple_spawns_worker_and_executes(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen._core.spawn_child = AsyncMock(return_value=20)
+        queen._core.execute_task = AsyncMock(return_value={
+            "exit_code": 0, "output": "done", "artifacts": {}, "metadata": {},
+        })
+
+        result = await queen._core_handle_simple("summarize this")
+
+        queen._core.spawn_child.assert_called_once()
+        queen._core.execute_task.assert_called_once()
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["metadata"]["strategy"], "simple")
+
+    async def test_simple_kills_worker_on_failure(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen._core.spawn_child = AsyncMock(return_value=20)
+        queen._core.execute_task = AsyncMock(side_effect=RuntimeError("worker died"))
+
+        result = await queen._core_handle_simple("do stuff")
+
+        self.assertEqual(result["exit_code"], 1)
+        queen._core.kill_child.assert_called_with(20)
+
+
+# --- Core Handle Complex Tests ---
+
+class TestCoreHandleComplex(unittest.IsolatedAsyncioTestCase):
+    """Test _core_handle_complex flow."""
+
+    async def test_complex_acquires_lead_and_releases(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen._core.spawn_child = AsyncMock(return_value=30)
+        queen._core.execute_task = AsyncMock(return_value={
+            "exit_code": 0, "output": "synthesized", "artifacts": {}, "metadata": {},
+        })
+
+        result = await queen._core_handle_complex("research and analyze AI")
+
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["metadata"]["strategy"], "complex")
+        # Lead should be in idle pool.
+        self.assertEqual(len(queen._idle_leads), 1)
+        self.assertEqual(queen._idle_leads[0][0], 30)
+
+    async def test_complex_kills_lead_on_failure(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen._core.spawn_child = AsyncMock(return_value=30)
+        queen._core.execute_task = AsyncMock(side_effect=RuntimeError("crashed"))
+
+        result = await queen._core_handle_complex("research stuff")
+
+        self.assertEqual(result["exit_code"], 1)
+        queen._core.kill_child.assert_called_with(30)
+        self.assertEqual(len(queen._idle_leads), 0)
+
+
+# --- handle_task (Execute stream thin wrapper) Tests ---
+
+class TestHandleTask(unittest.IsolatedAsyncioTestCase):
+    """Test handle_task delegates to _core_handle_* methods."""
+
+    async def _make_queen(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen.llm = MagicMock()
+        queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
+        return queen
+
+    async def test_handle_task_simple(self):
+        queen = await self._make_queen()
+        ctx = _mock_ctx()
+        task = _mock_task("summarize this article")
+
+        result = await queen.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        # ctx.report_progress should still be called (progress for stream callers).
+        ctx.report_progress.assert_called()
+        # Core methods should be used.
+        queen._core.spawn_child.assert_called()
+        queen._core.execute_task.assert_called()
+
+    async def test_handle_task_complex(self):
+        queen = await self._make_queen()
+        queen._core.spawn_child = AsyncMock(return_value=50)
+        ctx = _mock_ctx()
+        task = _mock_task("research and analyze the impact of AI")
+
+        result = await queen.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("complex", result.metadata.get("strategy", ""))
+
+    async def test_handle_task_records_history(self):
+        queen = await self._make_queen()
+        ctx = _mock_ctx()
+        task = _mock_task("summarize this text")
+
+        await queen.handle_task(task, ctx)
+
+        self.assertEqual(len(queen._task_history), 1)
+
+    async def test_handle_task_stores_artifact(self):
+        queen = await self._make_queen()
+        ctx = _mock_ctx()
+        task = _mock_task("summarize this text")
+
+        await queen.handle_task(task, ctx)
+
+        queen._core.store_artifact.assert_called_once()
+
+    async def test_handle_task_empty_description(self):
+        queen = await self._make_queen()
+        ctx = _mock_ctx()
+        task = _mock_task("", params={"task": ""})
+
+        result = await queen.handle_task(task, ctx)
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Empty", result.output)
+
+
+# --- handle_message (IPC path) Tests ---
+
+class TestHandleMessage(unittest.IsolatedAsyncioTestCase):
+    """Test unified handle_message path."""
+
+    async def _make_queen(self):
+        queen = QueenAgent()
+        queen._core = _mock_core()
+        queen.llm = MagicMock()
+        queen.ask = AsyncMock(return_value='{"complexity": "complex"}')
+        return queen
+
+    async def test_ipc_simple_task(self):
+        queen = await self._make_queen()
+        msg = _mock_message("summarize this article")
+
+        await queen._process_message_task(msg)
+
+        # Should have spawned worker via core.
+        queen._core.spawn_child.assert_called()
+        queen._core.execute_task.assert_called()
+        # Should send reply.
+        queen._core.send_message.assert_called()
+        call_kwargs = queen._core.send_message.call_args
+        self.assertEqual(call_kwargs.kwargs.get("to_pid") or call_kwargs[1].get("to_pid", 0), 5)
+
+    async def test_ipc_complex_task(self):
+        queen = await self._make_queen()
+        queen._core.spawn_child = AsyncMock(return_value=50)
+        msg = _mock_message("research and analyze the impact of AI")
+
+        await queen._process_message_task(msg)
+
+        queen._core.spawn_child.assert_called()
+        queen._core.execute_task.assert_called()
+
+    async def test_ipc_architect_task(self):
+        """Architect path should work through IPC (was missing before)."""
+        queen = await self._make_queen()
+
+        spawn_count = [0]
+
+        async def mock_spawn(**kwargs):
+            spawn_count[0] += 1
+            return 100 + spawn_count[0]
+
+        queen._core.spawn_child = mock_spawn
+
+        exec_count = [0]
+
+        async def mock_exec(target_pid, description, params, **kwargs):
+            exec_count[0] += 1
+            return {"output": "plan" if exec_count[0] == 1 else "result",
+                    "exit_code": 0, "metadata": {}, "artifacts": {}}
+
+        queen._core.execute_task = mock_exec
+
+        msg = _mock_message("architect a microservices system")
+        await queen._process_message_task(msg)
+
+        # Should have spawned architect + lead.
+        self.assertGreaterEqual(spawn_count[0], 2)
+
+    async def test_ipc_records_history(self):
+        queen = await self._make_queen()
+        msg = _mock_message("summarize this article")
+
+        await queen._process_message_task(msg)
+
+        self.assertEqual(len(queen._task_history), 1)
+
+    async def test_ipc_stores_artifact(self):
+        queen = await self._make_queen()
+        msg = _mock_message("summarize this article")
+
+        await queen._process_message_task(msg)
+
+        queen._core.store_artifact.assert_called()
+
+    async def test_ipc_lead_reuse(self):
+        """IPC path should reuse leads (was killing them before)."""
+        queen = await self._make_queen()
+        queen._core.spawn_child = AsyncMock(return_value=50)
+
+        # First complex task.
+        msg1 = _mock_message("research and analyze topic A")
+        await queen._process_message_task(msg1)
+
+        # Lead should be in pool.
+        self.assertEqual(len(queen._idle_leads), 1)
+        self.assertEqual(queen._idle_leads[0][0], 50)
+
+    async def test_ipc_empty_task(self):
+        queen = await self._make_queen()
+        msg = _mock_message("")
+
+        await queen._process_message_task(msg)
+
+        # Should send error reply.
+        queen._core.send_message.assert_called()
+
+    async def test_ipc_sends_reply_with_correct_reply_to(self):
+        queen = await self._make_queen()
+        msg = _mock_message("summarize this", reply_to="original-msg-id")
+
+        await queen._process_message_task(msg)
+
+        call_kwargs = queen._core.send_message.call_args
+        # reply_to should be the original message's reply_to for correlation.
+        self.assertEqual(
+            call_kwargs.kwargs.get("reply_to") or call_kwargs[1].get("reply_to"),
+            "original-msg-id",
+        )
+
+    async def test_handle_message_queues_task_request(self):
+        queen = await self._make_queen()
+        msg = _mock_message("test task")
+
+        ack = await queen.handle_message(msg)
+
+        self.assertEqual(ack.status, MessageAck.ACK_QUEUED)
+
+    async def test_handle_message_accepts_non_task(self):
+        queen = await self._make_queen()
+        msg = Message(
+            message_id="m1", from_pid=5, type="ping", payload=b"",
+        )
+
+        ack = await queen.handle_message(msg)
+
+        self.assertEqual(ack.status, MessageAck.ACK_ACCEPTED)
 
 
 # --- Shutdown Tests ---

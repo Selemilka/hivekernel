@@ -1932,7 +1932,7 @@ const file_core_proto_rawDesc = "" +
 	"\x03pid\x18\x01 \x01(\x04R\x03pid\"e\n" +
 	"\x11ListInboxResponse\x12:\n" +
 	"\bmessages\x18\x01 \x03(\v2\x1e.hivekernel.agent.AgentMessageR\bmessages\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total2\xc3\r\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total2\xf8\x0e\n" +
 	"\vCoreService\x12M\n" +
 	"\n" +
 	"SpawnChild\x12\x1e.hivekernel.agent.SpawnRequest\x1a\x1f.hivekernel.agent.SpawnResponse\x12J\n" +
@@ -1955,7 +1955,9 @@ const file_core_proto_rawDesc = "" +
 	"\n" +
 	"RemoveCron\x12\".hivekernel.core.RemoveCronRequest\x1a#.hivekernel.core.RemoveCronResponse\x12O\n" +
 	"\bListCron\x12 .hivekernel.core.ListCronRequest\x1a!.hivekernel.core.ListCronResponse\x12R\n" +
-	"\tListInbox\x12!.hivekernel.core.ListInboxRequest\x1a\".hivekernel.core.ListInboxResponseB2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
+	"\tListInbox\x12!.hivekernel.core.ListInboxRequest\x1a\".hivekernel.core.ListInboxResponse\x12]\n" +
+	"\fListSiblings\x12%.hivekernel.agent.ListSiblingsRequest\x1a&.hivekernel.agent.ListSiblingsResponse\x12T\n" +
+	"\tWaitChild\x12\".hivekernel.agent.WaitChildRequest\x1a#.hivekernel.agent.WaitChildResponseB2Z0github.com/selemilka/hivekernel/api/proto/hivepbb\x06proto3"
 
 var (
 	file_core_proto_rawDescOnce sync.Once
@@ -2015,13 +2017,17 @@ var file_core_proto_goTypes = []any{
 	(*GetArtifactRequest)(nil),     // 41: hivekernel.agent.GetArtifactRequest
 	(*EscalateRequest)(nil),        // 42: hivekernel.agent.EscalateRequest
 	(*LogRequest)(nil),             // 43: hivekernel.agent.LogRequest
-	(*SpawnResponse)(nil),          // 44: hivekernel.agent.SpawnResponse
-	(*KillResponse)(nil),           // 45: hivekernel.agent.KillResponse
-	(*SendMessageResponse)(nil),    // 46: hivekernel.agent.SendMessageResponse
-	(*StoreArtifactResponse)(nil),  // 47: hivekernel.agent.StoreArtifactResponse
-	(*GetArtifactResponse)(nil),    // 48: hivekernel.agent.GetArtifactResponse
-	(*EscalateResponse)(nil),       // 49: hivekernel.agent.EscalateResponse
-	(*LogResponse)(nil),            // 50: hivekernel.agent.LogResponse
+	(*ListSiblingsRequest)(nil),    // 44: hivekernel.agent.ListSiblingsRequest
+	(*WaitChildRequest)(nil),       // 45: hivekernel.agent.WaitChildRequest
+	(*SpawnResponse)(nil),          // 46: hivekernel.agent.SpawnResponse
+	(*KillResponse)(nil),           // 47: hivekernel.agent.KillResponse
+	(*SendMessageResponse)(nil),    // 48: hivekernel.agent.SendMessageResponse
+	(*StoreArtifactResponse)(nil),  // 49: hivekernel.agent.StoreArtifactResponse
+	(*GetArtifactResponse)(nil),    // 50: hivekernel.agent.GetArtifactResponse
+	(*EscalateResponse)(nil),       // 51: hivekernel.agent.EscalateResponse
+	(*LogResponse)(nil),            // 52: hivekernel.agent.LogResponse
+	(*ListSiblingsResponse)(nil),   // 53: hivekernel.agent.ListSiblingsResponse
+	(*WaitChildResponse)(nil),      // 54: hivekernel.agent.WaitChildResponse
 }
 var file_core_proto_depIdxs = []int32{
 	31, // 0: hivekernel.core.ProcessInfo.role:type_name -> hivekernel.agent.AgentRole
@@ -2058,28 +2064,32 @@ var file_core_proto_depIdxs = []int32{
 	21, // 31: hivekernel.core.CoreService.RemoveCron:input_type -> hivekernel.core.RemoveCronRequest
 	23, // 32: hivekernel.core.CoreService.ListCron:input_type -> hivekernel.core.ListCronRequest
 	25, // 33: hivekernel.core.CoreService.ListInbox:input_type -> hivekernel.core.ListInboxRequest
-	44, // 34: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
-	45, // 35: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
-	1,  // 36: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
-	3,  // 37: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
-	46, // 38: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
-	36, // 39: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
-	47, // 40: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
-	48, // 41: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
-	6,  // 42: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
-	9,  // 43: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
-	11, // 44: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
-	49, // 45: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
-	50, // 46: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
-	13, // 47: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
-	15, // 48: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
-	16, // 49: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
-	20, // 50: hivekernel.core.CoreService.AddCron:output_type -> hivekernel.core.AddCronResponse
-	22, // 51: hivekernel.core.CoreService.RemoveCron:output_type -> hivekernel.core.RemoveCronResponse
-	24, // 52: hivekernel.core.CoreService.ListCron:output_type -> hivekernel.core.ListCronResponse
-	26, // 53: hivekernel.core.CoreService.ListInbox:output_type -> hivekernel.core.ListInboxResponse
-	34, // [34:54] is the sub-list for method output_type
-	14, // [14:34] is the sub-list for method input_type
+	44, // 34: hivekernel.core.CoreService.ListSiblings:input_type -> hivekernel.agent.ListSiblingsRequest
+	45, // 35: hivekernel.core.CoreService.WaitChild:input_type -> hivekernel.agent.WaitChildRequest
+	46, // 36: hivekernel.core.CoreService.SpawnChild:output_type -> hivekernel.agent.SpawnResponse
+	47, // 37: hivekernel.core.CoreService.KillChild:output_type -> hivekernel.agent.KillResponse
+	1,  // 38: hivekernel.core.CoreService.GetProcessInfo:output_type -> hivekernel.core.ProcessInfo
+	3,  // 39: hivekernel.core.CoreService.ListChildren:output_type -> hivekernel.core.ListChildrenResponse
+	48, // 40: hivekernel.core.CoreService.SendMessage:output_type -> hivekernel.agent.SendMessageResponse
+	36, // 41: hivekernel.core.CoreService.Subscribe:output_type -> hivekernel.agent.AgentMessage
+	49, // 42: hivekernel.core.CoreService.StoreArtifact:output_type -> hivekernel.agent.StoreArtifactResponse
+	50, // 43: hivekernel.core.CoreService.GetArtifact:output_type -> hivekernel.agent.GetArtifactResponse
+	6,  // 44: hivekernel.core.CoreService.ListArtifacts:output_type -> hivekernel.core.ListArtifactsResponse
+	9,  // 45: hivekernel.core.CoreService.GetResourceUsage:output_type -> hivekernel.core.ResourceUsage
+	11, // 46: hivekernel.core.CoreService.RequestResources:output_type -> hivekernel.core.ResourceResponse
+	51, // 47: hivekernel.core.CoreService.Escalate:output_type -> hivekernel.agent.EscalateResponse
+	52, // 48: hivekernel.core.CoreService.Log:output_type -> hivekernel.agent.LogResponse
+	13, // 49: hivekernel.core.CoreService.ReportMetric:output_type -> hivekernel.core.MetricResponse
+	15, // 50: hivekernel.core.CoreService.ExecuteTask:output_type -> hivekernel.core.ExecuteTaskResponse
+	16, // 51: hivekernel.core.CoreService.SubscribeEvents:output_type -> hivekernel.core.ProcessEvent
+	20, // 52: hivekernel.core.CoreService.AddCron:output_type -> hivekernel.core.AddCronResponse
+	22, // 53: hivekernel.core.CoreService.RemoveCron:output_type -> hivekernel.core.RemoveCronResponse
+	24, // 54: hivekernel.core.CoreService.ListCron:output_type -> hivekernel.core.ListCronResponse
+	26, // 55: hivekernel.core.CoreService.ListInbox:output_type -> hivekernel.core.ListInboxResponse
+	53, // 56: hivekernel.core.CoreService.ListSiblings:output_type -> hivekernel.agent.ListSiblingsResponse
+	54, // 57: hivekernel.core.CoreService.WaitChild:output_type -> hivekernel.agent.WaitChildResponse
+	36, // [36:58] is the sub-list for method output_type
+	14, // [14:36] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name

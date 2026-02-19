@@ -163,6 +163,40 @@ class HiveAgent:
                 f"No reply from PID {to_pid} within {timeout}s (request_id={request_id})"
             )
 
+    async def send_and_wait_core(
+        self,
+        to_pid: int,
+        type: str,
+        payload: bytes,
+        timeout: float = 60.0,
+    ) -> Message:
+        """Send a message via CoreClient and wait for a correlated reply.
+
+        Like send_and_wait() but uses self._core instead of SyscallContext,
+        so it works outside an Execute bidi stream (e.g. from handle_message).
+        """
+        if not self._core:
+            raise RuntimeError("CoreClient not connected")
+
+        request_id = str(uuid.uuid4())
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        self._pending_requests[request_id] = fut
+
+        try:
+            await self._core.send_message(
+                to_pid=to_pid,
+                type=type,
+                payload=payload,
+                reply_to=request_id,
+            )
+            return await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending_requests.pop(request_id, None)
+            raise TimeoutError(
+                f"No reply from PID {to_pid} within {timeout}s (request_id={request_id})"
+            )
+
     def drain_pending_results(self) -> list[Message]:
         """Drain all pending async results from the mailbox."""
         results = self._pending_results[:]

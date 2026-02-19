@@ -621,6 +621,103 @@ func (s *CoreServer) ListInbox(ctx context.Context, req *pb.ListInboxRequest) (*
 	return resp, nil
 }
 
+// --- Siblings / Wait ---
+
+func (s *CoreServer) ListSiblings(ctx context.Context, req *pb.ListSiblingsRequest) (*pb.ListSiblingsResponse, error) {
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	caller, err := s.king.Registry().Get(pid)
+	if err != nil {
+		return &pb.ListSiblingsResponse{}, nil
+	}
+
+	children := s.king.Registry().GetChildren(caller.PPID)
+	var siblings []*pb.SiblingInfo
+	for _, child := range children {
+		if child.PID == pid {
+			continue // exclude self
+		}
+		siblings = append(siblings, &pb.SiblingInfo{
+			Pid:   child.PID,
+			Name:  child.Name,
+			Role:  child.Role.String(),
+			State: child.State.String(),
+		})
+	}
+
+	log.Printf("[grpc] ListSiblings: PID %d found %d siblings", pid, len(siblings))
+	return &pb.ListSiblingsResponse{Siblings: siblings}, nil
+}
+
+func (s *CoreServer) WaitChild(ctx context.Context, req *pb.WaitChildRequest) (*pb.WaitChildResponse, error) {
+	pid, err := callerPID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate target is a child of caller.
+	target, err := s.king.Registry().Get(req.TargetPid)
+	if err != nil {
+		return &pb.WaitChildResponse{Success: false, Error: "process not found"}, nil
+	}
+	if target.PPID != pid {
+		return &pb.WaitChildResponse{Success: false, Error: "can only wait for own children"}, nil
+	}
+
+	// If already zombie/dead, collect result immediately.
+	if target.State == process.StateZombie || target.State == process.StateDead {
+		result, _ := s.king.Lifecycle().WaitResult(target.PID)
+		if result != nil {
+			return &pb.WaitChildResponse{
+				Success:  true,
+				Pid:      target.PID,
+				ExitCode: int32(result.ExitCode),
+				Output:   string(result.Output),
+			}, nil
+		}
+		return &pb.WaitChildResponse{Success: true, Pid: target.PID, ExitCode: -1}, nil
+	}
+
+	// Process is still alive -- poll until it dies or timeout.
+	timeout := time.Duration(req.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return &pb.WaitChildResponse{Success: false, Error: "context cancelled"}, nil
+		case <-deadline:
+			return &pb.WaitChildResponse{Success: false, Error: "timeout waiting for child"}, nil
+		case <-ticker.C:
+			proc, err := s.king.Registry().Get(req.TargetPid)
+			if err != nil {
+				return &pb.WaitChildResponse{Success: true, Pid: req.TargetPid, ExitCode: -1}, nil
+			}
+			if proc.State == process.StateZombie || proc.State == process.StateDead {
+				result, _ := s.king.Lifecycle().WaitResult(proc.PID)
+				if result != nil {
+					return &pb.WaitChildResponse{
+						Success:  true,
+						Pid:      proc.PID,
+						ExitCode: int32(result.ExitCode),
+						Output:   string(result.Output),
+					}, nil
+				}
+				return &pb.WaitChildResponse{Success: true, Pid: proc.PID, ExitCode: -1}, nil
+			}
+		}
+	}
+}
+
 // --- Event sourcing ---
 
 func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc.ServerStreamingServer[pb.ProcessEvent]) error {

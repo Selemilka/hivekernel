@@ -263,6 +263,77 @@ class MemoryRecallTool:
         return ToolResult(content="No memory stored yet")
 
 
+class ScheduleCronTool:
+    """Schedule a recurring task via cron expression."""
+
+    @property
+    def name(self) -> str:
+        return "schedule_cron"
+
+    @property
+    def description(self) -> str:
+        return "Schedule a recurring task via cron expression"
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name for the cron entry"},
+                "cron_expression": {"type": "string", "description": "Cron expression (e.g. '*/5 * * * *')"},
+                "target_pid": {"type": "integer", "description": "PID of the agent to execute on"},
+                "description": {"type": "string", "description": "Task description for the cron entry"},
+                "action": {"type": "string", "description": "Action type: execute, message, spawn, wake"},
+            },
+            "required": ["name", "cron_expression", "target_pid"],
+        }
+
+    async def execute(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        cron_id = await ctx.core.add_cron(
+            name=args["name"],
+            cron_expression=args["cron_expression"],
+            target_pid=args["target_pid"],
+            description=args.get("description", ""),
+            action=args.get("action", "execute"),
+        )
+        return ToolResult(content=f"Cron scheduled, id={cron_id}")
+
+
+class GetProcessInfoTool:
+    """Get information about a process by PID."""
+
+    @property
+    def name(self) -> str:
+        return "get_process_info"
+
+    @property
+    def description(self) -> str:
+        return "Get information about a process by PID (0 = self)"
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "pid": {"type": "integer", "description": "PID to query (0 = self)"},
+            },
+            "required": ["pid"],
+        }
+
+    async def execute(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        info = await ctx.core.get_process_info(args["pid"])
+        result = {
+            "pid": info.pid,
+            "ppid": info.ppid,
+            "name": info.name,
+            "role": info.role,
+            "state": info.state,
+            "cognitive_tier": info.cognitive_tier,
+            "model": info.model,
+        }
+        return ToolResult(content=json.dumps(result))
+
+
 ALL_BUILTIN_TOOLS = [
     SpawnChildTool,
     ExecuteTaskTool,
@@ -273,6 +344,8 @@ ALL_BUILTIN_TOOLS = [
     ListSiblingsTool,
     MemoryStoreTool,
     MemoryRecallTool,
+    ScheduleCronTool,
+    GetProcessInfoTool,
 ]
 
 

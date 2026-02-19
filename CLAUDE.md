@@ -7,7 +7,7 @@ HiveKernel is a runtime for managing swarms of LLM agents, modeled after Linux p
 - **Agent runtime** (Python): LLM calls, prompts, tools — pluggable via gRPC
 - **Communication**: gRPC over unix domain socket (single VPS) or TCP+TLS (multi-VPS)
 
-The canonical specification is `HIVEKERNEL-SPEC.md` in the repo root. Always consult it for architecture decisions.
+The architecture spec is split across `docs/ARCHITECTURE.md`, `docs/AGENT-ROLES.md`, and `docs/MAILBOX.md`.
 
 ## Module & Repo
 
@@ -76,13 +76,12 @@ cmd/hivekernel/main.go       — Entry point, gRPC server setup, demo scenario
 internal/
   kernel/                     — King (PID 1), config, gRPC CoreService, type converters
   process/                    — Registry, spawner, signals, tree ops, supervisor
-  ipc/                        — Priority queue with aging
-  runtime/                    — Agent runtime manager, health monitor
-  daemons/                    — Maid (per-VPS health daemon)
-  scheduler/                  — (Phase 2+)
-  resources/                  — (Phase 3+)
-  permissions/                — (Phase 3+)
-  cluster/                    — (Phase 4+)
+  ipc/                        — Broker, priority queue, shared memory, pipes, events
+  runtime/                    — Agent runtime manager, health monitor, executor
+  scheduler/                  — Task priority, cron scheduling
+  resources/                  — Budgets, rate limiting, cgroups, accounting
+  permissions/                — Auth, ACL, capabilities
+  cluster/                    — Node discovery, migration, cross-VPS connectors
 api/proto/                    — Proto definitions + generated Go code in hivepb/
 sdk/python/                   — Python SDK (UV-managed)
 ```
@@ -99,4 +98,4 @@ sdk/python/                   — Python SDK (UV-managed)
 
 ## Roadmap
 
-See `CHANGELOG.md` for completed phases and `HIVEKERNEL-SPEC.md` section "Development Roadmap" for the full plan.
+See `CHANGELOG.md` for completed phases.

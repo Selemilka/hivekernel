@@ -15,10 +15,12 @@ from hivekernel_sdk.builtin_tools import (
     ALL_BUILTIN_TOOLS,
     ExecuteTaskTool,
     GetArtifactTool,
+    GetProcessInfoTool,
     ListChildrenTool,
     ListSiblingsTool,
     MemoryRecallTool,
     MemoryStoreTool,
+    ScheduleCronTool,
     SendMessageTool,
     SpawnChildTool,
     StoreArtifactTool,
@@ -172,11 +174,50 @@ class TestMemoryRecallTool(unittest.IsolatedAsyncioTestCase):
         self.assertIn("No memory", result.content)
 
 
+class TestScheduleCronTool(unittest.IsolatedAsyncioTestCase):
+    async def test_schedule(self):
+        core = AsyncMock()
+        core.add_cron = AsyncMock(return_value="cron-1")
+        ctx = ToolContext(pid=1, core=core)
+
+        tool = ScheduleCronTool()
+        result = await tool.execute(ctx, {
+            "name": "health-check",
+            "cron_expression": "*/5 * * * *",
+            "target_pid": 3,
+            "description": "Check health",
+        })
+        self.assertIn("cron-1", result.content)
+        core.add_cron.assert_called_once()
+
+
+class TestGetProcessInfoTool(unittest.IsolatedAsyncioTestCase):
+    async def test_get_info(self):
+        core = AsyncMock()
+        info = MagicMock()
+        info.pid = 5
+        info.ppid = 1
+        info.name = "worker-1"
+        info.role = "worker"
+        info.state = "running"
+        info.cognitive_tier = "operational"
+        info.model = "mini"
+        core.get_process_info = AsyncMock(return_value=info)
+        ctx = ToolContext(pid=1, core=core)
+
+        tool = GetProcessInfoTool()
+        result = await tool.execute(ctx, {"pid": 5})
+        parsed = json.loads(result.content)
+        self.assertEqual(parsed["pid"], 5)
+        self.assertEqual(parsed["name"], "worker-1")
+        core.get_process_info.assert_called_once_with(5)
+
+
 class TestRegisterBuiltinTools(unittest.TestCase):
     def test_registers_all(self):
         reg = ToolRegistry()
         register_builtin_tools(reg)
-        self.assertEqual(len(ALL_BUILTIN_TOOLS), 9)
+        self.assertEqual(len(ALL_BUILTIN_TOOLS), 11)
         for cls in ALL_BUILTIN_TOOLS:
             tool = cls()
             self.assertIsNotNone(reg.get(tool.name))
@@ -185,7 +226,7 @@ class TestRegisterBuiltinTools(unittest.TestCase):
         reg = ToolRegistry()
         register_builtin_tools(reg)
         schema = reg.to_openai_schema()
-        self.assertEqual(len(schema), 9)
+        self.assertEqual(len(schema), 11)
         for entry in schema:
             self.assertEqual(entry["type"], "function")
             func = entry["function"]

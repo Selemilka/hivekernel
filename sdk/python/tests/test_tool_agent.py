@@ -114,6 +114,85 @@ class TestOnInit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(agent.agent_loop.max_iterations, 25)
 
 
+class TestToolFiltering(unittest.IsolatedAsyncioTestCase):
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_filter_tools_from_metadata(self):
+        """When agent.tools is set, only those tools should be registered."""
+        agent = TestToolAgent()
+        agent._pid = 5
+        config = AgentConfig(
+            name="test",
+            model="mini",
+            metadata={"agent.tools": "spawn_child,calculator"},
+        )
+        await agent.on_init(config)
+
+        # Only spawn_child and calculator should be registered.
+        self.assertIsNotNone(agent.registry.get("spawn_child"))
+        self.assertIsNotNone(agent.registry.get("calculator"))
+        # Other builtin tools should NOT be registered.
+        self.assertIsNone(agent.registry.get("execute_task"))
+        self.assertIsNone(agent.registry.get("send_message"))
+
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_no_filter_registers_all(self):
+        """When agent.tools is not set, all tools should be registered."""
+        agent = TestToolAgent()
+        agent._pid = 5
+        config = AgentConfig(name="test", model="mini")
+        await agent.on_init(config)
+
+        self.assertIsNotNone(agent.registry.get("spawn_child"))
+        self.assertIsNotNone(agent.registry.get("execute_task"))
+        self.assertIsNotNone(agent.registry.get("calculator"))
+
+
+class TestDynamicPrompt(unittest.IsolatedAsyncioTestCase):
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_system_prompt_includes_identity(self):
+        agent = TestToolAgent()
+        agent._pid = 5
+        config = AgentConfig(
+            name="queen",
+            model="mini",
+            system_prompt="You are the queen.",
+        )
+        await agent.on_init(config)
+
+        self.assertIn("queen", agent._system_prompt)
+        self.assertIn("PID 5", agent._system_prompt)
+        self.assertIn("You are the queen.", agent._system_prompt)
+
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_system_prompt_includes_tool_summaries(self):
+        agent = TestToolAgent()
+        agent._pid = 5
+        config = AgentConfig(name="test", model="mini")
+        await agent.on_init(config)
+
+        self.assertIn("Available Tools", agent._system_prompt)
+        self.assertIn("spawn_child", agent._system_prompt)
+        self.assertIn("calculator", agent._system_prompt)
+
+
+class TestWorkspaceInContext(unittest.IsolatedAsyncioTestCase):
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_workspace_passed_to_tool_ctx(self):
+        agent = TestToolAgent()
+        agent._pid = 5
+        agent._core = AsyncMock()
+        config = AgentConfig(
+            name="test",
+            model="mini",
+            metadata={"agent.workspace": "/tmp/ws"},
+        )
+        await agent.on_init(config)
+
+        tool_ctx = agent._make_tool_ctx()
+        self.assertEqual(tool_ctx.workspace, "/tmp/ws")
+        self.assertIsNotNone(tool_ctx.llm)
+
+
 class TestHandleTask(unittest.IsolatedAsyncioTestCase):
     @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
     async def test_handle_task_runs_loop(self):

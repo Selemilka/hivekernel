@@ -1,0 +1,85 @@
+{
+  "agents": [
+    {
+      "name": "queen",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_image": "hivekernel_sdk.tool_agent:ToolAgent",
+      "system_prompt_file": "../prompts/queen.md",
+      "tools": [
+        "spawn_child", "execute_task", "orchestrate",
+        "send_message", "store_artifact", "get_artifact",
+        "list_children", "schedule_cron", "get_process_info",
+        "memory_store", "memory_recall"
+      ],
+      "workspace": "../workspace"
+    },
+    {
+      "name": "assistant",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_image": "hivekernel_sdk.tool_agent:ToolAgent",
+      "system_prompt_file": "../prompts/assistant.md",
+      "tools": [
+        "execute_task", "delegate_async", "schedule_cron",
+        "send_message", "list_siblings", "store_artifact",
+        "get_artifact", "read_file", "write_file",
+        "web_fetch", "web_search",
+        "memory_store", "memory_recall"
+      ],
+      "workspace": "../workspace"
+    },
+    {
+      "name": "coder",
+      "role": "daemon",
+      "cognitive_tier": "tactical",
+      "model": "sonnet",
+      "runtime_image": "hivekernel_sdk.tool_agent:ToolAgent",
+      "system_prompt_file": "../prompts/coder.md",
+      "tools": [
+        "read_file", "write_file", "edit_file", "list_dir",
+        "shell_exec", "store_artifact", "get_artifact",
+        "memory_store", "memory_recall"
+      ],
+      "workspace": "../workspace"
+    },
+    {
+      "name": "architect",
+      "role": "daemon",
+      "cognitive_tier": "strategic",
+      "model": "sonnet",
+      "runtime_image": "hivekernel_sdk.tool_agent:ToolAgent",
+      "system_prompt_file": "../prompts/architect.md",
+      "tools": [
+        "store_artifact", "get_artifact", "send_message",
+        "read_file", "list_dir", "web_fetch", "web_search",
+        "memory_store", "memory_recall"
+      ],
+      "workspace": "../workspace"
+    },
+    {
+      "name": "maid",
+      "role": "daemon",
+      "cognitive_tier": "operational",
+      "model": "mini",
+      "runtime_image": "hivekernel_sdk.tool_agent:ToolAgent",
+      "system_prompt_file": "../prompts/maid.md",
+      "tools": [
+        "get_process_info", "list_children", "list_siblings",
+        "send_message", "store_artifact", "get_artifact",
+        "memory_store", "memory_recall"
+      ],
+      "workspace": "../workspace",
+      "cron": [
+        {
+          "name": "health-check",
+          "expression": "*/10 * * * *",
+          "action": "execute",
+          "description": "Check health of all running agents and report issues"
+        }
+      ]
+    }
+  ]
+}

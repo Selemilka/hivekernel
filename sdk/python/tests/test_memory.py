@@ -97,6 +97,56 @@ class TestNeedsSummarization(unittest.TestCase):
         self.assertTrue(mem.needs_summarization(threshold=5))
 
 
+class TestEstimateTokens(unittest.TestCase):
+    def test_empty(self):
+        mem = AgentMemory(pid=42)
+        self.assertEqual(mem.estimate_tokens(), 0)
+
+    def test_rough_estimate(self):
+        mem = AgentMemory(pid=42)
+        mem.add_message("user", "a" * 250)  # ~100 tokens
+        tokens = mem.estimate_tokens()
+        self.assertAlmostEqual(tokens, 100, delta=5)
+
+
+class TestForceCompress(unittest.TestCase):
+    def test_compress_drops_oldest(self):
+        mem = AgentMemory(pid=42)
+        for i in range(10):
+            mem.add_message("user", f"msg {i}")
+        mem.force_compress()
+        # Should keep last 5 (50% of 10)
+        self.assertEqual(len(mem.messages), 5)
+        self.assertEqual(mem.messages[0]["content"], "msg 5")
+
+    def test_compress_keeps_minimum(self):
+        mem = AgentMemory(pid=42)
+        mem.add_message("user", "msg 0")
+        mem.add_message("assistant", "msg 1")
+        mem.force_compress()
+        # 2 messages, should not drop anything
+        self.assertEqual(len(mem.messages), 2)
+
+    def test_compress_empty(self):
+        mem = AgentMemory(pid=42)
+        mem.force_compress()
+        self.assertEqual(len(mem.messages), 0)
+
+
+class TestTokenBasedSummarization(unittest.TestCase):
+    def test_token_trigger(self):
+        mem = AgentMemory(pid=42)
+        # Add a large message that exceeds 60000 tokens (~150KB of text)
+        mem.add_message("user", "x" * 200000)
+        self.assertTrue(mem.needs_summarization(threshold=100, max_tokens=60000))
+
+    def test_count_trigger_still_works(self):
+        mem = AgentMemory(pid=42)
+        for i in range(25):
+            mem.add_message("user", "short")
+        self.assertTrue(mem.needs_summarization(threshold=20, max_tokens=1000000))
+
+
 class TestLoadSave(unittest.IsolatedAsyncioTestCase):
     async def test_save_stores_all_keys(self):
         mem = AgentMemory(pid=7)

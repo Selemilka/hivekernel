@@ -39,6 +39,8 @@ const (
 	CoreService_RemoveCron_FullMethodName       = "/hivekernel.core.CoreService/RemoveCron"
 	CoreService_ListCron_FullMethodName         = "/hivekernel.core.CoreService/ListCron"
 	CoreService_ListInbox_FullMethodName        = "/hivekernel.core.CoreService/ListInbox"
+	CoreService_ListSiblings_FullMethodName     = "/hivekernel.core.CoreService/ListSiblings"
+	CoreService_WaitChild_FullMethodName        = "/hivekernel.core.CoreService/WaitChild"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -75,6 +77,9 @@ type CoreServiceClient interface {
 	ListCron(ctx context.Context, in *ListCronRequest, opts ...grpc.CallOption) (*ListCronResponse, error)
 	// Inbox inspection
 	ListInbox(ctx context.Context, in *ListInboxRequest, opts ...grpc.CallOption) (*ListInboxResponse, error)
+	// Sibling / wait support (mirror of syscall equivalents)
+	ListSiblings(ctx context.Context, in *ListSiblingsRequest, opts ...grpc.CallOption) (*ListSiblingsResponse, error)
+	WaitChild(ctx context.Context, in *WaitChildRequest, opts ...grpc.CallOption) (*WaitChildResponse, error)
 }
 
 type coreServiceClient struct {
@@ -303,6 +308,26 @@ func (c *coreServiceClient) ListInbox(ctx context.Context, in *ListInboxRequest,
 	return out, nil
 }
 
+func (c *coreServiceClient) ListSiblings(ctx context.Context, in *ListSiblingsRequest, opts ...grpc.CallOption) (*ListSiblingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSiblingsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListSiblings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) WaitChild(ctx context.Context, in *WaitChildRequest, opts ...grpc.CallOption) (*WaitChildResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WaitChildResponse)
+	err := c.cc.Invoke(ctx, CoreService_WaitChild_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -337,6 +362,9 @@ type CoreServiceServer interface {
 	ListCron(context.Context, *ListCronRequest) (*ListCronResponse, error)
 	// Inbox inspection
 	ListInbox(context.Context, *ListInboxRequest) (*ListInboxResponse, error)
+	// Sibling / wait support (mirror of syscall equivalents)
+	ListSiblings(context.Context, *ListSiblingsRequest) (*ListSiblingsResponse, error)
+	WaitChild(context.Context, *WaitChildRequest) (*WaitChildResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -406,6 +434,12 @@ func (UnimplementedCoreServiceServer) ListCron(context.Context, *ListCronRequest
 }
 func (UnimplementedCoreServiceServer) ListInbox(context.Context, *ListInboxRequest) (*ListInboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListInbox not implemented")
+}
+func (UnimplementedCoreServiceServer) ListSiblings(context.Context, *ListSiblingsRequest) (*ListSiblingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSiblings not implemented")
+}
+func (UnimplementedCoreServiceServer) WaitChild(context.Context, *WaitChildRequest) (*WaitChildResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WaitChild not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -774,6 +808,42 @@ func _CoreService_ListInbox_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListSiblings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSiblingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListSiblings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListSiblings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListSiblings(ctx, req.(*ListSiblingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_WaitChild_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitChildRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).WaitChild(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_WaitChild_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).WaitChild(ctx, req.(*WaitChildRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -852,6 +922,14 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListInbox",
 			Handler:    _CoreService_ListInbox_Handler,
+		},
+		{
+			MethodName: "ListSiblings",
+			Handler:    _CoreService_ListSiblings_Handler,
+		},
+		{
+			MethodName: "WaitChild",
+			Handler:    _CoreService_WaitChild_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

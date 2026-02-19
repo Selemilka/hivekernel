@@ -41,6 +41,8 @@ class ToolContext:
     pid: int
     core: Any  # CoreClient (always available)
     syscall: Any = None  # SyscallContext (only during handle_task)
+    workspace: str = ""  # Agent workspace directory (if configured)
+    llm: Any = None  # LLMClient (for power tools that need LLM access)
 
     async def log(self, level: str, message: str) -> None:
         """Log a message via syscall or core."""
@@ -87,6 +89,13 @@ class ToolRegistry:
             return await tool.execute(ctx, args)
         except Exception as e:
             return ToolResult(content=f"Tool {name} failed: {e}", is_error=True)
+
+    def get_summaries(self) -> str:
+        """Return a summary of all registered tools for system prompt injection."""
+        lines = []
+        for tool in self._tools.values():
+            lines.append(f"- {tool.name}: {tool.description}")
+        return "\n".join(lines)
 
     def to_openai_schema(self) -> list[dict]:
         """Convert registered tools to OpenAI/OpenRouter tool definitions."""

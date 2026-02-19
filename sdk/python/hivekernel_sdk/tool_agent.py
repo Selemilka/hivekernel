@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from .builtin_tools import register_builtin_tools
+from .builtin_tools import ALL_BUILTIN_TOOLS, register_builtin_tools
 from .llm_agent import LLMAgent
 from .loop import AgentLoop
 from .memory import AgentMemory
@@ -15,6 +15,28 @@ from .types import AgentConfig, Message, MessageAck, Task, TaskResult
 from .syscall import SyscallContext
 
 logger = logging.getLogger("hivekernel.tool_agent")
+
+
+def _get_all_available_tools() -> list[Tool]:
+    """Collect all tool instances from builtin + extension modules."""
+    tools: list[Tool] = [cls() for cls in ALL_BUILTIN_TOOLS]
+    # Import extension tool modules; each defines a list for registration.
+    try:
+        from .power_tools import POWER_TOOLS
+        tools.extend(cls() for cls in POWER_TOOLS)
+    except ImportError:
+        pass
+    try:
+        from .workspace_tools import WORKSPACE_TOOLS
+        tools.extend(cls() for cls in WORKSPACE_TOOLS)
+    except ImportError:
+        pass
+    try:
+        from .web_tools import WEB_TOOLS
+        tools.extend(cls() for cls in WEB_TOOLS)
+    except ImportError:
+        pass
+    return tools
 
 
 class ToolAgent(LLMAgent):
@@ -34,32 +56,86 @@ class ToolAgent(LLMAgent):
         self.registry: ToolRegistry = ToolRegistry()
         self.memory: AgentMemory | None = None
         self.agent_loop: AgentLoop | None = None
+        self._workspace: str = ""
 
     async def on_init(self, config: AgentConfig) -> None:
         """Initialize LLM, tools, memory, and agent loop."""
         await super().on_init(config)
 
-        # Register built-in syscall tools
-        register_builtin_tools(self.registry)
+        # Read workspace from metadata.
+        self._workspace = config.metadata.get("agent.workspace", "")
 
-        # Register subclass custom tools
-        for tool in self.get_tools():
-            self.registry.register(tool)
+        # Determine which tools to register.
+        tools_filter = config.metadata.get("agent.tools", "")
+        if tools_filter:
+            # Selective: only register tools named in the comma-separated list.
+            allowed = {t.strip() for t in tools_filter.split(",") if t.strip()}
+            all_tools = _get_all_available_tools() + self.get_tools()
+            for tool in all_tools:
+                if tool.name in allowed:
+                    self.registry.register(tool)
+            registered = set(self.registry._tools.keys())
+            missing = allowed - registered
+            if missing:
+                logger.warning("Requested tools not found: %s", ", ".join(sorted(missing)))
+        else:
+            # Default: register all builtin tools + subclass tools.
+            register_builtin_tools(self.registry)
+            for tool in self.get_tools():
+                self.registry.register(tool)
 
-        # Initialize memory and loop
+        # Build dynamic system prompt.
+        self._system_prompt = self._build_system_prompt(config)
+
+        # Initialize memory and loop.
         self.memory = AgentMemory(pid=self.pid)
         max_iter = int(config.metadata.get("max_iterations", "15"))
         self.agent_loop = AgentLoop(
             self.llm, self.registry, self.memory, max_iter
         )
 
+    def _build_system_prompt(self, config: AgentConfig) -> str:
+        """Build dynamic system prompt with identity and tool summaries."""
+        parts: list[str] = []
+
+        # Base prompt (from config / prompt file).
+        base = config.system_prompt.strip()
+        if base:
+            parts.append(base)
+
+        # Identity section.
+        tier = config.metadata.get("cognitive_tier", "operational")
+        role = config.metadata.get("role", "agent")
+        identity = (
+            f"\n## Identity\n"
+            f"You are {config.name} (PID {self.pid}), role={role}, tier={tier}."
+        )
+        parts.append(identity)
+
+        # Available tools section.
+        summaries = self.registry.get_summaries()
+        if summaries:
+            parts.append(f"\n## Available Tools\n{summaries}")
+
+        return "\n".join(parts)
+
     def get_tools(self) -> list[Tool]:
         """Override to add custom tools. Called during on_init."""
         return []
 
+    def _make_tool_ctx(self, syscall: Any = None) -> ToolContext:
+        """Create a ToolContext with workspace and LLM populated."""
+        return ToolContext(
+            pid=self.pid,
+            core=self._core,
+            syscall=syscall,
+            workspace=self._workspace,
+            llm=self.llm,
+        )
+
     async def handle_task(self, task: Task, ctx: SyscallContext) -> TaskResult:
         """Run the agent loop for a task."""
-        tool_ctx = ToolContext(pid=self.pid, core=self._core, syscall=ctx)
+        tool_ctx = self._make_tool_ctx(syscall=ctx)
         await self.memory.load(tool_ctx)
 
         prompt = task.params.get("task", task.description)
@@ -87,7 +163,7 @@ class ToolAgent(LLMAgent):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 prompt = message.payload.decode("utf-8", errors="replace")
 
-            tool_ctx = ToolContext(pid=self.pid, core=self._core)
+            tool_ctx = self._make_tool_ctx()
             await self.memory.load(tool_ctx)
 
             result = await self.agent_loop.run(

@@ -41,7 +41,7 @@ configs/*.local.yaml
 **/logs/*.jsonl
 
 # Runtime artifacts
-kernel_stderr.log
+*.log
 /tmp/
 
 # Windows DEVNULL artifact

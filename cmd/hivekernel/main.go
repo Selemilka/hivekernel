@@ -268,8 +268,21 @@ func spawnStartupAgents(king *kernel.King, cfg kernel.Config, startupCfg kernel.
 			name = name + "@" + cfg.NodeName
 		}
 
-		// Convert ClawConfig to flat metadata map if present.
-		metadata := kernel.ClawConfigToMetadata(agent.ClawConfig)
+		// Build metadata map: start with explicit metadata, then ClawConfig, then tools/workspace.
+		metadata := make(map[string]string)
+		for k, v := range agent.Metadata {
+			metadata[k] = v
+		}
+		clawMeta := kernel.ClawConfigToMetadata(agent.ClawConfig)
+		for k, v := range clawMeta {
+			metadata[k] = v
+		}
+		if len(agent.Tools) > 0 {
+			metadata["agent.tools"] = strings.Join(agent.Tools, ",")
+		}
+		if agent.Workspace != "" {
+			metadata["agent.workspace"] = agent.Workspace
+		}
 
 		proc, err := king.SpawnChild(process.SpawnRequest{
 			ParentPID:     king.PID(),

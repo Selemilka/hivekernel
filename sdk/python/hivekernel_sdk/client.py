@@ -275,6 +275,40 @@ class CoreClient:
             metadata=self._metadata,
         )
 
+    # --- Siblings / Wait ---
+
+    async def list_siblings(self) -> list[dict]:
+        """List sibling processes (same parent, excluding self)."""
+        resp = await self._stub.ListSiblings(
+            agent_pb2.ListSiblingsRequest(),
+            metadata=self._metadata,
+        )
+        return [
+            {"pid": s.pid, "name": s.name, "role": s.role, "state": s.state}
+            for s in resp.siblings
+        ]
+
+    async def wait_child(self, pid: int, timeout_seconds: int = 60) -> dict:
+        """Wait for a child process to exit (like waitpid).
+
+        Returns dict with keys: pid, exit_code, output.
+        """
+        resp = await self._stub.WaitChild(
+            agent_pb2.WaitChildRequest(
+                target_pid=pid,
+                timeout_seconds=timeout_seconds,
+            ),
+            metadata=self._metadata,
+            timeout=timeout_seconds + 10,
+        )
+        if not resp.success:
+            raise RuntimeError(f"wait_child failed: {resp.error}")
+        return {
+            "pid": resp.pid,
+            "exit_code": resp.exit_code,
+            "output": resp.output,
+        }
+
     # --- Cron management ---
 
     async def add_cron(

@@ -72,12 +72,28 @@ class AgentLoop:
             iterations += 1
 
             messages = self.memory.get_context_messages(system_prompt)
-            choice = await self.llm.chat_with_tools(
-                messages=messages[1:],  # skip system, pass as param
-                tools=tools_schema,
-                system=messages[0]["content"] if messages else "",
-                model=model,
-            )
+
+            # Retry with compression on context overflow.
+            choice = None
+            for retry in range(3):
+                try:
+                    choice = await self.llm.chat_with_tools(
+                        messages=messages[1:],  # skip system, pass as param
+                        tools=tools_schema,
+                        system=messages[0]["content"] if messages else "",
+                        model=model,
+                    )
+                    break
+                except RuntimeError as e:
+                    err_msg = str(e).lower()
+                    if "context" in err_msg or "token" in err_msg or "length" in err_msg:
+                        logger.warning("Context overflow, compressing (retry %d)", retry + 1)
+                        self.memory.force_compress()
+                        messages = self.memory.get_context_messages(system_prompt)
+                        continue
+                    raise
+            if choice is None:
+                raise RuntimeError("Context overflow after 3 retries")
 
             message = choice["message"]
             finish_reason = choice["finish_reason"]

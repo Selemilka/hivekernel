@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/selemilka/hivekernel/internal/process"
@@ -50,15 +51,19 @@ func ClawConfigToMetadata(cc *ClawAgentConfig) map[string]string {
 
 // StartupAgent describes an agent to spawn at kernel startup.
 type StartupAgent struct {
-	Name          string            `json:"name"`
-	Role          string            `json:"role"`
-	CognitiveTier string           `json:"cognitive_tier"`
-	Model         string            `json:"model,omitempty"`
-	RuntimeType   string            `json:"runtime_type"`
-	RuntimeImage  string            `json:"runtime_image"`
-	SystemPrompt  string            `json:"system_prompt,omitempty"`
-	ClawConfig    *ClawAgentConfig  `json:"claw_config,omitempty"`
-	Cron          []StartupCron     `json:"cron,omitempty"`
+	Name             string            `json:"name"`
+	Role             string            `json:"role"`
+	CognitiveTier    string            `json:"cognitive_tier"`
+	Model            string            `json:"model,omitempty"`
+	RuntimeType      string            `json:"runtime_type"`
+	RuntimeImage     string            `json:"runtime_image"`
+	SystemPrompt     string            `json:"system_prompt,omitempty"`
+	SystemPromptFile string            `json:"system_prompt_file,omitempty"`
+	Tools            []string          `json:"tools,omitempty"`
+	Workspace        string            `json:"workspace,omitempty"`
+	Metadata         map[string]string `json:"metadata,omitempty"`
+	ClawConfig       *ClawAgentConfig  `json:"claw_config,omitempty"`
+	Cron             []StartupCron     `json:"cron,omitempty"`
 }
 
 // StartupCron describes a cron entry to create after an agent spawns.
@@ -92,6 +97,9 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 		return StartupConfig{}, fmt.Errorf("parse startup config: %w", err)
 	}
 
+	// Resolve config base dir for relative paths.
+	configDir := filepath.Dir(path)
+
 	// Validate each agent entry.
 	for i, a := range cfg.Agents {
 		if a.Name == "" {
@@ -108,6 +116,33 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 		}
 		if a.CognitiveTier == "" {
 			cfg.Agents[i].CognitiveTier = "operational" // default
+		}
+
+		// Load system prompt from file if specified.
+		if a.SystemPromptFile != "" {
+			promptPath := a.SystemPromptFile
+			if !filepath.IsAbs(promptPath) {
+				promptPath = filepath.Join(configDir, promptPath)
+			}
+			content, err := os.ReadFile(promptPath)
+			if err != nil {
+				return StartupConfig{}, fmt.Errorf("agent[%d] (%s): read system_prompt_file: %w", i, a.Name, err)
+			}
+			// system_prompt_file wins over system_prompt
+			cfg.Agents[i].SystemPrompt = string(content)
+		}
+
+		// Resolve workspace to absolute path and create agent subdir.
+		if a.Workspace != "" {
+			wsPath := a.Workspace
+			if !filepath.IsAbs(wsPath) {
+				wsPath = filepath.Join(configDir, wsPath)
+			}
+			agentDir := filepath.Join(wsPath, a.Name)
+			if err := os.MkdirAll(agentDir, 0755); err != nil {
+				return StartupConfig{}, fmt.Errorf("agent[%d] (%s): create workspace dir: %w", i, a.Name, err)
+			}
+			cfg.Agents[i].Workspace = agentDir
 		}
 	}
 

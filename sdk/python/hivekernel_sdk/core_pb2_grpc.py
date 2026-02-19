@@ -137,6 +137,16 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.ListInboxRequest.SerializeToString,
                 response_deserializer=core__pb2.ListInboxResponse.FromString,
                 _registered_method=True)
+        self.ListSiblings = channel.unary_unary(
+                '/hivekernel.core.CoreService/ListSiblings',
+                request_serializer=agent__pb2.ListSiblingsRequest.SerializeToString,
+                response_deserializer=agent__pb2.ListSiblingsResponse.FromString,
+                _registered_method=True)
+        self.WaitChild = channel.unary_unary(
+                '/hivekernel.core.CoreService/WaitChild',
+                request_serializer=agent__pb2.WaitChildRequest.SerializeToString,
+                response_deserializer=agent__pb2.WaitChildResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -274,6 +284,19 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListSiblings(self, request, context):
+        """Sibling / wait support (mirror of syscall equivalents)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WaitChild(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -376,6 +399,16 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.ListInbox,
                     request_deserializer=core__pb2.ListInboxRequest.FromString,
                     response_serializer=core__pb2.ListInboxResponse.SerializeToString,
+            ),
+            'ListSiblings': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListSiblings,
+                    request_deserializer=agent__pb2.ListSiblingsRequest.FromString,
+                    response_serializer=agent__pb2.ListSiblingsResponse.SerializeToString,
+            ),
+            'WaitChild': grpc.unary_unary_rpc_method_handler(
+                    servicer.WaitChild,
+                    request_deserializer=agent__pb2.WaitChildRequest.FromString,
+                    response_serializer=agent__pb2.WaitChildResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -920,6 +953,60 @@ class CoreService(object):
             '/hivekernel.core.CoreService/ListInbox',
             core__pb2.ListInboxRequest.SerializeToString,
             core__pb2.ListInboxResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListSiblings(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/ListSiblings',
+            agent__pb2.ListSiblingsRequest.SerializeToString,
+            agent__pb2.ListSiblingsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WaitChild(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hivekernel.core.CoreService/WaitChild',
+            agent__pb2.WaitChildRequest.SerializeToString,
+            agent__pb2.WaitChildResponse.FromString,
             options,
             channel_credentials,
             insecure,

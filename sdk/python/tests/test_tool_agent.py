@@ -280,8 +280,37 @@ class TestHandleMessage(unittest.IsolatedAsyncioTestCase):
         agent.agent_loop.run.assert_called_once()
 
     @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    async def test_handle_message_cron_task(self):
+        """cron_task messages are processed like task_request."""
+        agent = TestToolAgent()
+        agent._pid = 5
+        agent._core = AsyncMock()
+        agent._core.get_artifact = AsyncMock(side_effect=Exception("not found"))
+        agent._core.send_message = AsyncMock(return_value="msg-1")
+
+        config = AgentConfig(name="test", model="mini")
+        await agent.on_init(config)
+
+        agent.agent_loop.run = AsyncMock(return_value=MagicMock(
+            content="cron response",
+            iterations=1,
+            tool_calls_total=0,
+        ))
+
+        msg = Message(
+            message_id="msg-1",
+            from_pid=2,
+            type="cron_task",
+            payload=json.dumps({"description": "run health check"}).encode("utf-8"),
+        )
+
+        ack = await agent.handle_message(msg)
+        self.assertEqual(ack.status, MessageAck.ACK_ACCEPTED)
+        agent.agent_loop.run.assert_called_once()
+
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
     async def test_handle_message_non_task_request(self):
-        """Non task_request messages use default handling."""
+        """Non task_request/cron_task messages use default handling."""
         agent = TestToolAgent()
         agent._pid = 5
         agent._core = AsyncMock()
@@ -293,7 +322,7 @@ class TestHandleMessage(unittest.IsolatedAsyncioTestCase):
         msg = Message(
             message_id="msg-1",
             from_pid=2,
-            type="cron_task",
+            type="notification",
             payload=b"{}",
         )
 

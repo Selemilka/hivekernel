@@ -89,7 +89,8 @@ func main() {
 	king.Broker().OnMessage = func(pid process.PID, msg *ipc.Message) {
 		client := rtManager.GetClient(pid)
 		if client == nil {
-			return // no runtime connected (or process is kernel-internal)
+			log.Printf("[broker] push delivery skipped for PID %d (type=%s): no runtime client", pid, msg.Type)
+			return
 		}
 		pbMsg := &pb.AgentMessage{
 			MessageId:   msg.ID,

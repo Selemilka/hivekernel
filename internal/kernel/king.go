@@ -533,10 +533,39 @@ func (k *King) executeCronEntry(ctx context.Context, entry *scheduler.CronEntry)
 			log.Printf("[cron] %q: no runtime for PID %d", entry.Name, entry.TargetPID)
 			return
 		}
+		cronTraceID := fmt.Sprintf("cron-%s-%d", entry.ID, time.Now().Unix())
+		params := make(map[string]string)
+		for k, v := range entry.ExecuteParams {
+			params[k] = v
+		}
+		params["trace_id"] = cronTraceID
 		taskReq := &pb.TaskRequest{
-			TaskId:      fmt.Sprintf("cron-%s-%d", entry.ID, time.Now().Unix()),
+			TaskId:      cronTraceID,
 			Description: entry.ExecuteDesc,
-			Params:      entry.ExecuteParams,
+			Params:      params,
+		}
+		// Set trace for the target PID so all events get annotated.
+		k.SetTrace(entry.TargetPID, cronTraceID, "cron")
+		// Emit message_sent event so dashboard shows the cron execution.
+		if el := k.eventLog; el != nil {
+			toName := ""
+			if receiver, err := k.registry.Get(entry.TargetPID); err == nil {
+				toName = receiver.Name
+			}
+			payload := map[string]interface{}{
+				"description": entry.ExecuteDesc,
+				"params":      entry.ExecuteParams,
+			}
+			jsonPayload, _ := json.Marshal(payload)
+			el.Emit(process.ProcessEvent{
+				Type:           process.EventMessageSent,
+				PID:            1,
+				PPID:           entry.TargetPID,
+				Name:           "king",
+				Role:           toName,
+				Message:        "cron_execute",
+				PayloadPreview: truncatePayload(string(jsonPayload), 2000),
+			})
 		}
 		result, err := k.executor.ExecuteTask(ctx, rt.Addr, entry.TargetPID, taskReq)
 		if err != nil {

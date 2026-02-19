@@ -405,8 +405,16 @@ func (h *KernelSyscallHandler) handleExecuteOn(ctx context.Context, callID strin
 	}
 
 	// Extract trace context from task params and propagate to target.
+	// If not in params, inherit from caller's trace context.
+	traceSet := false
 	if req.Task != nil && req.Task.Params != nil {
 		if tID, tSpan := extractTraceFromParams(req.Task.Params); tID != "" {
+			h.king.SetTrace(req.TargetPid, tID, tSpan)
+			traceSet = true
+		}
+	}
+	if !traceSet {
+		if tID, tSpan := h.king.GetTrace(callerPID); tID != "" {
 			h.king.SetTrace(req.TargetPid, tID, tSpan)
 		}
 	}

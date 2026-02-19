@@ -1,6 +1,7 @@
 """HiveAgent base class — the main SDK entrypoint for agent authors."""
 
 import asyncio
+import json
 import logging
 import uuid
 
@@ -95,21 +96,30 @@ class HiveAgent:
         if message.type == "task_response" and message.reply_to:
             self._pending_results.append(message)
             return MessageAck(status=MessageAck.ACK_ACCEPTED)
+        # Normalize cron_task payload: add "task" key from "description" for
+        # uniform handling in subclasses (type stays "cron_task" so agents like
+        # Maid that have specific cron_task handlers still work).
+        if message.type == "cron_task":
+            try:
+                data = json.loads(message.payload.decode("utf-8"))
+                if "description" in data and "task" not in data:
+                    data["task"] = data["description"]
+                    message.payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
         # Delegate to application handler.
         return await self.handle_message(message)
 
     async def handle_message(self, message: Message) -> MessageAck:
         """Handle incoming message -- the primary task handler.
 
-        All tasks arrive as messages: cron_task, task_request, etc.
+        All tasks arrive as messages (cron_task is normalized to task_request
+        in on_message before reaching here).
         Use self.core for syscalls: spawn_child, send_message, store_artifact.
         Send replies via self.reply_to(message, payload, type="task_response").
 
         Override in subclass to implement application logic.
-        Default behavior for cron_task messages: log and accept.
         """
-        if message.type == "cron_task":
-            logger.info("PID %d received cron_task from PID %d", self._pid, message.from_pid)
         return MessageAck(status=MessageAck.ACK_ACCEPTED)
 
     async def reply_to(

@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -528,6 +529,8 @@ async def api_execute(pid: int, body: dict):
     params = body.get("params", {})
     timeout = body.get("timeout", 60)
     node_name = tree_cache.get(pid, {}).get("name", "")
+    if "trace_id" not in params:
+        params["trace_id"] = f"t-{uuid.uuid4().hex[:8]}"
     start = _time.monotonic()
 
     try:
@@ -577,6 +580,7 @@ async def api_run_task(body: dict):
         return JSONResponse({"ok": False, "error": "Queen not found in process tree"}, status_code=503)
 
     queen_name = tree_cache.get(queen_pid, {}).get("name", "queen")
+    trace_id = f"t-{uuid.uuid4().hex[:8]}"
     start = _time.monotonic()
 
     # Execute task on Queen -- she decides the strategy (simple vs complex).
@@ -585,7 +589,7 @@ async def api_run_task(body: dict):
             core_pb2.ExecuteTaskRequest(
                 target_pid=queen_pid,
                 description=task_text,
-                params={"task": task_text, "max_workers": max_workers},
+                params={"task": task_text, "max_workers": max_workers, "trace_id": trace_id},
                 timeout_seconds=timeout,
             ),
             metadata=md(1),
@@ -659,6 +663,7 @@ async def api_chat(body: dict):
         return JSONResponse({"ok": False, "error": "Assistant agent not found"}, status_code=503)
 
     sibling_pids = _get_sibling_pids()
+    trace_id = f"t-{uuid.uuid4().hex[:8]}"
     start = _time.monotonic()
 
     try:
@@ -670,6 +675,7 @@ async def api_chat(body: dict):
                     "message": message,
                     "history": json.dumps(history, ensure_ascii=False),
                     "sibling_pids": json.dumps(sibling_pids),
+                    "trace_id": trace_id,
                 },
                 timeout_seconds=60,
             ),

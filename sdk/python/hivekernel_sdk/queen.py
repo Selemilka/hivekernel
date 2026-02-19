@@ -120,7 +120,7 @@ class QueenAgent(LLMAgent):
 
     async def handle_message(self, message: Message) -> MessageAck:
         """Handle incoming IPC messages from sibling agents."""
-        if message.type == "task_request":
+        if message.type in ("task_request", "cron_task"):
             # Queue the task for async processing.
             asyncio.create_task(self._process_message_task(message))
             return MessageAck(status=MessageAck.ACK_QUEUED)
@@ -133,7 +133,7 @@ class QueenAgent(LLMAgent):
         """
         try:
             payload = json.loads(message.payload.decode("utf-8"))
-            description = payload.get("task", "")
+            description = payload.get("task", payload.get("description", ""))
             trace_id = payload.get("trace_id", "")
             if not description:
                 result_payload = json.dumps({"error": "empty task"}).encode("utf-8")

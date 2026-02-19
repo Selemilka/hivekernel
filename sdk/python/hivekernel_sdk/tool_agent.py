@@ -156,7 +156,7 @@ class ToolAgent(LLMAgent):
 
     async def handle_message(self, message: Message) -> MessageAck:
         """Handle IPC messages with the agent loop."""
-        if message.type == "task_request":
+        if message.type in ("task_request", "cron_task"):
             try:
                 payload = json.loads(message.payload.decode("utf-8"))
                 prompt = payload.get("task", payload.get("description", ""))

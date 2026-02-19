@@ -11,6 +11,7 @@ Dashboard passes sibling PIDs in task params so Assistant can delegate.
 Runtime image: hivekernel_sdk.assistant:AssistantAgent
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -115,6 +116,51 @@ class AssistantAgent(LLMAgent):
                     logger.warning("Failed to record delegation result: %s", e)
 
         return ack
+
+    async def handle_message(self, message: Message) -> MessageAck:
+        """Handle IPC messages (task_request and cron_task)."""
+        if message.type in ("task_request", "cron_task"):
+            asyncio.create_task(self._process_ipc_task(message))
+            return MessageAck(status=MessageAck.ACK_QUEUED)
+        return await super().handle_message(message)
+
+    async def _process_ipc_task(self, message: Message):
+        """Process a task_request received via IPC."""
+        try:
+            payload = json.loads(message.payload.decode("utf-8"))
+            description = payload.get("task", payload.get("description", ""))
+            if not description:
+                await self.reply_to(
+                    message,
+                    json.dumps({"error": "empty task"}).encode("utf-8"),
+                )
+                return
+
+            logger.info(
+                "Assistant processing IPC task from PID %d: %s",
+                message.from_pid,
+                description[:80],
+            )
+
+            # Use LLM to process the task.
+            response = await self.ask(description, max_tokens=1024)
+
+            if self.core:
+                await self.core.log("info", f"IPC task result: {response[:200]}")
+
+            await self.reply_to(
+                message,
+                json.dumps({"output": response}, ensure_ascii=False).encode("utf-8"),
+            )
+        except Exception as e:
+            logger.warning("IPC task processing failed: %s", e)
+            try:
+                await self.reply_to(
+                    message,
+                    json.dumps({"error": str(e)}).encode("utf-8"),
+                )
+            except Exception:
+                pass
 
     async def handle_task(self, task, ctx: SyscallContext) -> TaskResult:
         message = task.params.get("message", task.description)

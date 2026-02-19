@@ -113,8 +113,13 @@ class LLMClient:
 
         if "error" in resp:
             err = resp["error"]
-            msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            raise RuntimeError(f"OpenRouter API error: {msg}")
+            if isinstance(err, dict):
+                code = err.get("code", "")
+                msg = err.get("message", str(err))
+                detail = f"[{code}] {msg}" if code else msg
+            else:
+                detail = str(err)
+            raise RuntimeError(f"OpenRouter API error: {detail}")
 
         usage = resp.get("usage", {})
         self._total_tokens += usage.get("total_tokens", 0)
@@ -185,8 +190,13 @@ class LLMClient:
 
         if "error" in resp:
             err = resp["error"]
-            msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            raise RuntimeError(f"OpenRouter API error: {msg}")
+            if isinstance(err, dict):
+                code = err.get("code", "")
+                msg = err.get("message", str(err))
+                detail = f"[{code}] {msg}" if code else msg
+            else:
+                detail = str(err)
+            raise RuntimeError(f"OpenRouter API error: {detail}")
 
         usage = resp.get("usage", {})
         self._total_tokens += usage.get("total_tokens", 0)

@@ -115,17 +115,38 @@ class TestForceCompress(unittest.TestCase):
         for i in range(10):
             mem.add_message("user", f"msg {i}")
         mem.force_compress()
-        # Should keep last 5 (50% of 10)
-        self.assertEqual(len(mem.messages), 5)
-        self.assertEqual(mem.messages[0]["content"], "msg 5")
+        # Phase 1: 10 > 4, so keep last 4
+        self.assertEqual(len(mem.messages), 4)
+        self.assertEqual(mem.messages[0]["content"], "msg 6")
+
+    def test_compress_progressive(self):
+        """Each force_compress call is more aggressive."""
+        mem = AgentMemory(pid=42)
+        for i in range(10):
+            mem.add_message("user", f"msg {i}")
+        mem.summary = "x" * 5000
+
+        # Phase 1: keep last 4, truncate summary to 2000
+        mem.force_compress()
+        self.assertEqual(len(mem.messages), 4)
+        self.assertEqual(len(mem.summary), 2000)
+
+        # Phase 2: 4 > 2, keep last 2, clear summary
+        mem.force_compress()
+        self.assertEqual(len(mem.messages), 2)
+        self.assertEqual(mem.summary, "")
+
+        # Phase 3: 2 > 1, keep last 1, clear summary
+        mem.force_compress()
+        self.assertEqual(len(mem.messages), 1)
 
     def test_compress_keeps_minimum(self):
         mem = AgentMemory(pid=42)
         mem.add_message("user", "msg 0")
         mem.add_message("assistant", "msg 1")
         mem.force_compress()
-        # 2 messages, should not drop anything
-        self.assertEqual(len(mem.messages), 2)
+        # 2 messages: phase 3 (not > 2), keeps last 1
+        self.assertEqual(len(mem.messages), 1)
 
     def test_compress_empty(self):
         mem = AgentMemory(pid=42)

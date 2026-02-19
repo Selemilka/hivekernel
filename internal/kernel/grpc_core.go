@@ -746,7 +746,7 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				Type:           string(evt.Type),
 				Pid:            evt.PID,
 				Ppid:           evt.PPID,
-				Name:           evt.Name,
+				Name:           sanitizeUTF8(evt.Name),
 				Role:           evt.Role,
 				Tier:           evt.Tier,
 				Model:          evt.Model,
@@ -754,13 +754,13 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 				OldState:       evt.OldState,
 				NewState:       evt.NewState,
 				Level:          evt.Level,
-				Message:        evt.Message,
+				Message:        sanitizeUTF8(evt.Message),
 				ReplyTo:        evt.ReplyTo,
-				PayloadPreview: evt.PayloadPreview,
+				PayloadPreview: sanitizeUTF8(evt.PayloadPreview),
 				TraceId:        evt.TraceID,
 				TraceSpan:      evt.TraceSpan,
 				MessageId:      evt.MessageID,
-				Fields:         evt.Fields,
+				Fields:         sanitizeMapUTF8(evt.Fields),
 			}
 			if err := stream.Send(pbEvt); err != nil {
 				return err
@@ -769,4 +769,37 @@ func (s *CoreServer) SubscribeEvents(req *pb.SubscribeEventsRequest, stream grpc
 			return ctx.Err()
 		}
 	}
+}
+
+// sanitizeUTF8 replaces invalid UTF-8 sequences with the Unicode replacement character.
+// Protobuf3 string fields require valid UTF-8; raw byte payloads can contain invalid sequences.
+func sanitizeUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	// Build valid string by replacing invalid bytes.
+	result := make([]byte, 0, len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size <= 1 {
+			result = append(result, '?')
+			i++
+		} else {
+			result = append(result, s[i:i+size]...)
+			i += size
+		}
+	}
+	return string(result)
+}
+
+// sanitizeMapUTF8 sanitizes all values in a string map.
+func sanitizeMapUTF8(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	clean := make(map[string]string, len(m))
+	for k, v := range m {
+		clean[sanitizeUTF8(k)] = sanitizeUTF8(v)
+	}
+	return clean
 }

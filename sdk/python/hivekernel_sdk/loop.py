@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -13,6 +14,30 @@ from .memory import AgentMemory
 from .tools import ToolContext, ToolRegistry
 
 logger = logging.getLogger("hivekernel.loop")
+
+# Patterns that indicate a genuine context length overflow (vs. rate limits, auth, etc.)
+_CONTEXT_OVERFLOW_PATTERNS = [
+    "context length",       # "maximum context length", "context length exceeded"
+    "context_length",       # "context_length_exceeded" (error code)
+    "too many tokens",      # "prompt has too many tokens"
+    "too long",             # "prompt is too long"
+    "max.*token.*exceed",   # "max token limit exceeded"
+    "request too large",    # generic
+    "maximum.*tokens",      # "maximum number of tokens"
+    "prompt.*exceed",       # "prompt exceeds the model's limit"
+]
+
+
+def _is_context_overflow(error_msg: str) -> bool:
+    """Check if an error message indicates a context length overflow.
+
+    Must be precise: 'token' alone matches rate limits and auth errors.
+    """
+    lower = error_msg.lower()
+    for pattern in _CONTEXT_OVERFLOW_PATTERNS:
+        if re.search(pattern, lower):
+            return True
+    return False
 
 
 @dataclass
@@ -81,13 +106,34 @@ class AgentLoop:
         tool_calls_total = 0
         final_content = ""
 
+        # Pre-flight: proactively compress if loaded memory is already too large.
+        # Budget: ~80K tokens for context (leaves room for response + overhead).
+        tools_overhead = len(json.dumps(tools_schema)) // 3 if tools_schema else 0
+        system_overhead = len(system_prompt) // 3
+        context_budget = 80000
+        pre_total = self.memory.estimate_total_tokens() + tools_overhead + system_overhead
+        if pre_total > context_budget:
+            logger.warning(
+                "Pre-flight compression: ~%d tokens (budget=%d) "
+                "[messages=%d, summary=%d chars, long_term=%d chars, tools~%d tok]",
+                pre_total, context_budget, len(self.memory.messages),
+                len(self.memory.summary), len(self.memory.long_term), tools_overhead,
+            )
+            while self.memory.estimate_total_tokens() + tools_overhead + system_overhead > context_budget:
+                before = self.memory.estimate_total_tokens()
+                self.memory.force_compress()
+                after = self.memory.estimate_total_tokens()
+                if after >= before:
+                    break  # No further compression possible
+
         for _ in range(self.max_iterations):
             iterations += 1
 
             messages = self.memory.get_context_messages(system_prompt)
 
-            # Retry with compression on context overflow.
+            # Call LLM, retry with compression only on genuine context overflow.
             choice = None
+            last_error = None
             for retry in range(3):
                 try:
                     choice = await self.llm.chat_with_tools(
@@ -98,15 +144,34 @@ class AgentLoop:
                     )
                     break
                 except RuntimeError as e:
-                    err_msg = str(e).lower()
-                    if "context" in err_msg or "token" in err_msg or "length" in err_msg:
-                        logger.warning("Context overflow, compressing (retry %d)", retry + 1)
+                    last_error = e
+                    if _is_context_overflow(str(e)):
+                        msg_count = len(self.memory.messages)
+                        total_est = self.memory.estimate_total_tokens()
+                        logger.warning(
+                            "Context overflow (retry %d/3): %s "
+                            "[messages=%d, ~%d tokens, summary=%d chars]",
+                            retry + 1, str(e)[:200], msg_count,
+                            total_est, len(self.memory.summary),
+                        )
                         self.memory.force_compress()
                         messages = self.memory.get_context_messages(system_prompt)
                         continue
+                    # Not a context overflow -- log and re-raise immediately.
+                    logger.error("LLM call failed: %s", str(e)[:500])
+                    try:
+                        await ctx.log_event(
+                            "error",
+                            f"LLM error: {str(e)[:300]}",
+                            iteration=str(iterations),
+                        )
+                    except Exception:
+                        pass
                     raise
             if choice is None:
-                raise RuntimeError("Context overflow after 3 retries")
+                raise RuntimeError(
+                    f"Context overflow after 3 retries: {last_error}"
+                )
 
             message = choice["message"]
             finish_reason = choice["finish_reason"]
@@ -237,7 +302,11 @@ class AgentLoop:
             )
             existing = self.memory.summary
             if existing:
-                self.memory.summary = f"{existing}\n\n{summary}"
+                combined = f"{existing}\n\n{summary}"
+                # Cap summary to prevent unbounded growth across sessions.
+                if len(combined) > 4000:
+                    combined = combined[-4000:]
+                self.memory.summary = combined
             else:
                 self.memory.summary = summary
         except Exception as e:

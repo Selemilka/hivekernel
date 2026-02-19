@@ -547,6 +547,11 @@ button.btn-secondary:hover {
     color: #ccc;
 }
 
+.log-line .log-fields {
+    color: #666;
+    font-size: 10px;
+}
+
 /* ─── Primary Button ─── */
 button.btn-primary {
     background: #0a8f6a;

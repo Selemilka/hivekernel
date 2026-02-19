@@ -527,13 +527,28 @@ function appendLogEntry(data) {
     else if (eventType === 'tool_call') prefix = '<span class="log-evt-tag log-evt-tool">TOOL</span> ';
     else if (eventType === 'cron_executed') prefix = '<span class="log-evt-tag log-evt-cron">CRON</span> ';
 
+    // Build field details for error/warn logs with extra context.
+    let fieldsHtml = '';
+    if (data.fields && (level === 'error' || level === 'warn')) {
+        const f = data.fields;
+        const parts = [];
+        for (const [k, v] of Object.entries(f)) {
+            if (k === 'component') continue; // already shown as name
+            if (v && v.length > 0) parts.push(`${k}=${v}`);
+        }
+        if (parts.length > 0) {
+            fieldsHtml = ` <span class="log-fields">[${escapeHtml(parts.join(', '))}]</span>`;
+        }
+    }
+
     div.innerHTML =
         `<span class="log-ts">${ts}</span>` +
         `<span class="log-pid">PID ${pid}</span>` +
         (name ? `<span class="log-name">${name}</span>` : '') +
         prefix +
         `<span class="log-level">[${level.toUpperCase()}]</span> ` +
-        `<span class="log-msg">${escapeHtml(msg)}</span>`;
+        `<span class="log-msg">${escapeHtml(msg)}</span>` +
+        fieldsHtml;
 
     // Apply current filters.
     if (logLevelFilter !== 'all' && level !== logLevelFilter) {

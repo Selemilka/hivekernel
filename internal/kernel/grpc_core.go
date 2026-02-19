@@ -461,7 +461,7 @@ func (s *CoreServer) Escalate(ctx context.Context, req *pb.EscalateRequest) (*pb
 
 func (s *CoreServer) Log(ctx context.Context, req *pb.LogRequest) (*pb.LogResponse, error) {
 	pid, _ := callerPID(ctx)
-	hklog.For("grpc").Info("agent log", "pid", pid, "level", req.Level, "message", req.Message)
+	hklog.For("grpc").Debug("agent log", "pid", pid, "level", req.Level, "message", req.Message)
 	return &pb.LogResponse{}, nil
 }
 
@@ -535,6 +535,7 @@ func (s *CoreServer) ExecuteTask(ctx context.Context, req *pb.ExecuteTaskRequest
 	hklog.For("grpc").Info("ExecuteTask", "target_pid", req.TargetPid, "name", target.Name, "task", req.Description)
 	result, err := s.executor.ExecuteTask(ctx, rt.Addr, req.TargetPid, taskReq)
 	if err != nil {
+		hklog.For("grpc").Error(fmt.Sprintf("ExecuteTask failed on %s (PID %d): %v", target.Name, req.TargetPid, err), "task", req.Description)
 		return &pb.ExecuteTaskResponse{Success: false, Error: err.Error()}, nil
 	}
 

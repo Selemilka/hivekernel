@@ -84,7 +84,14 @@ func (e *Executor) ExecuteTask(
 			}
 
 		case pb.ProgressType_PROGRESS_COMPLETED:
-			hklog.For("executor").Info("task completed", "task_id", progress.TaskId)
+			outPreview := ""
+			if progress.Result != nil && progress.Result.Output != "" {
+				outPreview = progress.Result.Output
+				if len(outPreview) > 200 {
+					outPreview = outPreview[:200] + "..."
+				}
+			}
+			hklog.For("executor").Info("task completed", "task_id", progress.TaskId, "pid", callerPID, "output_preview", outPreview)
 			_ = stream.CloseSend()
 			return progress.Result, nil
 
@@ -93,7 +100,7 @@ func (e *Executor) ExecuteTask(
 			if errMsg == "" && progress.Result != nil {
 				errMsg = progress.Result.Output
 			}
-			hklog.For("executor").Error("task failed", "task_id", progress.TaskId, "error", errMsg)
+			hklog.For("executor").Error(fmt.Sprintf("task failed: %s", errMsg), "task_id", progress.TaskId, "pid", callerPID)
 			_ = stream.CloseSend()
 			return progress.Result, fmt.Errorf("task failed: %s", errMsg)
 

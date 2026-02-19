@@ -57,14 +57,14 @@ func (h *eventLogHandler) Handle(_ context.Context, r slog.Record) error {
 		return nil
 	}
 
-	level := "info"
+	level := "debug"
 	switch {
 	case r.Level >= slog.LevelError:
 		level = "error"
 	case r.Level >= slog.LevelWarn:
 		level = "warn"
-	case r.Level >= slog.LevelDebug:
-		level = "debug"
+	case r.Level >= slog.LevelInfo:
+		level = "info"
 	}
 
 	// Extract component and other fields from attributes.

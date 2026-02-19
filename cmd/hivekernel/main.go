@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -117,7 +118,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if _, err := client.DeliverMessage(ctx, pbMsg); err != nil {
-			brokerLog.Error("push delivery failed", "pid", pid, "error", err)
+			brokerLog.Error(fmt.Sprintf("push delivery failed to PID %d: %v", pid, err), "type", msg.Type, "from_pid", msg.FromPID)
 			return
 		}
 		// Emit message_delivered event.

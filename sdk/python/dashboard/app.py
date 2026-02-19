@@ -253,7 +253,8 @@ def apply_event(event) -> dict | None:
         name = event.name
         if not name and event.pid in tree_cache:
             name = tree_cache[event.pid].get("name", "")
-        return {
+        fields = dict(event.fields) if event.fields else {}
+        result = {
             "action": "log",
             "pid": event.pid,
             "name": name,
@@ -261,6 +262,9 @@ def apply_event(event) -> dict | None:
             "message": event.message,
             "ts": event.timestamp_ms,
         }
+        if fields:
+            result["fields"] = fields
+        return result
 
     elif event.type == "llm_call":
         # Track per-PID LLM usage.

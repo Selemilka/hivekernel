@@ -346,7 +346,7 @@ func (h *KernelSyscallHandler) handleLog(callID string, callerPID process.PID, r
 	case pb.LogLevel_LOG_ERROR:
 		levelStr = "error"
 	}
-	hklog.For("syscall").Info("agent log", "pid", callerPID, "level", levelStr, "message", req.Message)
+	hklog.For("syscall").Debug("agent log", "pid", callerPID, "level", levelStr, "message", req.Message)
 
 	// Emit log event so dashboard can display it.
 	if el := h.king.EventLog(); el != nil {

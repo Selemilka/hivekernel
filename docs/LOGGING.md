@@ -5,7 +5,7 @@ HiveKernel has three logging subsystems, each serving a different purpose:
 | Subsystem | What it captures | Format | Location |
 |-----------|-----------------|--------|----------|
 | **Kernel log** | Go slog messages (startup, errors, runtime) | Text (console) + JSON (file) | stderr / `--log-file` path |
-| **Event log** | Process lifecycle, IPC, LLM/tool call summaries | JSONL | `logs/events-YYYYMMDD-HHMMSS.jsonl` |
+| **Event log** | Process lifecycle, IPC, LLM/tool call summaries | JSONL | `logs/events/YYYYMMDD-HHMMSS.jsonl` |
 | **Dialog log** | Full LLM request/response payloads | JSONL | `logs/dialogs/YYYYMMDD-HHMMSS.jsonl` |
 
 All log files live under `logs/` (gitignored).
@@ -55,7 +55,7 @@ Structured audit trail of **everything that happens** in the kernel. Written by 
 ### File
 
 ```
-logs/events-YYYYMMDD-HHMMSS.jsonl
+logs/events/YYYYMMDD-HHMMSS.jsonl
 ```
 
 Timestamp is kernel start time. New file on each kernel restart.
@@ -453,8 +453,9 @@ They complement each other: the event log gives the big picture (what happened a
 
 ```
 logs/
-  events-20260220-131035.jsonl    # Event log (session 1)
-  events-20260220-142200.jsonl    # Event log (session 2)
+  events/
+    20260220-131035.jsonl         # Event log (session 1)
+    20260220-142200.jsonl         # Event log (session 2)
   dialogs/
     20260220-131035.jsonl         # Dialog log (session 1)
     20260220-142200.jsonl         # Dialog log (session 2)

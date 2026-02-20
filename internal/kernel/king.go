@@ -86,11 +86,11 @@ func New(cfg Config) (*King, error) {
 	spawner := process.NewSpawner(registry)
 
 	// Create event log directory and event log.
-	logDir := "logs"
+	logDir := filepath.Join("logs", "events")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("create log dir: %w", err)
 	}
-	logPath := filepath.Join(logDir, fmt.Sprintf("events-%s.jsonl", time.Now().Format("20060102-150405")))
+	logPath := filepath.Join(logDir, fmt.Sprintf("%s.jsonl", time.Now().Format("20060102-150405")))
 	eventLog, err := process.NewEventLog(4096, logPath)
 	if err != nil {
 		return nil, fmt.Errorf("create event log: %w", err)

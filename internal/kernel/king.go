@@ -50,7 +50,6 @@ type King struct {
 	cgroups   *resources.CGroupManager
 
 	// Phase 5: Dynamic Scaling
-	scheduler *scheduler.Scheduler
 	cron      *scheduler.CronScheduler
 	lifecycle *process.LifecycleManager
 	signals   *process.SignalRouter
@@ -128,7 +127,6 @@ func New(cfg Config) (*King, error) {
 		connector:   cluster.NewConnector(),
 		migrator:    cluster.NewMigrationManager(registry, nodes),
 		cgroups:     resources.NewCGroupManager(registry),
-		scheduler:   scheduler.NewScheduler(cfg.MessageAgingFactor),
 		cron:        scheduler.NewCronScheduler(),
 		lifecycle:   process.NewLifecycleManager(registry, signals),
 		signals:     signals,
@@ -247,11 +245,6 @@ func (k *King) Migrator() *cluster.MigrationManager {
 // CGroups returns the cgroup manager.
 func (k *King) CGroups() *resources.CGroupManager {
 	return k.cgroups
-}
-
-// Scheduler returns the task scheduler.
-func (k *King) Scheduler() *scheduler.Scheduler {
-	return k.scheduler
 }
 
 // Cron returns the cron scheduler.

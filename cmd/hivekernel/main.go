@@ -98,7 +98,7 @@ func main() {
 		logger.Info("Python SDK path resolved", "path", resolvedSDK)
 	}
 
-	// Start runtime manager, executor, and health monitor.
+	// Start runtime manager and executor.
 	rtManager := runtime.NewManager(coreAddr, "python")
 	if resolvedSDK != "" {
 		rtManager.SetSDKPath(resolvedSDK)
@@ -149,20 +149,6 @@ func main() {
 	executor := runtime.NewExecutor(syscallHandler)
 	syscallHandler.SetExecutor(executor)
 
-	healthMon := runtime.NewHealthMonitor(
-		rtManager,
-		10*time.Second, // check interval
-		3,              // max consecutive failures before kill
-		5*time.Second,  // ping timeout
-	)
-	healthLog := hklog.For("health")
-	healthMon.OnUnhealthy(func(pid process.PID) {
-		healthLog.Warn("agent unreachable, killing", "pid", pid)
-		_ = rtManager.StopRuntime(pid)
-		_ = king.Registry().SetState(pid, process.StateZombie)
-		king.Signals().NotifyParent(pid, -1, "health: unreachable")
-	})
-
 	// Start supervisor (zombie reaping, restart policies).
 	supervisor := process.NewSupervisor(
 		king.Registry(),
@@ -188,7 +174,6 @@ func main() {
 	rtLog := hklog.For("runtime")
 	rtManager.OnProcessExit(func(pid process.PID, exitCode int) {
 		rtLog.Info("process exited", "pid", pid, "exit_code", exitCode)
-		healthMon.Remove(pid)
 		supervisor.HandleChildExit(pid, exitCode)
 	})
 
@@ -232,10 +217,7 @@ func main() {
 
 	go supervisor.Run(ctx)
 
-	// Start health monitor.
-	go healthMon.Run(ctx)
-
-	// Start cron poller (checks due entries every 30s).
+	// Start cron poller.
 	king.SetExecutor(executor)
 	go king.RunCronPoller(ctx)
 
@@ -251,7 +233,7 @@ func main() {
 	sig := <-sigCh
 	logger.Info("received shutdown signal", "signal", sig)
 
-	// 1. Cancel context — signals all goroutines (cron poller, health monitor, king.Run).
+	// 1. Cancel context — signals all goroutines (cron poller, supervisor, king.Run).
 	cancel()
 
 	// 2. Close event log — unblocks SubscribeEvents streams by closing subscriber channels.

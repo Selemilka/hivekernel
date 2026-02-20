@@ -506,12 +506,12 @@ func (k *King) routeMessage(msg *ipc.Message) {
 	}
 }
 
-// RunCronPoller ticks every 30 seconds, checks for due cron entries,
+// RunCronPoller ticks every second, checks for due cron entries,
 // and executes them. Blocks until ctx is cancelled.
 func (k *King) RunCronPoller(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	hklog.For("cron").Info("poller started", "interval", "30s")
+	hklog.For("cron").Info("poller started", "interval", "1s")
 	for {
 		select {
 		case <-ctx.Done():

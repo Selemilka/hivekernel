@@ -66,15 +66,17 @@ type CronEntry struct {
 }
 
 // CronSchedule represents a parsed cron expression.
-// Simplified cron: minute hour day-of-month month day-of-week.
-// Supports: *, specific values, and intervals (*/N).
+// Supports 6-field Quartz-style: second minute hour day-of-month month day-of-week
+// and 5-field Unix-style: minute hour day-of-month month day-of-week (second defaults to 0).
+// Supports: *, specific values, comma-separated values, and intervals (*/N).
 type CronSchedule struct {
-	Minute    cronField
-	Hour      cronField
+	Second     cronField
+	Minute     cronField
+	Hour       cronField
 	DayOfMonth cronField
-	Month     cronField
-	DayOfWeek cronField
-	Raw       string
+	Month      cronField
+	DayOfWeek  cronField
+	Raw        string
 }
 
 type cronField struct {
@@ -83,23 +85,41 @@ type cronField struct {
 	Interval int // */N
 }
 
-// ParseCron parses a cron expression like "0 8 * * *" or "*/5 * * * *".
+// ParseCron parses a cron expression.
+// 6 fields (Quartz-style): "second minute hour day month dow"
+// 5 fields (Unix-style):   "minute hour day month dow" (second defaults to 0)
 func ParseCron(expr string) (CronSchedule, error) {
 	parts := strings.Fields(expr)
-	if len(parts) != 5 {
-		return CronSchedule{}, fmt.Errorf("cron expression must have 5 fields, got %d: %q", len(parts), expr)
+	if len(parts) != 5 && len(parts) != 6 {
+		return CronSchedule{}, fmt.Errorf("cron: need 5 or 6 fields, got %d: %q", len(parts), expr)
+	}
+
+	// 6 fields: second minute hour day month dow
+	// 5 fields: minute hour day month dow (second defaults to 0)
+	offset := 0
+	var second cronField
+	if len(parts) == 6 {
+		s, err := parseCronField(parts[0])
+		if err != nil {
+			return CronSchedule{}, fmt.Errorf("field 0 (%q): %w", parts[0], err)
+		}
+		second = s
+		offset = 1
+	} else {
+		second = cronField{Values: []int{0}}
 	}
 
 	fields := make([]cronField, 5)
-	for i, part := range parts {
-		f, err := parseCronField(part)
+	for i := 0; i < 5; i++ {
+		f, err := parseCronField(parts[offset+i])
 		if err != nil {
-			return CronSchedule{}, fmt.Errorf("field %d (%q): %w", i, part, err)
+			return CronSchedule{}, fmt.Errorf("field %d (%q): %w", offset+i, parts[offset+i], err)
 		}
 		fields[i] = f
 	}
 
 	return CronSchedule{
+		Second:     second,
 		Minute:     fields[0],
 		Hour:       fields[1],
 		DayOfMonth: fields[2],
@@ -137,7 +157,8 @@ func parseCronField(s string) (cronField, error) {
 
 // Matches checks if a time matches this schedule.
 func (cs CronSchedule) Matches(t time.Time) bool {
-	return cs.Minute.matches(t.Minute()) &&
+	return cs.Second.matches(t.Second()) &&
+		cs.Minute.matches(t.Minute()) &&
 		cs.Hour.matches(t.Hour()) &&
 		cs.DayOfMonth.matches(t.Day()) &&
 		cs.Month.matches(int(t.Month())) &&
@@ -224,14 +245,14 @@ func (cs *CronScheduler) SetEnabled(id string, enabled bool) error {
 }
 
 // CheckDue returns all entries that are due at the given time
-// and haven't been run in the current minute.
+// and haven't been run in the current second.
 func (cs *CronScheduler) CheckDue(now time.Time) []*CronEntry {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
 	var due []*CronEntry
-	// Truncate to minute for comparison.
-	nowMinute := now.Truncate(time.Minute)
+	// Truncate to second for comparison (second-precision cron).
+	nowSecond := now.Truncate(time.Second)
 
 	for _, entry := range cs.entries {
 		if !entry.Enabled {
@@ -240,8 +261,8 @@ func (cs *CronScheduler) CheckDue(now time.Time) []*CronEntry {
 		if !entry.Schedule.Matches(now) {
 			continue
 		}
-		// Don't re-trigger within the same minute.
-		if entry.LastRun.Truncate(time.Minute).Equal(nowMinute) {
+		// Don't re-trigger within the same second.
+		if entry.LastRun.Truncate(time.Second).Equal(nowSecond) {
 			continue
 		}
 
@@ -324,15 +345,15 @@ func (cs *CronScheduler) Count() int {
 }
 
 // NextRunAfter finds the next time after 'after' when the schedule matches.
-// Scans up to 1440 minutes (24 hours) ahead. Returns zero time if not found.
+// Scans up to 86400 seconds (24 hours) ahead. Returns zero time if not found.
 func NextRunAfter(sched CronSchedule, after time.Time) time.Time {
-	// Start from the next minute boundary.
-	t := after.Truncate(time.Minute).Add(time.Minute)
-	for i := 0; i < 1440; i++ {
+	// Start from the next second boundary.
+	t := after.Truncate(time.Second).Add(time.Second)
+	for i := 0; i < 86400; i++ {
 		if sched.Matches(t) {
 			return t
 		}
-		t = t.Add(time.Minute)
+		t = t.Add(time.Second)
 	}
 	return time.Time{}
 }

@@ -53,6 +53,9 @@ func TestParseCron_Invalid(t *testing.T) {
 	if _, err := ParseCron("0 8 *"); err == nil {
 		t.Error("should fail with only 3 fields")
 	}
+	if _, err := ParseCron("* * * * * * *"); err == nil {
+		t.Error("should fail with 7 fields")
+	}
 	if _, err := ParseCron("*/0 * * * *"); err == nil {
 		t.Error("should fail on */0")
 	}
@@ -181,8 +184,8 @@ func TestCronScheduler_CheckDue(t *testing.T) {
 		TargetPID: 100,
 	})
 
-	// Check at 08:00 — should trigger.
-	at8 := time.Date(2025, 1, 15, 8, 0, 30, 0, time.UTC)
+	// Check at 08:00:00 — should trigger (5-field cron defaults second to 0).
+	at8 := time.Date(2025, 1, 15, 8, 0, 0, 0, time.UTC)
 	due := cs.CheckDue(at8)
 	if len(due) != 1 {
 		t.Errorf("due=%d, want 1 at 08:00", len(due))
@@ -421,5 +424,114 @@ func TestCronScheduler_SpawnEntry(t *testing.T) {
 	}
 	if entry.KeepAlive {
 		t.Error("KeepAlive should be false")
+	}
+}
+
+// --- 6-field (Quartz-style) cron tests ---
+
+func TestParseCron_SixField(t *testing.T) {
+	// "0 */5 * * * *" = second=0, minute=every 5, rest=any
+	sched, err := ParseCron("0 */5 * * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if sched.Raw != "0 */5 * * * *" {
+		t.Errorf("Raw=%q", sched.Raw)
+	}
+	if len(sched.Second.Values) != 1 || sched.Second.Values[0] != 0 {
+		t.Errorf("Second should be [0], got Values=%v Any=%v Interval=%d", sched.Second.Values, sched.Second.Any, sched.Second.Interval)
+	}
+	if sched.Minute.Interval != 5 {
+		t.Errorf("Minute.Interval=%d, want 5", sched.Minute.Interval)
+	}
+	if !sched.Hour.Any || !sched.DayOfMonth.Any || !sched.Month.Any || !sched.DayOfWeek.Any {
+		t.Error("remaining fields should all be *")
+	}
+}
+
+func TestParseCron_SixField_SecondInterval(t *testing.T) {
+	// "*/10 * * * * *" = every 10 seconds
+	sched, err := ParseCron("*/10 * * * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if sched.Second.Interval != 10 {
+		t.Errorf("Second.Interval=%d, want 10", sched.Second.Interval)
+	}
+	if !sched.Minute.Any {
+		t.Error("Minute should be *")
+	}
+}
+
+func TestCronSchedule_Matches_Second(t *testing.T) {
+	// "*/15 * * * * *" = every 15 seconds
+	sched, _ := ParseCron("*/15 * * * * *")
+
+	for _, sec := range []int{0, 15, 30, 45} {
+		tm := time.Date(2025, 1, 15, 10, 5, sec, 0, time.UTC)
+		if !sched.Matches(tm) {
+			t.Errorf("should match second %d", sec)
+		}
+	}
+
+	noMatch := time.Date(2025, 1, 15, 10, 5, 7, 0, time.UTC)
+	if sched.Matches(noMatch) {
+		t.Error("should not match second 7")
+	}
+}
+
+func TestParseCron_FiveField_DefaultSecond(t *testing.T) {
+	// 5-field expression should get Second.Values=[0]
+	sched, err := ParseCron("*/5 * * * *")
+	if err != nil {
+		t.Fatalf("ParseCron: %v", err)
+	}
+	if len(sched.Second.Values) != 1 || sched.Second.Values[0] != 0 {
+		t.Errorf("5-field Second should default to [0], got Values=%v Any=%v Interval=%d",
+			sched.Second.Values, sched.Second.Any, sched.Second.Interval)
+	}
+	// The first field should be parsed as Minute
+	if sched.Minute.Interval != 5 {
+		t.Errorf("Minute.Interval=%d, want 5", sched.Minute.Interval)
+	}
+}
+
+func TestCheckDue_SecondPrecision(t *testing.T) {
+	cs := NewCronScheduler()
+	// "*/10 * * * * *" = every 10 seconds
+	sched, _ := ParseCron("*/10 * * * * *")
+
+	cs.Add(&CronEntry{
+		Name:     "every-10s",
+		Schedule: sched,
+		Action:   CronWake,
+		TargetPID: 100,
+	})
+
+	// Fire at second 0
+	at0 := time.Date(2025, 1, 15, 8, 0, 0, 0, time.UTC)
+	due := cs.CheckDue(at0)
+	if len(due) != 1 {
+		t.Fatalf("due=%d, want 1 at second 0", len(due))
+	}
+
+	// Same second again -- should NOT fire (dedup)
+	due2 := cs.CheckDue(at0)
+	if len(due2) != 0 {
+		t.Errorf("due=%d, want 0 (same second dedup)", len(due2))
+	}
+
+	// Different second (10) -- should fire
+	at10 := time.Date(2025, 1, 15, 8, 0, 10, 0, time.UTC)
+	due3 := cs.CheckDue(at10)
+	if len(due3) != 1 {
+		t.Errorf("due=%d, want 1 at second 10", len(due3))
+	}
+
+	// Second 5 -- should NOT fire (not matching */10)
+	at5 := time.Date(2025, 1, 15, 8, 0, 5, 0, time.UTC)
+	due4 := cs.CheckDue(at5)
+	if len(due4) != 0 {
+		t.Errorf("due=%d, want 0 at second 5 (not matching */10)", len(due4))
 	}
 }

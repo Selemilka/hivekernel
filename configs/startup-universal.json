@@ -75,7 +75,7 @@
       "cron": [
         {
           "name": "health-check",
-          "expression": "*/10 * * * *",
+          "expression": "0 0 * * * *",
           "action": "execute",
           "description": "Check health of all running agents and report issues"
         }

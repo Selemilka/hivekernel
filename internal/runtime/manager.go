@@ -12,6 +12,7 @@ import (
 
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/process"
+	"github.com/selemilka/hivekernel/internal/tracing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -234,7 +235,11 @@ func (m *Manager) launchAndConnect(proc *process.Process, rtType RuntimeType, cm
 	hklog.For("runtime").Info("agent listening", "pid", proc.PID, "addr", agentAddr)
 
 	// Dial gRPC to the agent.
-	conn, err := grpc.NewClient(agentAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(agentAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(tracing.ClientUnaryInterceptor()),
+		grpc.WithChainStreamInterceptor(tracing.ClientStreamInterceptor()),
+	)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("runtime PID %d: dial agent: %w", proc.PID, err)

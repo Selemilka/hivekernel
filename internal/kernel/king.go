@@ -294,6 +294,16 @@ func (k *King) PID() process.PID {
 	return k.proc.PID
 }
 
+// ResolveAgent returns the agent name for a PID.
+// Implements tracing.PIDResolver.
+func (k *King) ResolveAgent(pid uint64) (name string, ok bool) {
+	p, err := k.registry.Get(pid)
+	if err != nil {
+		return "", false
+	}
+	return p.Name, true
+}
+
 // Run starts the kernel main loop. Blocks until ctx is cancelled.
 func (k *King) Run(ctx context.Context) error {
 	ctx, k.cancel = context.WithCancel(ctx)

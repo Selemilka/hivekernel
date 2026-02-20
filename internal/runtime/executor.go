@@ -7,6 +7,7 @@ import (
 	pb "github.com/selemilka/hivekernel/api/proto/hivepb"
 	"github.com/selemilka/hivekernel/internal/hklog"
 	"github.com/selemilka/hivekernel/internal/process"
+	"github.com/selemilka/hivekernel/internal/tracing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -42,6 +43,8 @@ func (e *Executor) ExecuteTask(
 	// syscalls that block the stream for 60-300s.
 	conn, err := grpc.NewClient(agentAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(tracing.ClientUnaryInterceptor()),
+		grpc.WithChainStreamInterceptor(tracing.ClientStreamInterceptor()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("executor: dial %s: %w", agentAddr, err)

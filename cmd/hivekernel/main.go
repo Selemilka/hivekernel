@@ -20,6 +20,7 @@ import (
 	"github.com/selemilka/hivekernel/internal/kernel"
 	"github.com/selemilka/hivekernel/internal/process"
 	"github.com/selemilka/hivekernel/internal/runtime"
+	"github.com/selemilka/hivekernel/internal/tracing"
 
 	"google.golang.org/grpc"
 )
@@ -40,6 +41,12 @@ func main() {
 
 	hklog.Init(*logLevel, *logFile)
 	logger := hklog.For("main")
+
+	// Initialize OpenTelemetry gRPC tracing (JSONL export to logs/otel/).
+	traceShutdown, err := tracing.Setup(os.Getenv("HIVE_SESSION_TS"), *nodeName)
+	if err != nil {
+		logger.Warn("tracing setup failed", "error", err)
+	}
 
 	// Load .env file if it exists.
 	if *envFile != "" {
@@ -62,6 +69,9 @@ func main() {
 		logger.Error("failed to bootstrap kernel", "error", err)
 		os.Exit(1)
 	}
+
+	// Wire PID resolver for otel span annotations.
+	tracing.SetPIDResolver(king)
 
 	// Bridge slog INFO+ to EventLog so kernel logs appear in dashboard.
 	hklog.SetEventLogEmitter(king)
@@ -190,7 +200,10 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// --- Start gRPC server ---
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(tracing.ServerUnaryInterceptor()),
+		grpc.ChainStreamInterceptor(tracing.ServerStreamInterceptor()),
+	)
 	coreServer := kernel.NewCoreServer(king)
 	coreServer.SetExecutor(executor)
 	coreServer.Register(grpcServer)
@@ -266,6 +279,13 @@ func main() {
 		logger.Warn("graceful shutdown timed out, forcing stop")
 		rtManager.KillAll()
 		grpcServer.Stop()
+	}
+
+	// Flush otel traces.
+	if traceShutdown != nil {
+		flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		traceShutdown(flushCtx)
+		flushCancel()
 	}
 
 	king.Stop()

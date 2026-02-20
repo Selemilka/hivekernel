@@ -1,12 +1,13 @@
 # Logging
 
-HiveKernel has three logging subsystems, each serving a different purpose:
+HiveKernel has four logging subsystems, each serving a different purpose:
 
 | Subsystem | What it captures | Format | Location |
 |-----------|-----------------|--------|----------|
 | **Kernel log** | Go slog messages (startup, errors, runtime) | Text (console) + JSON (file) | stderr / `--log-file` path |
 | **Event log** | Process lifecycle, IPC, LLM/tool call summaries | JSONL | `logs/events/YYYYMMDD-HHMMSS.jsonl` |
 | **Dialog log** | Full LLM request/response payloads | JSONL | `logs/dialogs/YYYYMMDD-HHMMSS.jsonl` |
+| **Trace log** | OpenTelemetry gRPC span traces | JSONL | `logs/otel/YYYYMMDD-HHMMSS.jsonl` |
 
 All log files live under `logs/` (gitignored).
 
@@ -435,6 +436,80 @@ jq -r 'select(.trace_id == "a1b2c3d4") |
 
 ---
 
+## OpenTelemetry gRPC Traces
+
+Infrastructure-level tracing of all gRPC calls between the kernel and agents. Uses the OpenTelemetry SDK with a custom JSONL exporter -- no external collectors needed.
+
+### Purpose
+
+- Measure RPC latency (how long Init, Execute, DeliverMessage, Syscall calls take)
+- Detect gRPC errors and connection issues
+- Correlate call chains via trace/span IDs
+- Complement the existing trace_id system (business-level) with transport-level visibility
+
+### File
+
+```
+logs/otel/YYYYMMDD-HHMMSS.jsonl
+```
+
+One file per kernel session. Timestamp matches `HIVE_SESSION_TS`.
+
+### What Gets Traced
+
+| Direction | Operations | Kind |
+|-----------|-----------|------|
+| **Server** (kernel receives) | Syscall, SendMessage, GetMessages, SubscribeEvents, ... | `server` |
+| **Client** (kernel calls agent) | Init, Execute, DeliverMessage, Heartbeat, Shutdown | `client` |
+
+### Record Structure
+
+```json
+{
+  "trace_id": "abc123def456789...",
+  "span_id": "1a2b3c4d5e6f7890",
+  "parent_span_id": "0a1b2c3d4e5f6789",
+  "operation": "/hivepb.CoreService/SendMessage",
+  "kind": "server",
+  "start_time": "2026-02-20T14:42:01.123456Z",
+  "end_time": "2026-02-20T14:42:01.234567Z",
+  "duration_ms": 111,
+  "status": "ok",
+  "status_message": "",
+  "attributes": {
+    "rpc.system": "grpc",
+    "rpc.service": "hivepb.CoreService",
+    "rpc.method": "SendMessage",
+    "hive.pid": "3",
+    "hive.agent": "queen@vps1"
+  }
+}
+```
+
+### Attributes
+
+| Key | Source | Description |
+|-----|--------|-------------|
+| `rpc.system` | Always | Always `"grpc"` |
+| `rpc.service` | Full method | Service name (e.g. `hivepb.CoreService`) |
+| `rpc.method` | Full method | Method name (e.g. `SendMessage`) |
+| `rpc.grpc.status_code` | Error spans | gRPC status code on error |
+| `hive.pid` | Server spans | PID from `x-hivekernel-pid` metadata |
+| `hive.agent` | Server spans | Agent name resolved from PID |
+
+### Trace Log vs Event Log
+
+| | Trace Log | Event Log |
+|-|-----------|-----------|
+| **Scope** | gRPC transport layer | Process lifecycle + business events |
+| **Written by** | Go otel interceptors | Go kernel + Python agents |
+| **Captures** | RPC timing, errors, call chains | Spawn, state change, LLM/tool calls |
+| **Use case** | Infrastructure debugging | Application monitoring |
+
+The trace_id in otel spans is an OpenTelemetry trace ID (auto-generated, hex-encoded). It is separate from the HiveKernel `trace_id` in event/dialog logs (UUID, business-level correlation).
+
+---
+
 ## Event Log vs Dialog Log
 
 | | Event Log | Dialog Log |
@@ -459,9 +534,12 @@ logs/
   dialogs/
     20260220-131035.jsonl         # Dialog log (session 1)
     20260220-142200.jsonl         # Dialog log (session 2)
+  otel/
+    20260220-131035.jsonl         # Trace log (session 1)
+    20260220-142200.jsonl         # Trace log (session 2)
 ```
 
-The `logs/` directory and `logs/dialogs/` subdirectory are created automatically on first use. All files under `logs/` are gitignored.
+The `logs/` directory and subdirectories are created automatically on first use. All files under `logs/` are gitignored.
 
 ---
 

@@ -141,6 +141,8 @@ class ToolAgent(LLMAgent):
 
         # Extract or generate trace_id for event correlation.
         trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
+        if self.llm._dialog_logger:
+            self.llm._dialog_logger.trace_id = trace_id
 
         prompt = task.params.get("task", task.description)
         result = await self.agent_loop.run(
@@ -166,6 +168,9 @@ class ToolAgent(LLMAgent):
     async def handle_message(self, message: Message) -> MessageAck:
         """Handle IPC messages with the agent loop."""
         if message.type in ("task_request", "cron_task"):
+            if self.llm._dialog_logger:
+                self.llm._dialog_logger.trace_id = str(uuid.uuid4())
+
             try:
                 payload = json.loads(message.payload.decode("utf-8"))
                 prompt = payload.get("task", payload.get("description", ""))

@@ -33,6 +33,8 @@ class OrchestratorAgent(LLMAgent):
         max_workers = int(task.params.get("max_workers", "3"))
         max_workers = min(max_workers, MAX_WORKERS)
         trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
+        if self.llm and self.llm._dialog_logger:
+            self.llm._dialog_logger.trace_id = trace_id
 
         await ctx.log("info", f"Orchestrator starting: {description[:80]}")
         await ctx.report_progress("Analyzing task...", 5.0)

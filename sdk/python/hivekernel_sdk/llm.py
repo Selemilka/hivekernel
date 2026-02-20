@@ -31,6 +31,7 @@ class LLMClient:
         self._llm_calls = 0
         self._total_latency_ms: float = 0.0
         self._last_call: dict = {}
+        self._dialog_logger = None  # Set by LLMAgent.on_init()
 
     @property
     def total_tokens(self) -> int:
@@ -139,7 +140,28 @@ class LLMClient:
         if not choices:
             raise RuntimeError("OpenRouter returned no choices")
 
-        return choices[0]["message"]["content"]
+        content = choices[0]["message"]["content"]
+
+        if self._dialog_logger:
+            self._dialog_logger.log(
+                method="chat",
+                model=resolved,
+                messages=full_messages,
+                tools=None,
+                params={"max_tokens": max_tokens, "temperature": temperature},
+                response={
+                    "content": content,
+                    "finish_reason": choices[0].get("finish_reason", "stop"),
+                    "reasoning": choices[0].get("message", {}).get("reasoning"),
+                    "system_fingerprint": resp.get("system_fingerprint"),
+                },
+                usage=usage,
+                latency_ms=latency_ms,
+                generation_id=resp.get("id", ""),
+                provider=resp.get("provider", ""),
+            )
+
+        return content
 
     async def chat_with_tools(
         self,
@@ -222,9 +244,31 @@ class LLMClient:
         if message.get("content") is None:
             message["content"] = ""
 
+        finish_reason = choice.get("finish_reason", "stop")
+
+        if self._dialog_logger:
+            self._dialog_logger.log(
+                method="chat_with_tools",
+                model=resolved,
+                messages=full_messages,
+                tools=tools,
+                params={"max_tokens": max_tokens, "temperature": temperature},
+                response={
+                    "content": message.get("content", ""),
+                    "tool_calls": message.get("tool_calls", []),
+                    "finish_reason": finish_reason,
+                    "reasoning": message.get("reasoning"),
+                    "system_fingerprint": resp.get("system_fingerprint"),
+                },
+                usage=usage,
+                latency_ms=latency_ms,
+                generation_id=resp.get("id", ""),
+                provider=resp.get("provider", ""),
+            )
+
         return {
             "message": message,
-            "finish_reason": choice.get("finish_reason", "stop"),
+            "finish_reason": finish_reason,
         }
 
     async def complete(self, prompt: str, **kwargs) -> str:

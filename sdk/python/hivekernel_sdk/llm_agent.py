@@ -48,6 +48,9 @@ class LLMAgent(HiveAgent):
         self.llm = LLMClient(api_key, default_model=model_id)
         self._system_prompt = config.system_prompt
 
+        from .dialog_log import DialogLogger
+        self.llm._dialog_logger = DialogLogger(pid=self.pid, agent_name=config.name)
+
     async def ask(self, prompt: str, **kwargs) -> str:
         """Shortcut: prompt -> response using agent's system_prompt and model.
 

@@ -136,6 +136,8 @@ class QueenAgent(LLMAgent):
             payload = json.loads(message.payload.decode("utf-8"))
             description = payload.get("task", payload.get("description", ""))
             trace_id = payload.get("trace_id", "") or str(uuid.uuid4())
+            if self.llm and self.llm._dialog_logger:
+                self.llm._dialog_logger.trace_id = trace_id
             if not description:
                 result_payload = json.dumps({"error": "empty task"}).encode("utf-8")
             else:
@@ -215,6 +217,8 @@ class QueenAgent(LLMAgent):
         description = task.params.get("task", task.description)
         self._max_workers = task.params.get("max_workers", "3")
         trace_id = task.params.get("trace_id", "") or str(uuid.uuid4())
+        if self.llm and self.llm._dialog_logger:
+            self.llm._dialog_logger.trace_id = trace_id
         if not description.strip():
             return TaskResult(exit_code=1, output="Empty task description")
 

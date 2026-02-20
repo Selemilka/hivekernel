@@ -35,6 +35,9 @@ func main() {
 	logFile := flag.String("log-file", "", "path to JSON log file (optional)")
 	flag.Parse()
 
+	// Set session timestamp for dialog logging -- inherited by all child processes.
+	os.Setenv("HIVE_SESSION_TS", time.Now().Format("20060102-150405"))
+
 	hklog.Init(*logLevel, *logFile)
 	logger := hklog.For("main")
 
